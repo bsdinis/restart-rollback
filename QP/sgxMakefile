@@ -1,0 +1,20 @@
+App_Dir := app
+Enclave_Dir := enclave
+Include_Dir := include
+
+App_Name := basicQP
+App_C_Files := $(wildcard $(App_Dir)/*.c)
+App_Cpp_Files := $(wildcard $(App_Dir)/*.cc)
+App_Link_Locations :=  -L.
+App_Link_Libs := -lcrypto -lssl
+
+Enclave_C_Files := $(wildcard $(Enclave_Dir)/*.c)
+Enclave_Cpp_Files := $(wildcard $(Enclave_Dir)/*.cc)
+
+Enclave_Name := enclave.so
+Signed_Enclave_Name := enclave.signed.so
+Enclave_Config_File := $(Enclave_Dir)/enclave.config.xml
+Enclave_EDL_File := $(Enclave_Dir)/enclave.edl
+
+SGX_MODE := DEBUG
+#SGX_MODE := HW

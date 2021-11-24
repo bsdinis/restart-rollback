@@ -1,0 +1,10 @@
+namespace epidemics.basicQP;
+
+// XXX: CHANGE ME
+// add new operations
+enum ReqType:byte {
+    sum,
+    ping,
+    close,
+}
+
