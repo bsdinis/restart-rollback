@@ -1,0 +1,61 @@
+enclave {
+  include "user_types.h"
+  include "config.h"
+
+  include "time.h"
+  include "ocall_types.h"
+
+  from "sgx_tstdc.edl" import *;
+
+  trusted {
+    public void crash_enclave_start(config_t conf,
+        ssize_t my_idx,
+        [user_check] void * measure_buffer,
+        size_t buffer_size
+        );
+  };
+
+  untrusted {
+    void ocall_start_enclave_report([in, string]const char * str) propagate_errno;
+    void ocall_sgx_olog([in, string]const char * str) propagate_errno;
+    void ocall_sgx_eolog([in, string]const char * str) propagate_errno;
+    int ocall_sgx_gettimeofday([in, out, size=tv_size]void *tv, int tv_size) propagate_errno;
+    int ocall_sgx_getsockopt(int s, int level, int optname, [out, size=optval_len]char *optval, int optval_len, [in,out, size=4]int* optlen) propagate_errno;
+    int ocall_sgx_setsockopt(int s, int level, int optname, [in, size=optlen]const void *optval, int optlen) propagate_errno;
+    int ocall_sgx_socket(int af, int type, int protocol) propagate_errno;
+    int ocall_sgx_listen(int s, int backlog) propagate_errno;
+    int ocall_sgx_bind(int s, [in, size=addr_size]const void *addr, int addr_size) propagate_errno;
+    int ocall_sgx_connect(int s, [in, size=addrlen]const void *addr, int addrlen) propagate_errno;
+    int ocall_sgx_connect_block([out, count = 1] int * socket, [in, string] const char * addr, uint16_t port) propagate_errno;
+    int ocall_sgx_accept(int s, [out, size=addr_size]void *addr, int addr_size, [in, out, size=4]int *addrlen) propagate_errno;
+    int ocall_sgx_accept_block(int s) propagate_errno;
+    int ocall_sgx_shutdown(int fd, int how) propagate_errno;
+    int ocall_sgx_read(int fd, [out, size=n]void *buf, int n) ;
+    int ocall_sgx_write(int fd, [in, size=n]const void *buf, int n) ;
+    int ocall_sgx_close(int fd) propagate_errno;
+    int ocall_sgx_getenv([in,size=envlen]const char *env, int envlen, [out,size=ret_len]char *ret_str,int ret_len) propagate_errno;
+    int ocall_sgx_select(int high_sock) propagate_errno;
+
+    void ocall_sgx_exit(int code) propagate_errno;
+    void ocall_sgx_puts([in, string] const char * str) propagate_errno;
+    void ocall_sgx_puts_e([in, string] const char * str) propagate_errno;
+    void ocall_sgx_flush_e(void) propagate_errno;
+
+    long ocall_sgx_clock(void) propagate_errno;   /* For Performance evaluation */
+
+    time_t ocall_sgx_time([out, size=t_len]time_t *timep, int t_len) propagate_errno;
+
+    struct tm *ocall_sgx_localtime([in, size=t_len]const time_t *timep, int t_len) propagate_errno;
+    struct tm *ocall_sgx_gmtime_r([in, size=t_len]const time_t *timep, int t_len, [out, size=tmp_len]struct tm *tmp, int tmp_len) propagate_errno;
+
+    void ocall_log([in, string] const char *file, int line,[in, string] const char * str) propagate_errno;
+    void * ocall_build_addr(uint16_t port, [in, string] const char * ip_addr) propagate_errno;
+
+    int  ocall_net_start_listen_socket([in, string] const char * server_addr, uint16_t server_port) propagate_errno;
+    void ocall_net_get_my_ipv4_addr([out, size=sz] char * addr, size_t sz) propagate_errno;
+    int ocall_needs_read(int sock) propagate_errno;
+    int ocall_needs_write(int sock) propagate_errno;
+    int ocall_needs_except(int sock) propagate_errno;
+    int ocall_select_list([in, count=list_sz] selected_t * list, ssize_t list_sz) propagate_errno;
+  };
+};

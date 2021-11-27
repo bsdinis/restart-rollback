@@ -1,0 +1,24 @@
+include "crash.fbs";
+
+namespace paxos_sgx.crash;
+
+table SumResult {
+    sum : int64;
+}
+
+table PingResult { }
+
+// XXX: CHANGE ME
+// add new operation results
+union Result {
+    SumResult,
+    PingResult,
+}
+
+table BasicResponse {
+    type    : ReqType;
+    ticket  : int64;
+    result  : Result;
+}
+
+root_type BasicResponse;

@@ -1,0 +1,27 @@
+include "crash.fbs";
+
+namespace paxos_sgx.crash;
+
+table SumArgs {
+    vec : [int64];
+}
+
+table PingArgs { }
+
+table CloseArgs { }
+
+// XXX: CHANGE ME
+// add new operation args
+union ReqArgs {
+    SumArgs,
+    PingArgs,
+    CloseArgs,
+}
+
+table BasicRequest {
+    type    : ReqType;
+    ticket  : int64;
+    args    : ReqArgs;
+}
+
+root_type BasicRequest;

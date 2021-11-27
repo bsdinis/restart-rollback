@@ -1,0 +1,12 @@
+basicQP.o: basicQP.cc config.h log.h main_loop.h perf.h setup.h peer.h
+config.o: config.cc config.h log.h
+fd_helper.o: fd_helper.cc fd_helper.h log.h peer.h
+main_loop.o: main_loop.cc config.h fd_helper.h log.h peer.h handlers.h \
+  setup.h perf.h
+network_wrappers.o: network_wrappers.cc network_wrappers.h log.h
+peer.o: peer.cc log.h peer.h ssl_util.h
+perf.o: perf.cc perf.h log.h
+setup.o: setup.cc setup.h config.h peer.h network_wrappers.h ssl_util.h \
+  log.h handlers.h
+ssl_util.o: ssl_util.cc ssl_util.h log.h
+timer.o: timer.cc timer.h
