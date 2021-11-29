@@ -2,16 +2,24 @@ include "crash.fbs";
 
 namespace paxos_sgx.crash;
 
-table SumResult {
-    sum : int64;
+table ClientGetResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaGetResult {
+    account : int64;
+    amount  : int64;
+    last_applied : int64;
+    success : bool;
 }
 
 table PingResult { }
 
-// XXX: CHANGE ME
-// add new operation results
 union Result {
-    SumResult,
+    ClientGetResult,
+    ReplicaGetResult,
     PingResult,
 }
 

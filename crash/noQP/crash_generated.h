@@ -10,34 +10,40 @@ namespace paxos_sgx {
 namespace crash {
 
 enum ReqType {
-  ReqType_sum = 0,
-  ReqType_ping = 1,
-  ReqType_close = 2,
-  ReqType_MIN = ReqType_sum,
-  ReqType_MAX = ReqType_close
+  ReqType_ping = 0,
+  ReqType_close = 1,
+  ReqType_transfer = 2,
+  ReqType_client_get = 3,
+  ReqType_replica_get = 4,
+  ReqType_MIN = ReqType_ping,
+  ReqType_MAX = ReqType_replica_get
 };
 
-inline const ReqType (&EnumValuesReqType())[3] {
+inline const ReqType (&EnumValuesReqType())[5] {
   static const ReqType values[] = {
-    ReqType_sum,
     ReqType_ping,
-    ReqType_close
+    ReqType_close,
+    ReqType_transfer,
+    ReqType_client_get,
+    ReqType_replica_get
   };
   return values;
 }
 
 inline const char * const *EnumNamesReqType() {
-  static const char * const names[4] = {
-    "sum",
+  static const char * const names[6] = {
     "ping",
     "close",
+    "transfer",
+    "client_get",
+    "replica_get",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameReqType(ReqType e) {
-  if (flatbuffers::IsOutRange(e, ReqType_sum, ReqType_close)) return "";
+  if (flatbuffers::IsOutRange(e, ReqType_ping, ReqType_replica_get)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesReqType()[index];
 }

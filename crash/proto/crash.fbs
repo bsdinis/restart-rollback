@@ -1,10 +1,9 @@
 namespace paxos_sgx.crash;
 
-// XXX: CHANGE ME
-// add new operations
 enum ReqType:byte {
-    sum,
     ping,
     close,
+    transfer,
+    client_get,
+    replica_get,
 }
-

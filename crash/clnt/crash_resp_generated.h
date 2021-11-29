@@ -11,8 +11,11 @@
 namespace paxos_sgx {
 namespace crash {
 
-struct SumResult;
-struct SumResultBuilder;
+struct ClientGetResult;
+struct ClientGetResultBuilder;
+
+struct ReplicaGetResult;
+struct ReplicaGetResultBuilder;
 
 struct PingResult;
 struct PingResultBuilder;
@@ -22,25 +25,28 @@ struct BasicResponseBuilder;
 
 enum Result {
   Result_NONE = 0,
-  Result_SumResult = 1,
-  Result_PingResult = 2,
+  Result_ClientGetResult = 1,
+  Result_ReplicaGetResult = 2,
+  Result_PingResult = 3,
   Result_MIN = Result_NONE,
   Result_MAX = Result_PingResult
 };
 
-inline const Result (&EnumValuesResult())[3] {
+inline const Result (&EnumValuesResult())[4] {
   static const Result values[] = {
     Result_NONE,
-    Result_SumResult,
+    Result_ClientGetResult,
+    Result_ReplicaGetResult,
     Result_PingResult
   };
   return values;
 }
 
 inline const char * const *EnumNamesResult() {
-  static const char * const names[4] = {
+  static const char * const names[5] = {
     "NONE",
-    "SumResult",
+    "ClientGetResult",
+    "ReplicaGetResult",
     "PingResult",
     nullptr
   };
@@ -57,8 +63,12 @@ template<typename T> struct ResultTraits {
   static const Result enum_value = Result_NONE;
 };
 
-template<> struct ResultTraits<paxos_sgx::crash::SumResult> {
-  static const Result enum_value = Result_SumResult;
+template<> struct ResultTraits<paxos_sgx::crash::ClientGetResult> {
+  static const Result enum_value = Result_ClientGetResult;
+};
+
+template<> struct ResultTraits<paxos_sgx::crash::ReplicaGetResult> {
+  static const Result enum_value = Result_ReplicaGetResult;
 };
 
 template<> struct ResultTraits<paxos_sgx::crash::PingResult> {
@@ -68,45 +78,137 @@ template<> struct ResultTraits<paxos_sgx::crash::PingResult> {
 bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj, Result type);
 bool VerifyResultVector(flatbuffers::Verifier &verifier, const flatbuffers::Vector<flatbuffers::Offset<void>> *values, const flatbuffers::Vector<uint8_t> *types);
 
-struct SumResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef SumResultBuilder Builder;
+struct ClientGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ClientGetResultBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SUM = 4
+    VT_ACCOUNT = 4,
+    VT_AMOUNT = 6,
+    VT_SUCCESS = 8
   };
-  int64_t sum() const {
-    return GetField<int64_t>(VT_SUM, 0);
+  int64_t account() const {
+    return GetField<int64_t>(VT_ACCOUNT, 0);
+  }
+  int64_t amount() const {
+    return GetField<int64_t>(VT_AMOUNT, 0);
+  }
+  bool success() const {
+    return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<int64_t>(verifier, VT_SUM) &&
+           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
+           VerifyField<int64_t>(verifier, VT_AMOUNT) &&
+           VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
            verifier.EndTable();
   }
 };
 
-struct SumResultBuilder {
-  typedef SumResult Table;
+struct ClientGetResultBuilder {
+  typedef ClientGetResult Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_sum(int64_t sum) {
-    fbb_.AddElement<int64_t>(SumResult::VT_SUM, sum, 0);
+  void add_account(int64_t account) {
+    fbb_.AddElement<int64_t>(ClientGetResult::VT_ACCOUNT, account, 0);
   }
-  explicit SumResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  void add_amount(int64_t amount) {
+    fbb_.AddElement<int64_t>(ClientGetResult::VT_AMOUNT, amount, 0);
+  }
+  void add_success(bool success) {
+    fbb_.AddElement<uint8_t>(ClientGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  explicit ClientGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  SumResultBuilder &operator=(const SumResultBuilder &);
-  flatbuffers::Offset<SumResult> Finish() {
+  ClientGetResultBuilder &operator=(const ClientGetResultBuilder &);
+  flatbuffers::Offset<ClientGetResult> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<SumResult>(end);
+    auto o = flatbuffers::Offset<ClientGetResult>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<SumResult> CreateSumResult(
+inline flatbuffers::Offset<ClientGetResult> CreateClientGetResult(
     flatbuffers::FlatBufferBuilder &_fbb,
-    int64_t sum = 0) {
-  SumResultBuilder builder_(_fbb);
-  builder_.add_sum(sum);
+    int64_t account = 0,
+    int64_t amount = 0,
+    bool success = false) {
+  ClientGetResultBuilder builder_(_fbb);
+  builder_.add_amount(amount);
+  builder_.add_account(account);
+  builder_.add_success(success);
+  return builder_.Finish();
+}
+
+struct ReplicaGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaGetResultBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ACCOUNT = 4,
+    VT_AMOUNT = 6,
+    VT_LAST_APPLIED = 8,
+    VT_SUCCESS = 10
+  };
+  int64_t account() const {
+    return GetField<int64_t>(VT_ACCOUNT, 0);
+  }
+  int64_t amount() const {
+    return GetField<int64_t>(VT_AMOUNT, 0);
+  }
+  int64_t last_applied() const {
+    return GetField<int64_t>(VT_LAST_APPLIED, 0);
+  }
+  bool success() const {
+    return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
+           VerifyField<int64_t>(verifier, VT_AMOUNT) &&
+           VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
+           VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
+           verifier.EndTable();
+  }
+};
+
+struct ReplicaGetResultBuilder {
+  typedef ReplicaGetResult Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_account(int64_t account) {
+    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_ACCOUNT, account, 0);
+  }
+  void add_amount(int64_t amount) {
+    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_AMOUNT, amount, 0);
+  }
+  void add_last_applied(int64_t last_applied) {
+    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_LAST_APPLIED, last_applied, 0);
+  }
+  void add_success(bool success) {
+    fbb_.AddElement<uint8_t>(ReplicaGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  explicit ReplicaGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaGetResultBuilder &operator=(const ReplicaGetResultBuilder &);
+  flatbuffers::Offset<ReplicaGetResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaGetResult>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaGetResult> CreateReplicaGetResult(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    int64_t account = 0,
+    int64_t amount = 0,
+    int64_t last_applied = 0,
+    bool success = false) {
+  ReplicaGetResultBuilder builder_(_fbb);
+  builder_.add_last_applied(last_applied);
+  builder_.add_amount(amount);
+  builder_.add_account(account);
+  builder_.add_success(success);
   return builder_.Finish();
 }
 
@@ -161,8 +263,11 @@ struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     return GetPointer<const void *>(VT_RESULT);
   }
   template<typename T> const T *result_as() const;
-  const paxos_sgx::crash::SumResult *result_as_SumResult() const {
-    return result_type() == paxos_sgx::crash::Result_SumResult ? static_cast<const paxos_sgx::crash::SumResult *>(result()) : nullptr;
+  const paxos_sgx::crash::ClientGetResult *result_as_ClientGetResult() const {
+    return result_type() == paxos_sgx::crash::Result_ClientGetResult ? static_cast<const paxos_sgx::crash::ClientGetResult *>(result()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaGetResult *result_as_ReplicaGetResult() const {
+    return result_type() == paxos_sgx::crash::Result_ReplicaGetResult ? static_cast<const paxos_sgx::crash::ReplicaGetResult *>(result()) : nullptr;
   }
   const paxos_sgx::crash::PingResult *result_as_PingResult() const {
     return result_type() == paxos_sgx::crash::Result_PingResult ? static_cast<const paxos_sgx::crash::PingResult *>(result()) : nullptr;
@@ -178,8 +283,12 @@ struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-template<> inline const paxos_sgx::crash::SumResult *BasicResponse::result_as<paxos_sgx::crash::SumResult>() const {
-  return result_as_SumResult();
+template<> inline const paxos_sgx::crash::ClientGetResult *BasicResponse::result_as<paxos_sgx::crash::ClientGetResult>() const {
+  return result_as_ClientGetResult();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaGetResult *BasicResponse::result_as<paxos_sgx::crash::ReplicaGetResult>() const {
+  return result_as_ReplicaGetResult();
 }
 
 template<> inline const paxos_sgx::crash::PingResult *BasicResponse::result_as<paxos_sgx::crash::PingResult>() const {
@@ -216,7 +325,7 @@ struct BasicResponseBuilder {
 
 inline flatbuffers::Offset<BasicResponse> CreateBasicResponse(
     flatbuffers::FlatBufferBuilder &_fbb,
-    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_sum,
+    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_ping,
     int64_t ticket = 0,
     paxos_sgx::crash::Result result_type = paxos_sgx::crash::Result_NONE,
     flatbuffers::Offset<void> result = 0) {
@@ -233,8 +342,12 @@ inline bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj, Resul
     case Result_NONE: {
       return true;
     }
-    case Result_SumResult: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::SumResult *>(obj);
+    case Result_ClientGetResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientGetResult *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Result_ReplicaGetResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaGetResult *>(obj);
       return verifier.VerifyTable(ptr);
     }
     case Result_PingResult: {

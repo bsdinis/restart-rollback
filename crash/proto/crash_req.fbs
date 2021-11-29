@@ -2,18 +2,28 @@ include "crash.fbs";
 
 namespace paxos_sgx.crash;
 
-table SumArgs {
-    vec : [int64];
+table TransferArgs {
+    account : int64;
+    to      : int64;
+    amount  : int64;
+}
+
+table ClientGetArgs {
+    account : int64;
+}
+
+table ReplicaGetArgs {
+    account : int64;
 }
 
 table PingArgs { }
 
 table CloseArgs { }
 
-// XXX: CHANGE ME
-// add new operation args
 union ReqArgs {
-    SumArgs,
+    TransferArgs,
+    ClientGetArgs,
+    ReplicaGetArgs,
     PingArgs,
     CloseArgs,
 }
