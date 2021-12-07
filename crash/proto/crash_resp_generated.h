@@ -11,11 +11,20 @@
 namespace paxos_sgx {
 namespace crash {
 
-struct ClientGetResult;
-struct ClientGetResultBuilder;
+struct ClientFastGetResult;
+struct ClientFastGetResultBuilder;
 
-struct ReplicaGetResult;
-struct ReplicaGetResultBuilder;
+struct ClientOperationResult;
+struct ClientOperationResultBuilder;
+
+struct ReplicaFastGetResult;
+struct ReplicaFastGetResultBuilder;
+
+struct ReplicaProposeResult;
+struct ReplicaProposeResultBuilder;
+
+struct ReplicaAcceptResult;
+struct ReplicaAcceptResultBuilder;
 
 struct PingResult;
 struct PingResultBuilder;
@@ -25,28 +34,37 @@ struct BasicResponseBuilder;
 
 enum Result {
   Result_NONE = 0,
-  Result_ClientGetResult = 1,
-  Result_ReplicaGetResult = 2,
-  Result_PingResult = 3,
+  Result_ClientFastGetResult = 1,
+  Result_ClientOperationResult = 2,
+  Result_ReplicaFastGetResult = 3,
+  Result_ReplicaProposeResult = 4,
+  Result_ReplicaAcceptResult = 5,
+  Result_PingResult = 6,
   Result_MIN = Result_NONE,
   Result_MAX = Result_PingResult
 };
 
-inline const Result (&EnumValuesResult())[4] {
+inline const Result (&EnumValuesResult())[7] {
   static const Result values[] = {
     Result_NONE,
-    Result_ClientGetResult,
-    Result_ReplicaGetResult,
+    Result_ClientFastGetResult,
+    Result_ClientOperationResult,
+    Result_ReplicaFastGetResult,
+    Result_ReplicaProposeResult,
+    Result_ReplicaAcceptResult,
     Result_PingResult
   };
   return values;
 }
 
 inline const char * const *EnumNamesResult() {
-  static const char * const names[5] = {
+  static const char * const names[8] = {
     "NONE",
-    "ClientGetResult",
-    "ReplicaGetResult",
+    "ClientFastGetResult",
+    "ClientOperationResult",
+    "ReplicaFastGetResult",
+    "ReplicaProposeResult",
+    "ReplicaAcceptResult",
     "PingResult",
     nullptr
   };
@@ -63,12 +81,24 @@ template<typename T> struct ResultTraits {
   static const Result enum_value = Result_NONE;
 };
 
-template<> struct ResultTraits<paxos_sgx::crash::ClientGetResult> {
-  static const Result enum_value = Result_ClientGetResult;
+template<> struct ResultTraits<paxos_sgx::crash::ClientFastGetResult> {
+  static const Result enum_value = Result_ClientFastGetResult;
 };
 
-template<> struct ResultTraits<paxos_sgx::crash::ReplicaGetResult> {
-  static const Result enum_value = Result_ReplicaGetResult;
+template<> struct ResultTraits<paxos_sgx::crash::ClientOperationResult> {
+  static const Result enum_value = Result_ClientOperationResult;
+};
+
+template<> struct ResultTraits<paxos_sgx::crash::ReplicaFastGetResult> {
+  static const Result enum_value = Result_ReplicaFastGetResult;
+};
+
+template<> struct ResultTraits<paxos_sgx::crash::ReplicaProposeResult> {
+  static const Result enum_value = Result_ReplicaProposeResult;
+};
+
+template<> struct ResultTraits<paxos_sgx::crash::ReplicaAcceptResult> {
+  static const Result enum_value = Result_ReplicaAcceptResult;
 };
 
 template<> struct ResultTraits<paxos_sgx::crash::PingResult> {
@@ -78,8 +108,8 @@ template<> struct ResultTraits<paxos_sgx::crash::PingResult> {
 bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj, Result type);
 bool VerifyResultVector(flatbuffers::Verifier &verifier, const flatbuffers::Vector<flatbuffers::Offset<void>> *values, const flatbuffers::Vector<uint8_t> *types);
 
-struct ClientGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef ClientGetResultBuilder Builder;
+struct ClientFastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ClientFastGetResultBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACCOUNT = 4,
     VT_AMOUNT = 6,
@@ -103,51 +133,116 @@ struct ClientGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-struct ClientGetResultBuilder {
-  typedef ClientGetResult Table;
+struct ClientFastGetResultBuilder {
+  typedef ClientFastGetResult Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
   void add_account(int64_t account) {
-    fbb_.AddElement<int64_t>(ClientGetResult::VT_ACCOUNT, account, 0);
+    fbb_.AddElement<int64_t>(ClientFastGetResult::VT_ACCOUNT, account, 0);
   }
   void add_amount(int64_t amount) {
-    fbb_.AddElement<int64_t>(ClientGetResult::VT_AMOUNT, amount, 0);
+    fbb_.AddElement<int64_t>(ClientFastGetResult::VT_AMOUNT, amount, 0);
   }
   void add_success(bool success) {
-    fbb_.AddElement<uint8_t>(ClientGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+    fbb_.AddElement<uint8_t>(ClientFastGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
   }
-  explicit ClientGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit ClientFastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ClientGetResultBuilder &operator=(const ClientGetResultBuilder &);
-  flatbuffers::Offset<ClientGetResult> Finish() {
+  ClientFastGetResultBuilder &operator=(const ClientFastGetResultBuilder &);
+  flatbuffers::Offset<ClientFastGetResult> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<ClientGetResult>(end);
+    auto o = flatbuffers::Offset<ClientFastGetResult>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<ClientGetResult> CreateClientGetResult(
+inline flatbuffers::Offset<ClientFastGetResult> CreateClientFastGetResult(
     flatbuffers::FlatBufferBuilder &_fbb,
     int64_t account = 0,
     int64_t amount = 0,
     bool success = false) {
-  ClientGetResultBuilder builder_(_fbb);
+  ClientFastGetResultBuilder builder_(_fbb);
   builder_.add_amount(amount);
   builder_.add_account(account);
   builder_.add_success(success);
   return builder_.Finish();
 }
 
-struct ReplicaGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef ReplicaGetResultBuilder Builder;
+struct ClientOperationResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ClientOperationResultBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACCOUNT = 4,
     VT_AMOUNT = 6,
-    VT_LAST_APPLIED = 8,
-    VT_SUCCESS = 10
+    VT_SUCCESS = 8
   };
+  int64_t account() const {
+    return GetField<int64_t>(VT_ACCOUNT, 0);
+  }
+  int64_t amount() const {
+    return GetField<int64_t>(VT_AMOUNT, 0);
+  }
+  bool success() const {
+    return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
+           VerifyField<int64_t>(verifier, VT_AMOUNT) &&
+           VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
+           verifier.EndTable();
+  }
+};
+
+struct ClientOperationResultBuilder {
+  typedef ClientOperationResult Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_account(int64_t account) {
+    fbb_.AddElement<int64_t>(ClientOperationResult::VT_ACCOUNT, account, 0);
+  }
+  void add_amount(int64_t amount) {
+    fbb_.AddElement<int64_t>(ClientOperationResult::VT_AMOUNT, amount, 0);
+  }
+  void add_success(bool success) {
+    fbb_.AddElement<uint8_t>(ClientOperationResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  explicit ClientOperationResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ClientOperationResultBuilder &operator=(const ClientOperationResultBuilder &);
+  flatbuffers::Offset<ClientOperationResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ClientOperationResult>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ClientOperationResult> CreateClientOperationResult(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    int64_t account = 0,
+    int64_t amount = 0,
+    bool success = false) {
+  ClientOperationResultBuilder builder_(_fbb);
+  builder_.add_amount(amount);
+  builder_.add_account(account);
+  builder_.add_success(success);
+  return builder_.Finish();
+}
+
+struct ReplicaFastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaFastGetResultBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SUCCESS = 4,
+    VT_ACCOUNT = 6,
+    VT_AMOUNT = 8,
+    VT_LAST_APPLIED = 10
+  };
+  bool success() const {
+    return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
+  }
   int64_t account() const {
     return GetField<int64_t>(VT_ACCOUNT, 0);
   }
@@ -157,58 +252,127 @@ struct ReplicaGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   int64_t last_applied() const {
     return GetField<int64_t>(VT_LAST_APPLIED, 0);
   }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
+           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
+           VerifyField<int64_t>(verifier, VT_AMOUNT) &&
+           VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
+           verifier.EndTable();
+  }
+};
+
+struct ReplicaFastGetResultBuilder {
+  typedef ReplicaFastGetResult Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_success(bool success) {
+    fbb_.AddElement<uint8_t>(ReplicaFastGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+  }
+  void add_account(int64_t account) {
+    fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_ACCOUNT, account, 0);
+  }
+  void add_amount(int64_t amount) {
+    fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_AMOUNT, amount, 0);
+  }
+  void add_last_applied(int64_t last_applied) {
+    fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_LAST_APPLIED, last_applied, 0);
+  }
+  explicit ReplicaFastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaFastGetResultBuilder &operator=(const ReplicaFastGetResultBuilder &);
+  flatbuffers::Offset<ReplicaFastGetResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaFastGetResult>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaFastGetResult> CreateReplicaFastGetResult(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    bool success = false,
+    int64_t account = 0,
+    int64_t amount = 0,
+    int64_t last_applied = 0) {
+  ReplicaFastGetResultBuilder builder_(_fbb);
+  builder_.add_last_applied(last_applied);
+  builder_.add_amount(amount);
+  builder_.add_account(account);
+  builder_.add_success(success);
+  return builder_.Finish();
+}
+
+struct ReplicaProposeResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaProposeResultBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SUCCESS = 4
+  };
   bool success() const {
     return GetField<uint8_t>(VT_SUCCESS, 0) != 0;
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
-           VerifyField<int64_t>(verifier, VT_AMOUNT) &&
-           VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
            VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
            verifier.EndTable();
   }
 };
 
-struct ReplicaGetResultBuilder {
-  typedef ReplicaGetResult Table;
+struct ReplicaProposeResultBuilder {
+  typedef ReplicaProposeResult Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_account(int64_t account) {
-    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_ACCOUNT, account, 0);
-  }
-  void add_amount(int64_t amount) {
-    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_AMOUNT, amount, 0);
-  }
-  void add_last_applied(int64_t last_applied) {
-    fbb_.AddElement<int64_t>(ReplicaGetResult::VT_LAST_APPLIED, last_applied, 0);
-  }
   void add_success(bool success) {
-    fbb_.AddElement<uint8_t>(ReplicaGetResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
+    fbb_.AddElement<uint8_t>(ReplicaProposeResult::VT_SUCCESS, static_cast<uint8_t>(success), 0);
   }
-  explicit ReplicaGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit ReplicaProposeResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ReplicaGetResultBuilder &operator=(const ReplicaGetResultBuilder &);
-  flatbuffers::Offset<ReplicaGetResult> Finish() {
+  ReplicaProposeResultBuilder &operator=(const ReplicaProposeResultBuilder &);
+  flatbuffers::Offset<ReplicaProposeResult> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<ReplicaGetResult>(end);
+    auto o = flatbuffers::Offset<ReplicaProposeResult>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<ReplicaGetResult> CreateReplicaGetResult(
+inline flatbuffers::Offset<ReplicaProposeResult> CreateReplicaProposeResult(
     flatbuffers::FlatBufferBuilder &_fbb,
-    int64_t account = 0,
-    int64_t amount = 0,
-    int64_t last_applied = 0,
     bool success = false) {
-  ReplicaGetResultBuilder builder_(_fbb);
-  builder_.add_last_applied(last_applied);
-  builder_.add_amount(amount);
-  builder_.add_account(account);
+  ReplicaProposeResultBuilder builder_(_fbb);
   builder_.add_success(success);
+  return builder_.Finish();
+}
+
+struct ReplicaAcceptResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaAcceptResultBuilder Builder;
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           verifier.EndTable();
+  }
+};
+
+struct ReplicaAcceptResultBuilder {
+  typedef ReplicaAcceptResult Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  explicit ReplicaAcceptResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaAcceptResultBuilder &operator=(const ReplicaAcceptResultBuilder &);
+  flatbuffers::Offset<ReplicaAcceptResult> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaAcceptResult>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaAcceptResult> CreateReplicaAcceptResult(
+    flatbuffers::FlatBufferBuilder &_fbb) {
+  ReplicaAcceptResultBuilder builder_(_fbb);
   return builder_.Finish();
 }
 
@@ -263,11 +427,20 @@ struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     return GetPointer<const void *>(VT_RESULT);
   }
   template<typename T> const T *result_as() const;
-  const paxos_sgx::crash::ClientGetResult *result_as_ClientGetResult() const {
-    return result_type() == paxos_sgx::crash::Result_ClientGetResult ? static_cast<const paxos_sgx::crash::ClientGetResult *>(result()) : nullptr;
+  const paxos_sgx::crash::ClientFastGetResult *result_as_ClientFastGetResult() const {
+    return result_type() == paxos_sgx::crash::Result_ClientFastGetResult ? static_cast<const paxos_sgx::crash::ClientFastGetResult *>(result()) : nullptr;
   }
-  const paxos_sgx::crash::ReplicaGetResult *result_as_ReplicaGetResult() const {
-    return result_type() == paxos_sgx::crash::Result_ReplicaGetResult ? static_cast<const paxos_sgx::crash::ReplicaGetResult *>(result()) : nullptr;
+  const paxos_sgx::crash::ClientOperationResult *result_as_ClientOperationResult() const {
+    return result_type() == paxos_sgx::crash::Result_ClientOperationResult ? static_cast<const paxos_sgx::crash::ClientOperationResult *>(result()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaFastGetResult *result_as_ReplicaFastGetResult() const {
+    return result_type() == paxos_sgx::crash::Result_ReplicaFastGetResult ? static_cast<const paxos_sgx::crash::ReplicaFastGetResult *>(result()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaProposeResult *result_as_ReplicaProposeResult() const {
+    return result_type() == paxos_sgx::crash::Result_ReplicaProposeResult ? static_cast<const paxos_sgx::crash::ReplicaProposeResult *>(result()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaAcceptResult *result_as_ReplicaAcceptResult() const {
+    return result_type() == paxos_sgx::crash::Result_ReplicaAcceptResult ? static_cast<const paxos_sgx::crash::ReplicaAcceptResult *>(result()) : nullptr;
   }
   const paxos_sgx::crash::PingResult *result_as_PingResult() const {
     return result_type() == paxos_sgx::crash::Result_PingResult ? static_cast<const paxos_sgx::crash::PingResult *>(result()) : nullptr;
@@ -283,12 +456,24 @@ struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-template<> inline const paxos_sgx::crash::ClientGetResult *BasicResponse::result_as<paxos_sgx::crash::ClientGetResult>() const {
-  return result_as_ClientGetResult();
+template<> inline const paxos_sgx::crash::ClientFastGetResult *BasicResponse::result_as<paxos_sgx::crash::ClientFastGetResult>() const {
+  return result_as_ClientFastGetResult();
 }
 
-template<> inline const paxos_sgx::crash::ReplicaGetResult *BasicResponse::result_as<paxos_sgx::crash::ReplicaGetResult>() const {
-  return result_as_ReplicaGetResult();
+template<> inline const paxos_sgx::crash::ClientOperationResult *BasicResponse::result_as<paxos_sgx::crash::ClientOperationResult>() const {
+  return result_as_ClientOperationResult();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaFastGetResult *BasicResponse::result_as<paxos_sgx::crash::ReplicaFastGetResult>() const {
+  return result_as_ReplicaFastGetResult();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaProposeResult *BasicResponse::result_as<paxos_sgx::crash::ReplicaProposeResult>() const {
+  return result_as_ReplicaProposeResult();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaAcceptResult *BasicResponse::result_as<paxos_sgx::crash::ReplicaAcceptResult>() const {
+  return result_as_ReplicaAcceptResult();
 }
 
 template<> inline const paxos_sgx::crash::PingResult *BasicResponse::result_as<paxos_sgx::crash::PingResult>() const {
@@ -325,7 +510,7 @@ struct BasicResponseBuilder {
 
 inline flatbuffers::Offset<BasicResponse> CreateBasicResponse(
     flatbuffers::FlatBufferBuilder &_fbb,
-    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_ping,
+    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_client_fast_get,
     int64_t ticket = 0,
     paxos_sgx::crash::Result result_type = paxos_sgx::crash::Result_NONE,
     flatbuffers::Offset<void> result = 0) {
@@ -342,12 +527,24 @@ inline bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj, Resul
     case Result_NONE: {
       return true;
     }
-    case Result_ClientGetResult: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientGetResult *>(obj);
+    case Result_ClientFastGetResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientFastGetResult *>(obj);
       return verifier.VerifyTable(ptr);
     }
-    case Result_ReplicaGetResult: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaGetResult *>(obj);
+    case Result_ClientOperationResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientOperationResult *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Result_ReplicaFastGetResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaFastGetResult *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Result_ReplicaProposeResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaProposeResult *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Result_ReplicaAcceptResult: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaAcceptResult *>(obj);
       return verifier.VerifyTable(ptr);
     }
     case Result_PingResult: {

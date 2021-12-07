@@ -2,24 +2,39 @@ include "crash.fbs";
 
 namespace paxos_sgx.crash;
 
-table ClientGetResult {
+table ClientFastGetResult {
     account : int64;
     amount  : int64;
     success : bool;
 }
 
-table ReplicaGetResult {
+table ClientOperationResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaFastGetResult {
+    success : bool;
     account : int64;
     amount  : int64;
     last_applied : int64;
+}
+
+table ReplicaProposeResult {
     success : bool;
 }
+
+table ReplicaAcceptResult { }
 
 table PingResult { }
 
 union Result {
-    ClientGetResult,
-    ReplicaGetResult,
+    ClientFastGetResult,
+    ClientOperationResult,
+    ReplicaFastGetResult,
+    ReplicaProposeResult,
+    ReplicaAcceptResult,
     PingResult,
 }
 

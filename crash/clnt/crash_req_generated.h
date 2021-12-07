@@ -11,14 +11,26 @@
 namespace paxos_sgx {
 namespace crash {
 
-struct TransferArgs;
-struct TransferArgsBuilder;
+struct Transfer;
+struct TransferBuilder;
 
-struct ClientGetArgs;
-struct ClientGetArgsBuilder;
+struct Get;
+struct GetBuilder;
 
-struct ReplicaGetArgs;
-struct ReplicaGetArgsBuilder;
+struct ClientFastGetArgs;
+struct ClientFastGetArgsBuilder;
+
+struct ClientOperationArgs;
+struct ClientOperationArgsBuilder;
+
+struct ReplicaFastGetArgs;
+struct ReplicaFastGetArgsBuilder;
+
+struct ReplicaProposeArgs;
+struct ReplicaProposeArgsBuilder;
+
+struct ReplicaAcceptArgs;
+struct ReplicaAcceptArgsBuilder;
 
 struct PingArgs;
 struct PingArgsBuilder;
@@ -29,23 +41,75 @@ struct CloseArgsBuilder;
 struct BasicRequest;
 struct BasicRequestBuilder;
 
+enum Operation {
+  Operation_NONE = 0,
+  Operation_Transfer = 1,
+  Operation_Get = 2,
+  Operation_MIN = Operation_NONE,
+  Operation_MAX = Operation_Get
+};
+
+inline const Operation (&EnumValuesOperation())[3] {
+  static const Operation values[] = {
+    Operation_NONE,
+    Operation_Transfer,
+    Operation_Get
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesOperation() {
+  static const char * const names[4] = {
+    "NONE",
+    "Transfer",
+    "Get",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameOperation(Operation e) {
+  if (flatbuffers::IsOutRange(e, Operation_NONE, Operation_Get)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesOperation()[index];
+}
+
+template<typename T> struct OperationTraits {
+  static const Operation enum_value = Operation_NONE;
+};
+
+template<> struct OperationTraits<paxos_sgx::crash::Transfer> {
+  static const Operation enum_value = Operation_Transfer;
+};
+
+template<> struct OperationTraits<paxos_sgx::crash::Get> {
+  static const Operation enum_value = Operation_Get;
+};
+
+bool VerifyOperation(flatbuffers::Verifier &verifier, const void *obj, Operation type);
+bool VerifyOperationVector(flatbuffers::Verifier &verifier, const flatbuffers::Vector<flatbuffers::Offset<void>> *values, const flatbuffers::Vector<uint8_t> *types);
+
 enum ReqArgs {
   ReqArgs_NONE = 0,
-  ReqArgs_TransferArgs = 1,
-  ReqArgs_ClientGetArgs = 2,
-  ReqArgs_ReplicaGetArgs = 3,
-  ReqArgs_PingArgs = 4,
-  ReqArgs_CloseArgs = 5,
+  ReqArgs_ClientFastGetArgs = 1,
+  ReqArgs_ClientOperationArgs = 2,
+  ReqArgs_ReplicaFastGetArgs = 3,
+  ReqArgs_ReplicaProposeArgs = 4,
+  ReqArgs_ReplicaAcceptArgs = 5,
+  ReqArgs_PingArgs = 6,
+  ReqArgs_CloseArgs = 7,
   ReqArgs_MIN = ReqArgs_NONE,
   ReqArgs_MAX = ReqArgs_CloseArgs
 };
 
-inline const ReqArgs (&EnumValuesReqArgs())[6] {
+inline const ReqArgs (&EnumValuesReqArgs())[8] {
   static const ReqArgs values[] = {
     ReqArgs_NONE,
-    ReqArgs_TransferArgs,
-    ReqArgs_ClientGetArgs,
-    ReqArgs_ReplicaGetArgs,
+    ReqArgs_ClientFastGetArgs,
+    ReqArgs_ClientOperationArgs,
+    ReqArgs_ReplicaFastGetArgs,
+    ReqArgs_ReplicaProposeArgs,
+    ReqArgs_ReplicaAcceptArgs,
     ReqArgs_PingArgs,
     ReqArgs_CloseArgs
   };
@@ -53,11 +117,13 @@ inline const ReqArgs (&EnumValuesReqArgs())[6] {
 }
 
 inline const char * const *EnumNamesReqArgs() {
-  static const char * const names[7] = {
+  static const char * const names[9] = {
     "NONE",
-    "TransferArgs",
-    "ClientGetArgs",
-    "ReplicaGetArgs",
+    "ClientFastGetArgs",
+    "ClientOperationArgs",
+    "ReplicaFastGetArgs",
+    "ReplicaProposeArgs",
+    "ReplicaAcceptArgs",
     "PingArgs",
     "CloseArgs",
     nullptr
@@ -75,16 +141,24 @@ template<typename T> struct ReqArgsTraits {
   static const ReqArgs enum_value = ReqArgs_NONE;
 };
 
-template<> struct ReqArgsTraits<paxos_sgx::crash::TransferArgs> {
-  static const ReqArgs enum_value = ReqArgs_TransferArgs;
+template<> struct ReqArgsTraits<paxos_sgx::crash::ClientFastGetArgs> {
+  static const ReqArgs enum_value = ReqArgs_ClientFastGetArgs;
 };
 
-template<> struct ReqArgsTraits<paxos_sgx::crash::ClientGetArgs> {
-  static const ReqArgs enum_value = ReqArgs_ClientGetArgs;
+template<> struct ReqArgsTraits<paxos_sgx::crash::ClientOperationArgs> {
+  static const ReqArgs enum_value = ReqArgs_ClientOperationArgs;
 };
 
-template<> struct ReqArgsTraits<paxos_sgx::crash::ReplicaGetArgs> {
-  static const ReqArgs enum_value = ReqArgs_ReplicaGetArgs;
+template<> struct ReqArgsTraits<paxos_sgx::crash::ReplicaFastGetArgs> {
+  static const ReqArgs enum_value = ReqArgs_ReplicaFastGetArgs;
+};
+
+template<> struct ReqArgsTraits<paxos_sgx::crash::ReplicaProposeArgs> {
+  static const ReqArgs enum_value = ReqArgs_ReplicaProposeArgs;
+};
+
+template<> struct ReqArgsTraits<paxos_sgx::crash::ReplicaAcceptArgs> {
+  static const ReqArgs enum_value = ReqArgs_ReplicaAcceptArgs;
 };
 
 template<> struct ReqArgsTraits<paxos_sgx::crash::PingArgs> {
@@ -98,8 +172,8 @@ template<> struct ReqArgsTraits<paxos_sgx::crash::CloseArgs> {
 bool VerifyReqArgs(flatbuffers::Verifier &verifier, const void *obj, ReqArgs type);
 bool VerifyReqArgsVector(flatbuffers::Verifier &verifier, const flatbuffers::Vector<flatbuffers::Offset<void>> *values, const flatbuffers::Vector<uint8_t> *types);
 
-struct TransferArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef TransferArgsBuilder Builder;
+struct Transfer FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef TransferBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACCOUNT = 4,
     VT_TO = 6,
@@ -123,45 +197,45 @@ struct TransferArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-struct TransferArgsBuilder {
-  typedef TransferArgs Table;
+struct TransferBuilder {
+  typedef Transfer Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
   void add_account(int64_t account) {
-    fbb_.AddElement<int64_t>(TransferArgs::VT_ACCOUNT, account, 0);
+    fbb_.AddElement<int64_t>(Transfer::VT_ACCOUNT, account, 0);
   }
   void add_to(int64_t to) {
-    fbb_.AddElement<int64_t>(TransferArgs::VT_TO, to, 0);
+    fbb_.AddElement<int64_t>(Transfer::VT_TO, to, 0);
   }
   void add_amount(int64_t amount) {
-    fbb_.AddElement<int64_t>(TransferArgs::VT_AMOUNT, amount, 0);
+    fbb_.AddElement<int64_t>(Transfer::VT_AMOUNT, amount, 0);
   }
-  explicit TransferArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit TransferBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  TransferArgsBuilder &operator=(const TransferArgsBuilder &);
-  flatbuffers::Offset<TransferArgs> Finish() {
+  TransferBuilder &operator=(const TransferBuilder &);
+  flatbuffers::Offset<Transfer> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<TransferArgs>(end);
+    auto o = flatbuffers::Offset<Transfer>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<TransferArgs> CreateTransferArgs(
+inline flatbuffers::Offset<Transfer> CreateTransfer(
     flatbuffers::FlatBufferBuilder &_fbb,
     int64_t account = 0,
     int64_t to = 0,
     int64_t amount = 0) {
-  TransferArgsBuilder builder_(_fbb);
+  TransferBuilder builder_(_fbb);
   builder_.add_amount(amount);
   builder_.add_to(to);
   builder_.add_account(account);
   return builder_.Finish();
 }
 
-struct ClientGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef ClientGetArgsBuilder Builder;
+struct Get FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef GetBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACCOUNT = 4
   };
@@ -175,35 +249,35 @@ struct ClientGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-struct ClientGetArgsBuilder {
-  typedef ClientGetArgs Table;
+struct GetBuilder {
+  typedef Get Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
   void add_account(int64_t account) {
-    fbb_.AddElement<int64_t>(ClientGetArgs::VT_ACCOUNT, account, 0);
+    fbb_.AddElement<int64_t>(Get::VT_ACCOUNT, account, 0);
   }
-  explicit ClientGetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit GetBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ClientGetArgsBuilder &operator=(const ClientGetArgsBuilder &);
-  flatbuffers::Offset<ClientGetArgs> Finish() {
+  GetBuilder &operator=(const GetBuilder &);
+  flatbuffers::Offset<Get> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<ClientGetArgs>(end);
+    auto o = flatbuffers::Offset<Get>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<ClientGetArgs> CreateClientGetArgs(
+inline flatbuffers::Offset<Get> CreateGet(
     flatbuffers::FlatBufferBuilder &_fbb,
     int64_t account = 0) {
-  ClientGetArgsBuilder builder_(_fbb);
+  GetBuilder builder_(_fbb);
   builder_.add_account(account);
   return builder_.Finish();
 }
 
-struct ReplicaGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  typedef ReplicaGetArgsBuilder Builder;
+struct ClientFastGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ClientFastGetArgsBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_ACCOUNT = 4
   };
@@ -217,30 +291,260 @@ struct ReplicaGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-struct ReplicaGetArgsBuilder {
-  typedef ReplicaGetArgs Table;
+struct ClientFastGetArgsBuilder {
+  typedef ClientFastGetArgs Table;
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
   void add_account(int64_t account) {
-    fbb_.AddElement<int64_t>(ReplicaGetArgs::VT_ACCOUNT, account, 0);
+    fbb_.AddElement<int64_t>(ClientFastGetArgs::VT_ACCOUNT, account, 0);
   }
-  explicit ReplicaGetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit ClientFastGetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  ReplicaGetArgsBuilder &operator=(const ReplicaGetArgsBuilder &);
-  flatbuffers::Offset<ReplicaGetArgs> Finish() {
+  ClientFastGetArgsBuilder &operator=(const ClientFastGetArgsBuilder &);
+  flatbuffers::Offset<ClientFastGetArgs> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<ReplicaGetArgs>(end);
+    auto o = flatbuffers::Offset<ClientFastGetArgs>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<ReplicaGetArgs> CreateReplicaGetArgs(
+inline flatbuffers::Offset<ClientFastGetArgs> CreateClientFastGetArgs(
     flatbuffers::FlatBufferBuilder &_fbb,
     int64_t account = 0) {
-  ReplicaGetArgsBuilder builder_(_fbb);
+  ClientFastGetArgsBuilder builder_(_fbb);
   builder_.add_account(account);
+  return builder_.Finish();
+}
+
+struct ClientOperationArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ClientOperationArgsBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OPERATION_TYPE = 4,
+    VT_OPERATION = 6
+  };
+  paxos_sgx::crash::Operation operation_type() const {
+    return static_cast<paxos_sgx::crash::Operation>(GetField<uint8_t>(VT_OPERATION_TYPE, 0));
+  }
+  const void *operation() const {
+    return GetPointer<const void *>(VT_OPERATION);
+  }
+  template<typename T> const T *operation_as() const;
+  const paxos_sgx::crash::Transfer *operation_as_Transfer() const {
+    return operation_type() == paxos_sgx::crash::Operation_Transfer ? static_cast<const paxos_sgx::crash::Transfer *>(operation()) : nullptr;
+  }
+  const paxos_sgx::crash::Get *operation_as_Get() const {
+    return operation_type() == paxos_sgx::crash::Operation_Get ? static_cast<const paxos_sgx::crash::Get *>(operation()) : nullptr;
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OPERATION_TYPE) &&
+           VerifyOffset(verifier, VT_OPERATION) &&
+           VerifyOperation(verifier, operation(), operation_type()) &&
+           verifier.EndTable();
+  }
+};
+
+template<> inline const paxos_sgx::crash::Transfer *ClientOperationArgs::operation_as<paxos_sgx::crash::Transfer>() const {
+  return operation_as_Transfer();
+}
+
+template<> inline const paxos_sgx::crash::Get *ClientOperationArgs::operation_as<paxos_sgx::crash::Get>() const {
+  return operation_as_Get();
+}
+
+struct ClientOperationArgsBuilder {
+  typedef ClientOperationArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_operation_type(paxos_sgx::crash::Operation operation_type) {
+    fbb_.AddElement<uint8_t>(ClientOperationArgs::VT_OPERATION_TYPE, static_cast<uint8_t>(operation_type), 0);
+  }
+  void add_operation(flatbuffers::Offset<void> operation) {
+    fbb_.AddOffset(ClientOperationArgs::VT_OPERATION, operation);
+  }
+  explicit ClientOperationArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ClientOperationArgsBuilder &operator=(const ClientOperationArgsBuilder &);
+  flatbuffers::Offset<ClientOperationArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ClientOperationArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ClientOperationArgs> CreateClientOperationArgs(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    paxos_sgx::crash::Operation operation_type = paxos_sgx::crash::Operation_NONE,
+    flatbuffers::Offset<void> operation = 0) {
+  ClientOperationArgsBuilder builder_(_fbb);
+  builder_.add_operation(operation);
+  builder_.add_operation_type(operation_type);
+  return builder_.Finish();
+}
+
+struct ReplicaFastGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaFastGetArgsBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ACCOUNT = 4
+  };
+  int64_t account() const {
+    return GetField<int64_t>(VT_ACCOUNT, 0);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
+           verifier.EndTable();
+  }
+};
+
+struct ReplicaFastGetArgsBuilder {
+  typedef ReplicaFastGetArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_account(int64_t account) {
+    fbb_.AddElement<int64_t>(ReplicaFastGetArgs::VT_ACCOUNT, account, 0);
+  }
+  explicit ReplicaFastGetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaFastGetArgsBuilder &operator=(const ReplicaFastGetArgsBuilder &);
+  flatbuffers::Offset<ReplicaFastGetArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaFastGetArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaFastGetArgs> CreateReplicaFastGetArgs(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    int64_t account = 0) {
+  ReplicaFastGetArgsBuilder builder_(_fbb);
+  builder_.add_account(account);
+  return builder_.Finish();
+}
+
+struct ReplicaProposeArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaProposeArgsBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_OPERATION_TYPE = 4,
+    VT_OPERATION = 6,
+    VT_SLOT_NUMBER = 8
+  };
+  paxos_sgx::crash::Operation operation_type() const {
+    return static_cast<paxos_sgx::crash::Operation>(GetField<uint8_t>(VT_OPERATION_TYPE, 0));
+  }
+  const void *operation() const {
+    return GetPointer<const void *>(VT_OPERATION);
+  }
+  template<typename T> const T *operation_as() const;
+  const paxos_sgx::crash::Transfer *operation_as_Transfer() const {
+    return operation_type() == paxos_sgx::crash::Operation_Transfer ? static_cast<const paxos_sgx::crash::Transfer *>(operation()) : nullptr;
+  }
+  const paxos_sgx::crash::Get *operation_as_Get() const {
+    return operation_type() == paxos_sgx::crash::Operation_Get ? static_cast<const paxos_sgx::crash::Get *>(operation()) : nullptr;
+  }
+  int64_t slot_number() const {
+    return GetField<int64_t>(VT_SLOT_NUMBER, 0);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_OPERATION_TYPE) &&
+           VerifyOffset(verifier, VT_OPERATION) &&
+           VerifyOperation(verifier, operation(), operation_type()) &&
+           VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+           verifier.EndTable();
+  }
+};
+
+template<> inline const paxos_sgx::crash::Transfer *ReplicaProposeArgs::operation_as<paxos_sgx::crash::Transfer>() const {
+  return operation_as_Transfer();
+}
+
+template<> inline const paxos_sgx::crash::Get *ReplicaProposeArgs::operation_as<paxos_sgx::crash::Get>() const {
+  return operation_as_Get();
+}
+
+struct ReplicaProposeArgsBuilder {
+  typedef ReplicaProposeArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_operation_type(paxos_sgx::crash::Operation operation_type) {
+    fbb_.AddElement<uint8_t>(ReplicaProposeArgs::VT_OPERATION_TYPE, static_cast<uint8_t>(operation_type), 0);
+  }
+  void add_operation(flatbuffers::Offset<void> operation) {
+    fbb_.AddOffset(ReplicaProposeArgs::VT_OPERATION, operation);
+  }
+  void add_slot_number(int64_t slot_number) {
+    fbb_.AddElement<int64_t>(ReplicaProposeArgs::VT_SLOT_NUMBER, slot_number, 0);
+  }
+  explicit ReplicaProposeArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaProposeArgsBuilder &operator=(const ReplicaProposeArgsBuilder &);
+  flatbuffers::Offset<ReplicaProposeArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaProposeArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaProposeArgs> CreateReplicaProposeArgs(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    paxos_sgx::crash::Operation operation_type = paxos_sgx::crash::Operation_NONE,
+    flatbuffers::Offset<void> operation = 0,
+    int64_t slot_number = 0) {
+  ReplicaProposeArgsBuilder builder_(_fbb);
+  builder_.add_slot_number(slot_number);
+  builder_.add_operation(operation);
+  builder_.add_operation_type(operation_type);
+  return builder_.Finish();
+}
+
+struct ReplicaAcceptArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ReplicaAcceptArgsBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SLOT_NUMBER = 4
+  };
+  int64_t slot_number() const {
+    return GetField<int64_t>(VT_SLOT_NUMBER, 0);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+           verifier.EndTable();
+  }
+};
+
+struct ReplicaAcceptArgsBuilder {
+  typedef ReplicaAcceptArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_slot_number(int64_t slot_number) {
+    fbb_.AddElement<int64_t>(ReplicaAcceptArgs::VT_SLOT_NUMBER, slot_number, 0);
+  }
+  explicit ReplicaAcceptArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ReplicaAcceptArgsBuilder &operator=(const ReplicaAcceptArgsBuilder &);
+  flatbuffers::Offset<ReplicaAcceptArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ReplicaAcceptArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ReplicaAcceptArgs> CreateReplicaAcceptArgs(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    int64_t slot_number = 0) {
+  ReplicaAcceptArgsBuilder builder_(_fbb);
+  builder_.add_slot_number(slot_number);
   return builder_.Finish();
 }
 
@@ -325,14 +629,20 @@ struct BasicRequest FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     return GetPointer<const void *>(VT_ARGS);
   }
   template<typename T> const T *args_as() const;
-  const paxos_sgx::crash::TransferArgs *args_as_TransferArgs() const {
-    return args_type() == paxos_sgx::crash::ReqArgs_TransferArgs ? static_cast<const paxos_sgx::crash::TransferArgs *>(args()) : nullptr;
+  const paxos_sgx::crash::ClientFastGetArgs *args_as_ClientFastGetArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ClientFastGetArgs ? static_cast<const paxos_sgx::crash::ClientFastGetArgs *>(args()) : nullptr;
   }
-  const paxos_sgx::crash::ClientGetArgs *args_as_ClientGetArgs() const {
-    return args_type() == paxos_sgx::crash::ReqArgs_ClientGetArgs ? static_cast<const paxos_sgx::crash::ClientGetArgs *>(args()) : nullptr;
+  const paxos_sgx::crash::ClientOperationArgs *args_as_ClientOperationArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ClientOperationArgs ? static_cast<const paxos_sgx::crash::ClientOperationArgs *>(args()) : nullptr;
   }
-  const paxos_sgx::crash::ReplicaGetArgs *args_as_ReplicaGetArgs() const {
-    return args_type() == paxos_sgx::crash::ReqArgs_ReplicaGetArgs ? static_cast<const paxos_sgx::crash::ReplicaGetArgs *>(args()) : nullptr;
+  const paxos_sgx::crash::ReplicaFastGetArgs *args_as_ReplicaFastGetArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ReplicaFastGetArgs ? static_cast<const paxos_sgx::crash::ReplicaFastGetArgs *>(args()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaProposeArgs *args_as_ReplicaProposeArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ReplicaProposeArgs ? static_cast<const paxos_sgx::crash::ReplicaProposeArgs *>(args()) : nullptr;
+  }
+  const paxos_sgx::crash::ReplicaAcceptArgs *args_as_ReplicaAcceptArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ReplicaAcceptArgs ? static_cast<const paxos_sgx::crash::ReplicaAcceptArgs *>(args()) : nullptr;
   }
   const paxos_sgx::crash::PingArgs *args_as_PingArgs() const {
     return args_type() == paxos_sgx::crash::ReqArgs_PingArgs ? static_cast<const paxos_sgx::crash::PingArgs *>(args()) : nullptr;
@@ -351,16 +661,24 @@ struct BasicRequest FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   }
 };
 
-template<> inline const paxos_sgx::crash::TransferArgs *BasicRequest::args_as<paxos_sgx::crash::TransferArgs>() const {
-  return args_as_TransferArgs();
+template<> inline const paxos_sgx::crash::ClientFastGetArgs *BasicRequest::args_as<paxos_sgx::crash::ClientFastGetArgs>() const {
+  return args_as_ClientFastGetArgs();
 }
 
-template<> inline const paxos_sgx::crash::ClientGetArgs *BasicRequest::args_as<paxos_sgx::crash::ClientGetArgs>() const {
-  return args_as_ClientGetArgs();
+template<> inline const paxos_sgx::crash::ClientOperationArgs *BasicRequest::args_as<paxos_sgx::crash::ClientOperationArgs>() const {
+  return args_as_ClientOperationArgs();
 }
 
-template<> inline const paxos_sgx::crash::ReplicaGetArgs *BasicRequest::args_as<paxos_sgx::crash::ReplicaGetArgs>() const {
-  return args_as_ReplicaGetArgs();
+template<> inline const paxos_sgx::crash::ReplicaFastGetArgs *BasicRequest::args_as<paxos_sgx::crash::ReplicaFastGetArgs>() const {
+  return args_as_ReplicaFastGetArgs();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaProposeArgs *BasicRequest::args_as<paxos_sgx::crash::ReplicaProposeArgs>() const {
+  return args_as_ReplicaProposeArgs();
+}
+
+template<> inline const paxos_sgx::crash::ReplicaAcceptArgs *BasicRequest::args_as<paxos_sgx::crash::ReplicaAcceptArgs>() const {
+  return args_as_ReplicaAcceptArgs();
 }
 
 template<> inline const paxos_sgx::crash::PingArgs *BasicRequest::args_as<paxos_sgx::crash::PingArgs>() const {
@@ -401,7 +719,7 @@ struct BasicRequestBuilder {
 
 inline flatbuffers::Offset<BasicRequest> CreateBasicRequest(
     flatbuffers::FlatBufferBuilder &_fbb,
-    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_ping,
+    paxos_sgx::crash::ReqType type = paxos_sgx::crash::ReqType_client_fast_get,
     int64_t ticket = 0,
     paxos_sgx::crash::ReqArgs args_type = paxos_sgx::crash::ReqArgs_NONE,
     flatbuffers::Offset<void> args = 0) {
@@ -413,21 +731,58 @@ inline flatbuffers::Offset<BasicRequest> CreateBasicRequest(
   return builder_.Finish();
 }
 
+inline bool VerifyOperation(flatbuffers::Verifier &verifier, const void *obj, Operation type) {
+  switch (type) {
+    case Operation_NONE: {
+      return true;
+    }
+    case Operation_Transfer: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::Transfer *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case Operation_Get: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::Get *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    default: return true;
+  }
+}
+
+inline bool VerifyOperationVector(flatbuffers::Verifier &verifier, const flatbuffers::Vector<flatbuffers::Offset<void>> *values, const flatbuffers::Vector<uint8_t> *types) {
+  if (!values || !types) return !values && !types;
+  if (values->size() != types->size()) return false;
+  for (flatbuffers::uoffset_t i = 0; i < values->size(); ++i) {
+    if (!VerifyOperation(
+        verifier,  values->Get(i), types->GetEnum<Operation>(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 inline bool VerifyReqArgs(flatbuffers::Verifier &verifier, const void *obj, ReqArgs type) {
   switch (type) {
     case ReqArgs_NONE: {
       return true;
     }
-    case ReqArgs_TransferArgs: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::TransferArgs *>(obj);
+    case ReqArgs_ClientFastGetArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientFastGetArgs *>(obj);
       return verifier.VerifyTable(ptr);
     }
-    case ReqArgs_ClientGetArgs: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientGetArgs *>(obj);
+    case ReqArgs_ClientOperationArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ClientOperationArgs *>(obj);
       return verifier.VerifyTable(ptr);
     }
-    case ReqArgs_ReplicaGetArgs: {
-      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaGetArgs *>(obj);
+    case ReqArgs_ReplicaFastGetArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaFastGetArgs *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case ReqArgs_ReplicaProposeArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaProposeArgs *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case ReqArgs_ReplicaAcceptArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ReplicaAcceptArgs *>(obj);
       return verifier.VerifyTable(ptr);
     }
     case ReqArgs_PingArgs: {
