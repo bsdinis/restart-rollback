@@ -1,12 +1,12 @@
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <algorithm>
+#include <string>
 #include <vector>
 #include "log.h"
 #include "qp_clnt.h"
-#include <string>
 
 static int test_n = 1;
 
@@ -41,10 +41,10 @@ static int test_n = 1;
     }
 
 namespace {
-void test_sum();
+void test_fast_get();
+void test_get();
+void test_transfer();
 void test_ping();
-// XXX: CHANGE ME
-// add tests for other operations
 void test_pipelining();
 void test_cb();
 
@@ -53,15 +53,18 @@ ssize_t global_index = 0;
 void parse_cli_args(int argc, char** argv);
 }  // anonymous namespace
 
-using namespace epidemics;  // namespace sanity
+using namespace paxos_sgx;  // namespace sanity
 
-int main(int argc, char ** argv) {
+int main(int argc, char** argv) {
     parse_cli_args(argc, argv);
     setlinebuf(stdout);
 
     INFO("starting test");
     ASSERT_EQ(crash::init(global_config_path.c_str(), global_index), 0, "init");
-    test_sum();
+
+    test_fast_get();
+    test_get();
+    test_transfer();
     test_ping();
     test_pipelining();
     test_cb();
@@ -72,22 +75,76 @@ int main(int argc, char ** argv) {
 }
 
 namespace {
-void test_sum() {
+void test_fast_get() {
     // sync test
     {
-        std::vector<int64_t> const v{1, 2, 3, 4};
-        EXPECT_EQ(crash::sum(v), (int64_t)10, "sum");
+        int64_t amount = 0;
+        EXPECT_EQ(crash::fast_get((int64_t)1, amount), true, "fast_get");
+        EXPECT_EQ(amount, (int64_t)1000, "fast_get");
     }
 
     // async test
     {
-        std::vector<int64_t> const v{1, 2, 3, 4};
-        int64_t const ticket = crash::sum_async(v);
+        int64_t const ticket = crash::fast_get_async((int64_t)1);
         if (crash::wait_for(ticket) == crash::poll_state::ERR) {
-            ERROR("failed to wait for sum");
+            ERROR("failed to wait for fast_get");
             return;
         }
-        EXPECT_EQ(crash::get_reply<int64_t>(ticket), 10, "sum_async");
+        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto expected = std::make_pair<int64_t, bool>((int64_t)1000, true);
+        EXPECT_EQ(reply, expected, "fast_get_async");
+    }
+}
+
+void test_get() {
+    // sync test
+    {
+        int64_t amount = 0;
+        EXPECT_EQ(crash::get(2, amount), true, "get");
+        EXPECT_EQ(amount, (int64_t)1000, "get");
+    }
+
+    // async test
+    {
+        int64_t const ticket = crash::get_async(2);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto expected = std::make_pair<int64_t, bool>(1000, true);
+        EXPECT_EQ(reply, expected, "get_async");
+    }
+}
+
+void test_transfer() {
+    // sync test
+    {
+        int64_t amount = 0;
+        EXPECT_EQ(crash::transfer(3, 4, 100, amount), true, "transfer");
+        EXPECT_EQ(amount, (int64_t)900, "transfer");
+        EXPECT_EQ(crash::get(3, amount), true, "transfer");
+        EXPECT_EQ(amount, (int64_t)900, "transfer");
+        EXPECT_EQ(crash::get(4, amount), true, "transfer");
+        EXPECT_EQ(amount, (int64_t)1100, "transfer");
+    }
+
+    // async test
+    {
+        int64_t const ticket = crash::transfer_async(5, 6, 100);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for transfer");
+            return;
+        }
+        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto expected = std::make_pair<int64_t, bool>(900, true);
+        EXPECT_EQ(reply, expected, "transfer_async");
+
+        int64_t amount = 0;
+        EXPECT_EQ(crash::get(5, amount), true, "transfer_async");
+        EXPECT_EQ(amount, (int64_t)900, "transfer_async");
+        EXPECT_EQ(crash::get(6, amount), true, "transfer_async");
+        EXPECT_EQ(amount, (int64_t)1100, "transfer_async");
     }
 }
 
@@ -118,21 +175,43 @@ void test_ping() {
  * the server
  */
 void test_pipelining() {
-    std::vector<int64_t> const v{1, 2, 3, 4};
-    std::vector<int64_t> sum_tickets;
+    std::vector<int64_t> fast_get_tickets;
+    std::vector<int64_t> get_tickets;
+    std::vector<int64_t> transfer_tickets;
     std::vector<int64_t> ping_tickets;
     for (int i = 0; i < 10; i++) {
-        if (i % 2 == 0)
-            sum_tickets.emplace_back(crash::sum_async(v));
-        else
-            ping_tickets.emplace_back(crash::ping_async());
+        switch (i % 4) {
+            case 0:
+                fast_get_tickets.emplace_back(
+                    crash::fast_get_async((int64_t)7));
+                break;
+            case 1:
+                get_tickets.emplace_back(crash::get_async(8));
+                break;
+            case 2:
+                transfer_tickets.emplace_back(crash::transfer_async(9, 10, 1));
+                break;
+            case 3:
+            default:
+                ping_tickets.emplace_back(crash::ping_async());
+        }
     }
 
-    while (std::any_of(std::cbegin(sum_tickets), std::cend(sum_tickets),
+    while (std::any_of(
+               std::cbegin(fast_get_tickets), std::cend(fast_get_tickets),
+               [](int64_t ticket) {
+                   return crash::poll(ticket) == crash::poll_state::PENDING;
+               }) ||
+           std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
                            return crash::poll(ticket) ==
                                   crash::poll_state::PENDING;
                        }) ||
+           std::any_of(
+               std::cbegin(transfer_tickets), std::cend(transfer_tickets),
+               [](int64_t ticket) {
+                   return crash::poll(ticket) == crash::poll_state::PENDING;
+               }) ||
            std::any_of(std::cbegin(ping_tickets), std::cend(ping_tickets),
                        [](int64_t ticket) {
                            return crash::poll(ticket) ==
@@ -140,8 +219,21 @@ void test_pipelining() {
                        }))
         ;
 
-    for (int64_t const ticket : sum_tickets)
-        ASSERT_EQ(crash::get_reply<int64_t>(ticket), 10, "pipelining");
+    for (int64_t const ticket : fast_get_tickets)
+        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
+                  (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
+    for (int64_t const ticket : get_tickets)
+        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
+                  (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
+
+    int64_t amount = 1000;
+    for (int64_t const ticket : transfer_tickets) {
+        amount -= 1;
+        int64_t rv_amount = amount;
+        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
+                  (std::make_pair<int64_t, bool>(std::move(rv_amount), true)),
+                  "pipelining");
+    }
     for (int64_t const ticket : ping_tickets) {
         crash::get_reply<void>(ticket);
         EXPECT_EQ(0, 0, "pipelining");
@@ -152,22 +244,32 @@ void test_pipelining() {
  * this test tries to verify that the callbacks are being properly executed
  */
 void test_cb() {
-    std::vector<int64_t> const v{1, 2, 3, 4};
     int cbd_funcs = 0;
-    ASSERT_EQ(
-        crash::sum_set_cb([&cbd_funcs](int64_t, int64_t) { cbd_funcs++; }), 0,
-        "sum_set_cb");
+    ASSERT_EQ(crash::fast_get_set_cb(
+                  [&cbd_funcs](int64_t, int64_t, bool) { cbd_funcs++; }),
+              0, "fast_get_set_cb");
+    ASSERT_EQ(crash::transfer_set_cb(
+                  [&cbd_funcs](int64_t, int64_t, bool) { cbd_funcs++; }),
+              0, "transfer_set_cb");
     ASSERT_EQ(crash::ping_set_cb([&cbd_funcs](int64_t) { cbd_funcs++; }), 0,
               "ping_set_cb");
 
-    crash::sum_cb(v);
+    crash::fast_get_cb((int64_t)1);
     crash::ping_cb();
+    crash::get_cb((int64_t)4);
     crash::ping_cb();
-    crash::sum_cb(v);
+    crash::transfer_cb((int64_t)4, (int64_t)6, (int64_t)1);
+    crash::fast_get_cb((int64_t)2);
+    crash::get_cb((int64_t)5);
+    crash::ping_cb();
+    crash::transfer_cb((int64_t)6, (int64_t)4, (int64_t)1);
     crash::wait_for();
 
-    EXPECT_EQ(cbd_funcs, 4, "callback test");
-    ASSERT_EQ(crash::sum_set_cb([](int64_t, int64_t) {}), 0, "sum_set_cb");
+    EXPECT_EQ(cbd_funcs, 9, "callback test");
+    ASSERT_EQ(crash::fast_get_set_cb([](int64_t, int64_t, bool) {}), 0,
+              "fast_get_set_cb");
+    ASSERT_EQ(crash::transfer_set_cb([](int64_t, int64_t, bool) {}), 0,
+              "transfer_set_cb");
     ASSERT_EQ(crash::ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
 
@@ -215,4 +317,3 @@ void parse_cli_args(int argc, char** argv) {
 }
 
 }  // anonymous namespace
-

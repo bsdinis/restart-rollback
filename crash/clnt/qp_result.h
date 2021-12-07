@@ -9,7 +9,7 @@
 
 #include "log.h"
 
-namespace epidemics {
+namespace paxos_sgx {
 namespace crash {
 
 enum class result_type {
@@ -38,4 +38,4 @@ class one_val_result final : public result {
 };
 
 } // namespace crash
-} // namespace epidemics
+} // namespace paxos_sgx

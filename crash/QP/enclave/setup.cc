@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ssl_util.h"
+#include "state_machine.h"
 
 #include "error.h"
 
@@ -33,6 +34,8 @@ char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
 
 }  // anonymous namespace
+
+paxos_sgx::crash::StateMachine g_state_machine;
 
 // ========================================
 

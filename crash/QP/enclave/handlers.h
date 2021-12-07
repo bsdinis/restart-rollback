@@ -3,8 +3,7 @@
  *
  * generic handlers
  */
-#ifndef __HANDLERS_HEADER__
-#define __HANDLERS_HEADER__
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -21,5 +20,3 @@ int handle_client_message(peer &p);
 }  // namespace handler
 }  // namespace crash
 }  // namespace paxos_sgx
-
-#endif  // __HANDLERS_HEADER__

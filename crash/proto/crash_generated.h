@@ -11,7 +11,7 @@ namespace crash {
 
 enum ReqType {
   ReqType_client_fast_get = 0,
-  ReqType_client_operation_get = 1,
+  ReqType_client_operation = 1,
   ReqType_replica_fast_get = 2,
   ReqType_replica_propose = 3,
   ReqType_replica_accept = 4,
@@ -24,7 +24,7 @@ enum ReqType {
 inline const ReqType (&EnumValuesReqType())[7] {
   static const ReqType values[] = {
     ReqType_client_fast_get,
-    ReqType_client_operation_get,
+    ReqType_client_operation,
     ReqType_replica_fast_get,
     ReqType_replica_propose,
     ReqType_replica_accept,
@@ -37,7 +37,7 @@ inline const ReqType (&EnumValuesReqType())[7] {
 inline const char * const *EnumNamesReqType() {
   static const char * const names[8] = {
     "client_fast_get",
-    "client_operation_get",
+    "client_operation",
     "replica_fast_get",
     "replica_propose",
     "replica_accept",

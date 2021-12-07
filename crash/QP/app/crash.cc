@@ -38,7 +38,7 @@ perf::perf_stats stats{{"sum"}, {"ping", perf::measure_type::COUNT}};
 void setup_config(config_t const *conf, std::string const &filename);
 
 // signal things
-int  setup_signals(void (*handler)(int), int n_sigs, ...);
+int setup_signals(void (*handler)(int), int n_sigs, ...);
 void clean_exit_handler(int sig_number);
 void ignore_handler(int sig_number);
 void crash_handler(int sig_number);

@@ -322,9 +322,9 @@ int ocall_select_list(selected_t *list, ssize_t list_sz) {
         if (list[i].sockfd > high_sock) high_sock = list[i].sockfd;
     }
 
-    int activity = select(high_sock + 1, &read_fds, &write_fds, &except_fds, NULL);
-    if (activity == -1)
-        ERROR("select returned -1: %s", strerror(errno));
+    int activity =
+        select(high_sock + 1, &read_fds, &write_fds, &except_fds, NULL);
+    if (activity == -1) ERROR("select returned -1: %s", strerror(errno));
 
     return activity;
 }

@@ -2,7 +2,7 @@ namespace paxos_sgx.crash;
 
 enum ReqType:byte {
     client_fast_get,
-    client_operation_get,
+    client_operation,
     replica_fast_get,
     replica_propose,
     replica_accept,

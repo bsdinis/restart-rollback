@@ -1,7 +1,7 @@
 /**
- * ping_handler.h
+ * close_handler.h
  *
- * handler for the ping operation
+ * handler for the close operation
  */
 #pragma once
 

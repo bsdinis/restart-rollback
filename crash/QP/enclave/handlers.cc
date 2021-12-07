@@ -18,9 +18,10 @@
 
 // XXX: CHANGE ME
 // add other operation handlers
+#include "client_handler.h"
 #include "close_handler.h"
 #include "ping_handler.h"
-#include "sum_handler.h"
+#include "replica_handler.h"
 
 #include <string.h>
 #include <algorithm>
@@ -62,14 +63,34 @@ int handle_client_message(peer &p) {
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
         auto request = paxos_sgx::crash::GetBasicRequest(p.buffer().data() +
-                                                           sizeof(size_t));
+                                                         sizeof(size_t));
 
         auto const begin = timer::now();
         switch (request->type()) {
-            case paxos_sgx::crash::ReqType_sum:
-                sum_handler(p, request->ticket(),
-                            *request->args_as_SumArgs()->vec());
-                perf_rec.add("sum", timer::elapsed_usec(begin));
+            case paxos_sgx::crash::ReqType_client_fast_get:
+                client_fast_get_handler(p, request->ticket(),
+                                        request->args_as_ClientFastGetArgs());
+                perf_rec.add("client_fast_get", timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::ReqType_client_operation:
+                client_operation_handler(p, request->ticket(),
+                                         request->args_as_OperationArgs());
+                perf_rec.add("client_operation", timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::ReqType_replica_fast_get:
+                replica_fast_get_handler(p, request->ticket(),
+                                         request->args_as_ReplicaFastGetArgs());
+                perf_rec.add("replica_fast_get", timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::ReqType_replica_propose:
+                replica_propose_handler(p, request->ticket(),
+                                        request->args_as_ReplicaProposeArgs());
+                perf_rec.add("replica_propose", timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::ReqType_replica_accept:
+                replica_accept_handler(p, request->ticket(),
+                                       request->args_as_ReplicaAcceptArgs());
+                perf_rec.add("replica_accept", timer::elapsed_usec(begin));
                 break;
             case paxos_sgx::crash::ReqType_ping:
                 ping_handler(p, request->ticket());
@@ -113,8 +134,8 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
             return -1;
         }
     } else {
-        list.emplace(std::begin(list) + idx,
-                     paxos_sgx::crash::setup::ssl_ctx(), true);
+        list.emplace(std::begin(list) + idx, paxos_sgx::crash::setup::ssl_ctx(),
+                     true);
     }
     peer &p = idx == -1 ? *(std::end(list) - 1) : list[idx];
 

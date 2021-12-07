@@ -1,13 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <cstring>
 #include <string>
-#include <algorithm>
 #include <vector>
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace epidemics;  // namespace sanity
+using namespace paxos_sgx;  // namespace sanity
 
 namespace {
 std::string global_config_path = "../QP/default.conf";
@@ -15,12 +15,13 @@ ssize_t global_index = 0;
 void parse_cli_args(int argc, char** argv);
 }  // anonymous namespace
 
-int main(int argc, char ** argv) {
+int main(int argc, char** argv) {
     parse_cli_args(argc, argv);
     setlinebuf(stdout);
 
     if (crash::init(global_config_path.c_str(), global_index) == -1) {
-        INFO("could not connect [config = %s, idx = %zd]", global_config_path.c_str(), global_index);
+        INFO("could not connect [config = %s, idx = %zd]",
+             global_config_path.c_str(), global_index);
         return -1;
     }
     crash::close(true);

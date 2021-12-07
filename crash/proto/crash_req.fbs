@@ -2,35 +2,23 @@ include "crash.fbs";
 
 namespace paxos_sgx.crash;
 
-table Transfer {
+table ClientFastGetArgs {
+    account : int64;
+}
+
+table OperationArgs {
     account : int64;
     to      : int64;
     amount  : int64;
 }
 
-table Get {
-    account : int64;
-}
-
-union Operation {
-    Transfer,
-    Get
-}
-
-table ClientFastGetArgs {
-    account : int64;
-}
-
-table ClientOperationArgs {
-    operation: Operation;
-}
 
 table ReplicaFastGetArgs {
     account : int64;
 }
 
 table ReplicaProposeArgs {
-    operation: Operation;
+    operation_args: OperationArgs;
     slot_number: int64;
 }
 
@@ -44,7 +32,7 @@ table CloseArgs { }
 
 union ReqArgs {
     ClientFastGetArgs,
-    ClientOperationArgs,
+    OperationArgs,
     ReplicaFastGetArgs,
     ReplicaProposeArgs,
     ReplicaAcceptArgs,

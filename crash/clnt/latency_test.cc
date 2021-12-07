@@ -22,7 +22,7 @@
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace epidemics;  // namespace sanity
+using namespace paxos_sgx;  // namespace sanity
 
 namespace {
 void parse_cli_args(int argc, char** argv);
@@ -47,9 +47,20 @@ std::map<std::string, do_func> funcs_by_op = {
     {"ping", []() { crash::ping(); }},
     // if you need to use more intricate things for the arguments, you can add
     // global variables
-    {"sum",
+    {"fast_get",
      []() {
-         crash::sum(std::vector<int64_t>{1, 2, 3, 4});
+         int64_t amount;
+         crash::fast_get(1, amount);
+     }},
+    {"get",
+     []() {
+         int64_t amount;
+         crash::get(2, amount);
+     }},
+    {"transfer",
+     []() {
+         int64_t amount;
+         crash::transfer(3, 4, 1, amount);
      }},
 };
 
@@ -80,8 +91,7 @@ int main(int argc, char** argv) {
             global_prefix.c_str(), std::ctime(&now));
 
     if (global_config_path.empty()) {
-        if (crash::init() != 0)
-            KILL("failed to init connection to QP");
+        if (crash::init() != 0) KILL("failed to init connection to QP");
     } else if (crash::init(global_config_path.c_str()) != 0) {
         KILL("failed to init connection to QP");
     }
@@ -97,7 +107,7 @@ int main(int argc, char** argv) {
         if (i % 10 == 0) print_progress(i, global_n_calls);
     }
 
-    crash::close(true); // force close
+    crash::close(true);  // force close
 }
 
 namespace {

@@ -27,7 +27,7 @@
 #include <vector>
 #include <functional>
 
-namespace epidemics{
+namespace paxos_sgx{
 namespace crash {
 
 // replies from the `poll` method
@@ -63,10 +63,10 @@ size_t n_calls_outlasting();
  * sync API
  *
  * RPC-style calls
- * XXX: CHANGE ME
- * add new sync calls
  */
-int64_t sum(std::vector<int64_t> const &);
+bool fast_get(int64_t account, int64_t &amount);
+bool get(int64_t account, int64_t &amount);
+bool transfer(int64_t account, int64_t to, int64_t amount, int64_t &final_amount);
 void ping(void);
 
 /**
@@ -78,10 +78,10 @@ void ping(void);
  *
  * when a reply is ready, get_reply can be called (at most once per ticket) to retrieve the result
  *
- * XXX: CHANGE ME
- * add new async calls
  */
-int64_t sum_async(std::vector<int64_t> const &);
+int64_t fast_get_async(int64_t account);
+int64_t get_async(int64_t account);
+int64_t transfer_async(int64_t account, int64_t to, int64_t amount);
 int64_t ping_async(void);
 
 poll_state poll(int64_t ticket = -1);
@@ -101,16 +101,19 @@ T get_reply(int64_t ticket);
  * calling poll with no arguments advances all calls; when there are no more outlasting calls poll returns NO_CALLS
  * there is also an equivalent for wait_for
  *
- * XXX: CHANGE ME
- * add new callbacks and callback setters
  */
 
 // -1 means error
-int sum_set_cb(std::function<void(int64_t, int64_t)> cb);
-int64_t sum_cb(std::vector<int64_t> const &);
+int fast_get_set_cb(std::function<void(int64_t, int64_t, bool)> cb);
+int64_t fast_get_cb(int64_t account);
+
+int64_t get_cb(int64_t account);
+
+int transfer_set_cb(std::function<void(int64_t, int64_t, bool)> cb);
+int64_t transfer_cb(int64_t account, int64_t to, int64_t amount);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);
 
 } // namespace crash
-} // namespace epidemics
+} // namespace paxos_sgx

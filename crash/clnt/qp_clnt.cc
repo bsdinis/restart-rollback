@@ -27,27 +27,35 @@
 #include <numeric>
 #include <unordered_map>
 
-namespace epidemics {
+namespace paxos_sgx {
 namespace crash {
 
 namespace {
 // protocol helpers
 enum class call_type { SYNC, ASYNC, CALLBACK };
-// sum
-int64_t send_sum_request(peer &server, std::vector<int64_t> const &vec,
-                         call_type type);
-int sum_handler(int64_t ticket, int64_t result);
-int sum_handler_sync(int64_t sum);
-int sum_handler_async(int64_t ticket, int64_t sum);
-std::function<void(int64_t, int64_t)> sum_callback = [](int64_t, int64_t) {};
+// fast
+int64_t send_fast_get_request(peer &server, int64_t account, call_type type);
+int fast_get_handler(int64_t ticket, int64_t result, bool success);
+int fast_get_handler_sync(int64_t fast, bool success);
+int fast_get_handler_async(int64_t ticket, int64_t fast, bool success);
+std::function<void(int64_t, int64_t, bool)> fast_get_callback =
+    [](int64_t, int64_t, bool) {};
+
+// transfer
+int64_t send_transfer_request(peer &server, int64_t account, int64_t to,
+                              int64_t amount, call_type type);
+int transfer_handler(int64_t ticket, int64_t result, bool success);
+int transfer_handler_sync(int64_t transfer, bool success);
+int transfer_handler_async(int64_t ticket, int64_t transfer, bool success);
+std::function<void(int64_t, int64_t, bool)> transfer_callback =
+    [](int64_t, int64_t, bool) {};
+
 // ping
 int64_t send_ping_request(peer &server, call_type type);
 int ping_handler(int64_t ticket);
 int ping_handler_sync();
 int ping_handler_async(int64_t ticket);
 std::function<void(int64_t)> ping_callback = [](int64_t) {};
-// XXX: CHANGE ME
-// add new protocol helpers
 
 // protocol globals
 // ticket of the last call to be made
@@ -66,9 +74,11 @@ inline int64_t gen_ticket(call_type type) {
 }
 
 // global variables to channel the results of synchronous calls to
-int64_t sum_result;
-// XXX: CHANGE ME
-// add results (when required)
+int64_t fast_get_amount_result;
+bool fast_get_success_result;
+
+int64_t transfer_amount_result;
+bool transfer_success_result;
 
 // async results
 std::unordered_map<int64_t, std::unique_ptr<result>> results_map;
@@ -93,12 +103,13 @@ process_res process_peer(peer &p, struct timeval *timeout = nullptr);
 // public implementation
 // =================================
 int init(
-        char const * config,     // config file
-        ssize_t idx,             // index in the config; TODO: make -1 mean login to all and add idx in other calls
-        size_t concurrent_hint,  // hint for number of concurrent calls permitted
-        struct timeval timeout,  // timeout for select
-        char const * cert_path,  // certificate for the client
-        char const * key_path    // private key of the certificate
+    char const *config,  // config file
+    ssize_t idx,  // index in the config; TODO: make -1 mean login to all and
+                  // add idx in other calls
+    size_t concurrent_hint,  // hint for number of concurrent calls permitted
+    struct timeval timeout,  // timeout for select
+    char const *cert_path,   // certificate for the client
+    char const *key_path     // private key of the certificate
 ) {
     global_timeout = timeout;
     config_t conf;
@@ -120,7 +131,6 @@ int init(
         ERROR("failed load certs");
         return -1;
     }
-
 
     auto const &peer_node = conf.nodes[idx];
     if (connect_to_proxy(peer_node) == -1) {
@@ -162,7 +172,7 @@ int close(bool close_remote) {
         }
 
         server->flush();
-        process_peer(*server, nullptr); // block, gets released by EOF
+        process_peer(*server, nullptr);  // block, gets released by EOF
     }
 
     close_ssl_ctx(client_ctx);
@@ -176,17 +186,38 @@ size_t n_calls_concluded() { return calls_concluded; }
 size_t n_calls_outlasting() { return n_calls_issued() - n_calls_concluded(); }
 
 // sync api
-int64_t sum(std::vector<int64_t> const &vec) {
-    if (send_sum_request(*server, vec, call_type::SYNC) == -1) {
-        ERROR("Failed to sum");
-        return -1;
+bool fast_get(int64_t account, int64_t &amount) {
+    if (send_fast_get_request(*server, account, call_type::SYNC) == -1) {
+        ERROR("Failed to fast");
+        return false;
     }
     if (block_until_return(*server) == -1) {
         ERROR("failed to get a return from the basicQP");
-        return -1;
+        return false;
     }
 
-    return sum_result;
+    amount = fast_get_amount_result;
+    return fast_get_success_result;
+}
+
+bool get(int64_t account, int64_t &amount) {
+    return transfer(account, account, 0, amount);
+}
+
+bool transfer(int64_t account, int64_t to, int64_t amount,
+              int64_t &final_amount) {
+    if (send_transfer_request(*server, account, to, amount, call_type::SYNC) ==
+        -1) {
+        ERROR("Failed to transfer");
+        return false;
+    }
+    if (block_until_return(*server) == -1) {
+        ERROR("failed to get a return from the basicQP");
+        return false;
+    }
+
+    final_amount = transfer_amount_result;
+    return transfer_success_result;
 }
 
 void ping() {
@@ -200,26 +231,40 @@ void ping() {
     }
 }
 
-// XXX: CHANGE ME
-// implement sync functions
-
 // async api
-int64_t sum_async(std::vector<int64_t> const &vec) {
-    return send_sum_request(*server, vec, call_type::ASYNC);
+int64_t fast_get_async(int64_t account) {
+    return send_fast_get_request(*server, account, call_type::ASYNC);
 }
-
+int64_t get_async(int64_t account) {
+    return send_transfer_request(*server, account, account, 0,
+                                 call_type::ASYNC);
+}
+int64_t transfer_async(int64_t account, int64_t to, int64_t amount) {
+    return send_transfer_request(*server, account, to, amount,
+                                 call_type::ASYNC);
+}
 int64_t ping_async() { return send_ping_request(*server, call_type::ASYNC); }
 
-// XXX: CHANGE ME
-// implement async functions
-
 // callback api
-int sum_set_cb(std::function<void(int64_t, int64_t)> cb) {
-    sum_callback = cb;
+int fast_get_set_cb(std::function<void(int64_t, int64_t, bool)> cb) {
+    fast_get_callback = cb;
     return 0;
 }
-int64_t sum_cb(std::vector<int64_t> const &vec) {
-    return send_sum_request(*server, vec, call_type::CALLBACK);
+int64_t fast_get_cb(int64_t account) {
+    return send_fast_get_request(*server, account, call_type::CALLBACK);
+}
+
+int64_t get_cb(int64_t account) {
+    return send_transfer_request(*server, account, account, 0,
+                                 call_type::CALLBACK);
+}
+int transfer_set_cb(std::function<void(int64_t, int64_t, bool)> cb) {
+    transfer_callback = cb;
+    return 0;
+}
+int64_t transfer_cb(int64_t account, int64_t to, int64_t amount) {
+    return send_transfer_request(*server, account, to, amount,
+                                 call_type::CALLBACK);
 }
 
 int ping_set_cb(std::function<void(int64_t)> cb) {
@@ -228,13 +273,10 @@ int ping_set_cb(std::function<void(int64_t)> cb) {
 }
 int64_t ping_cb() { return send_ping_request(*server, call_type::CALLBACK); }
 
-// XXX: CHANGE ME
-// implement callback functions
-
 // functions to advance state
 poll_state poll(int64_t ticket) {
-    if (n_calls_outlasting() == 0) return poll_state::NO_CALLS;
     if (ticket != -1 && has_result(ticket)) return poll_state::READY;
+    if (n_calls_outlasting() == 0) return poll_state::NO_CALLS;
 
     if (!server->connected()) {
         ERROR("no connection to proxy");
@@ -298,8 +340,8 @@ T get_reply(int64_t ticket) {
     return downcasted->get();
 }
 
-// for sum
-template int64_t get_reply(int64_t ticket);
+// for fast, get, transfer
+template std::pair<int64_t, bool> get_reply(int64_t ticket);
 
 // for ping
 template <>
@@ -319,9 +361,6 @@ void get_reply(int64_t ticket) {
     results_map.erase(it);
 }
 
-// XXX: CHANGE ME
-// add required template instantiations
-//
 // eg: if you are adding an RPC like `double avg(std::vector<int64_t> & const
 // v)` you should add the following line `template double get_reply(int64_t
 // double)`
@@ -331,16 +370,46 @@ void get_reply(int64_t ticket) {
 // =================================
 
 namespace {
-int64_t send_sum_request(peer &server, std::vector<int64_t> const &vec,
-                         call_type type) {
+int64_t send_fast_get_request(peer &server, int64_t account, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto sum_args = paxos_sgx::crash::CreateSumArgsDirect(builder, &vec);
+    auto fast_get_args =
+        paxos_sgx::crash::CreateClientFastGetArgs(builder, account);
 
     auto request = paxos_sgx::crash::CreateBasicRequest(
-        builder, paxos_sgx::crash::ReqType_sum, ticket,
-        paxos_sgx::crash::ReqArgs_SumArgs, sum_args.Union());
+        builder, paxos_sgx::crash::ReqType_client_fast_get, ticket,
+        paxos_sgx::crash::ReqArgs_ClientFastGetArgs, fast_get_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (server.append(&size, 1) == -1) {
+        // encode message header
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+    if (server.append(payload, size) == -1) {  // then the segment itself
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+
+    calls_issued++;
+    return ticket;
+}
+
+int64_t send_transfer_request(peer &server, int64_t account, int64_t to,
+                              int64_t amount, call_type type) {
+    int64_t const ticket = gen_ticket(type);
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto transfer_args =
+        paxos_sgx::crash::CreateOperationArgs(builder, account, to, amount);
+
+    auto request = paxos_sgx::crash::CreateBasicRequest(
+        builder, paxos_sgx::crash::ReqType_client_operation, ticket,
+        paxos_sgx::crash::ReqArgs_OperationArgs, transfer_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -388,28 +457,56 @@ int64_t send_ping_request(peer &server, call_type type) {
     return ticket;
 }
 
-// XXX: CHANGE ME
-// add send function for new operations
-
-// sum
-int sum_handler_sync(int64_t sum) {
-    sum_result = sum;
+// fast
+int fast_get_handler_sync(int64_t amount, bool success) {
+    fast_get_amount_result = amount;
+    fast_get_success_result = success;
     return 0;
 }
-int sum_handler_async(int64_t ticket, int64_t sum) {
-    results_map.emplace(ticket, std::unique_ptr<result>(
-                                    std::make_unique<one_val_result<int64_t>>(
-                                        one_val_result<int64_t>(sum))));
+int fast_get_handler_async(int64_t ticket, int64_t amount, bool success) {
+    results_map.emplace(
+        ticket, std::unique_ptr<result>(
+                    std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
+                        one_val_result<std::pair<int64_t, bool>>(
+                            std::make_pair(amount, success)))));
     return 0;
 }
-int sum_handler(int64_t ticket, int64_t sum) {
+int fast_get_handler(int64_t ticket, int64_t amount, bool success) {
     switch (ticket % 3) {
         case 0:  // SYNC
-            return sum_handler_sync(sum);
+            return fast_get_handler_sync(amount, success);
         case 1:  // ASYNC
-            return sum_handler_async(ticket, sum);
+            return fast_get_handler_async(ticket, amount, success);
         case 2:  // CALLBACK
-            sum_callback(ticket, sum);
+            fast_get_callback(ticket, amount, success);
+            return 0;
+    }
+    // unreachable (could use __builtin_unreachable)
+    return -1;
+}
+
+// operation
+int transfer_handler_sync(int64_t amount, bool success) {
+    transfer_amount_result = amount;
+    transfer_success_result = success;
+    return 0;
+}
+int transfer_handler_async(int64_t ticket, int64_t amount, bool success) {
+    results_map.emplace(
+        ticket, std::unique_ptr<result>(
+                    std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
+                        one_val_result<std::pair<int64_t, bool>>(
+                            std::make_pair(amount, success)))));
+    return 0;
+}
+int transfer_handler(int64_t ticket, int64_t amount, bool success) {
+    switch (ticket % 3) {
+        case 0:  // SYNC
+            return transfer_handler_sync(amount, success);
+        case 1:  // ASYNC
+            return transfer_handler_async(ticket, amount, success);
+        case 2:  // CALLBACK
+            transfer_callback(ticket, amount, success);
             return 0;
     }
     // unreachable (could use __builtin_unreachable)
@@ -436,9 +533,6 @@ int ping_handler(int64_t ticket) {
     return -1;
 }
 
-// XXX: CHANGE ME
-// add handlers for new operations
-
 bool has_result(int64_t ticket) {
     return results_map.find(ticket) != std::end(results_map);
 }
@@ -455,14 +549,23 @@ int handle_received_message(peer &p) {
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
         auto response = paxos_sgx::crash::GetBasicResponse(p.buffer().data() +
-                                                             sizeof(size_t));
+                                                           sizeof(size_t));
 
         calls_concluded++;
         switch (response->type()) {
-            case paxos_sgx::crash::ReqType_sum:
-                FINE("sum response [ticket %ld]", response->ticket());
-                sum_handler(response->ticket(),
-                            response->result_as_SumResult()->sum());
+            case paxos_sgx::crash::ReqType_client_fast_get:
+                FINE("fast response [ticket %ld]", response->ticket());
+                fast_get_handler(
+                    response->ticket(),
+                    response->result_as_ClientFastGetResult()->amount(),
+                    response->result_as_ClientFastGetResult()->success());
+                break;
+            case paxos_sgx::crash::ReqType_client_operation:
+                FINE("operation response [ticket %ld]", response->ticket());
+                transfer_handler(
+                    response->ticket(),
+                    response->result_as_ClientOperationResult()->amount(),
+                    response->result_as_ClientOperationResult()->success());
                 break;
             case paxos_sgx::crash::ReqType_ping:
                 FINE("ping response [ticket %ld]", response->ticket());
@@ -598,4 +701,4 @@ process_res process_peer(peer &p, struct timeval *timeout) {
 }  // anonymous namespace
 
 }  // namespace crash
-}  // namespace epidemics
+}  // namespace paxos_sgx

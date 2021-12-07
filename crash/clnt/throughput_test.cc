@@ -22,7 +22,7 @@
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace epidemics;  // namespace sanity
+using namespace paxos_sgx;  // namespace sanity
 
 namespace {
 // cli options
@@ -64,19 +64,34 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
               KILL("failed to set ping callback");
           }
       }}},
-    {"sum",
+    {"fast_get",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
-      []() -> int64_t {
-          return crash::sum_cb(std::vector<int64_t>{1, 2, 3, 4});
-      },
+      []() -> int64_t { return crash::fast_get_cb(1); },
       []() {
-          auto sum_callbck = [](int64_t ticket, int64_t) {
-              fprintf(stdout, "%lu, %ld, %ld, %ld, SUM\n", now_usecs(),
+          auto fast_get_callbck = [](int64_t ticket, int64_t, bool) {
+              fprintf(stdout, "%lu, %ld, %ld, %ld, FAST_GET\n", now_usecs(),
                       global_load, global_tick_duration, ticket);
           };
-          if (crash::sum_set_cb(sum_callbck) == -1) {
-              KILL("failed to set sum callback");
+          if (crash::fast_get_set_cb(fast_get_callbck) == -1) {
+              KILL("failed to set fast get callback");
+          }
+      }}},
+    {"get",
+     {// if you need to use more intricate things for the arguments, you can add
+      // global variables
+      []() -> int64_t { return crash::fast_get_cb(1); }, []() {}}},
+    {"transfer",
+     {// if you need to use more intricate things for the arguments, you can add
+      // global variables
+      []() -> int64_t { return crash::transfer_cb(3, 4, 1); },
+      []() {
+          auto transfer_callbck = [](int64_t ticket, int64_t, bool) {
+              fprintf(stdout, "%lu, %ld, %ld, %ld, FAST_GET\n", now_usecs(),
+                      global_load, global_tick_duration, ticket);
+          };
+          if (crash::transfer_set_cb(transfer_callbck) == -1) {
+              KILL("failed to set fast get callback");
           }
       }}},
 };
@@ -101,8 +116,7 @@ void warmup(std::chrono::seconds duration) {
         while ((std::chrono::system_clock::now() - tick_start) <
                wtick_duration) {
             crash::poll();
-            print_progress(crash::n_calls_concluded(),
-                           crash::n_calls_issued());
+            print_progress(crash::n_calls_concluded(), crash::n_calls_issued());
         }
     }
     crash::wait_for();
@@ -165,8 +179,7 @@ int main(int argc, char** argv) {
     fflush(stdout);
 
     if (global_config_path.empty()) {
-        if (crash::init() != 0)
-            KILL("failed to init connection to QP");
+        if (crash::init() != 0) KILL("failed to init connection to QP");
     } else if (crash::init(global_config_path.c_str()) != 0) {
         KILL("failed to init connection to QP");
     }
@@ -185,7 +198,7 @@ int main(int argc, char** argv) {
     std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
     load_test(test_duration);
     INFO("finished test");
-    crash::close(true); // force close
+    crash::close(true);  // force close
 }
 
 namespace {

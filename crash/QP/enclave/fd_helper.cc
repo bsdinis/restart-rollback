@@ -7,8 +7,7 @@ namespace net {
 
 // returns effective size
 int select_list(int listen_socket, std::vector<peer> const &clnt_list) {
-    if (listen_socket == -1)
-        KILL("cannot select listen socket -1");
+    if (listen_socket == -1) KILL("cannot select listen socket -1");
 
     std::vector<selected_t> list;
     selected_t s = {listen_socket, 0};

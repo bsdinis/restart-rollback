@@ -2,8 +2,8 @@
 CC := clang
 CXX := clang++
 INCLUDES := -I.
-CFLAGS := -fdiagnostics-color=always $(INCLUDES)
-LDFLAGS := -L. $(INCLUDES)
+CFLAGS := -fdiagnostics-color=always -fsanitize=address $(INCLUDES)
+LDFLAGS := -L. -fsanitize=address $(INCLUDES)
 LDLIBS += -lssl -lcrypto
 LDLIBS += -lstdc++ -lm
 LDLIBS += -lflatbuffers
@@ -30,16 +30,16 @@ all: libbasicQP.a $(TESTS)
 
 -include autodep
 
-libbasicQP.a: config.o peer.o qp_clnt.o ssl_util.o
+libbasicQP.a: config.o peer.o qp_clnt.o ssl_util.o log.h
 	ar rcs $@ $^
 
 test: libbasicQP.a $(TESTS)
 	@for t in $(TESTS) ; do echo $$t; echo; ./$$t ; echo; done
 
-qp_test: qp_test.o
-close_remote: close_remote.o
-latency_test: latency_test.o
-throughput_test: throughput_test.o
+qp_test: qp_test.o libbasicQP.a
+close_remote: close_remote.o libbasicQP.a
+latency_test: latency_test.o libbasicQP.a
+throughput_test: throughput_test.o libbasicQP.a
 
 #################################
 
