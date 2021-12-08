@@ -22,6 +22,7 @@
 #include "close_handler.h"
 #include "ping_handler.h"
 #include "replica_handler.h"
+#include "reset_handler.h"
 
 #include <string.h>
 #include <algorithm>
@@ -95,6 +96,10 @@ int handle_client_message(peer &p) {
             case paxos_sgx::crash::ReqType_ping:
                 ping_handler(p, request->ticket());
                 perf_rec.add("ping");
+                break;
+            case paxos_sgx::crash::ReqType_reset:
+                reset_handler(p, request->ticket());
+                perf_rec.add("reset");
                 break;
             case paxos_sgx::crash::ReqType_close:
                 close_handler(p, request->ticket());

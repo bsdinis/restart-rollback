@@ -24,6 +24,7 @@ class StateMachine {
     bool execute(OperationArgs const *operation_args, int64_t &account,
                  int64_t &amount);
     int64_t get(int64_t account);
+    void reset();
 };
 
 }  // namespace crash

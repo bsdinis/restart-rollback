@@ -28,6 +28,9 @@ struct ReplicaAcceptResultBuilder;
 struct PingResult;
 struct PingResultBuilder;
 
+struct ResetResult;
+struct ResetResultBuilder;
+
 struct BasicResponse;
 struct BasicResponseBuilder;
 
@@ -39,35 +42,38 @@ enum Result {
     Result_ReplicaProposeResult = 4,
     Result_ReplicaAcceptResult = 5,
     Result_PingResult = 6,
+    Result_ResetResult = 7,
     Result_MIN = Result_NONE,
-    Result_MAX = Result_PingResult
+    Result_MAX = Result_ResetResult
 };
 
-inline const Result (&EnumValuesResult())[7] {
+inline const Result (&EnumValuesResult())[8] {
     static const Result values[] = {Result_NONE,
                                     Result_ClientFastGetResult,
                                     Result_ClientOperationResult,
                                     Result_ReplicaFastGetResult,
                                     Result_ReplicaProposeResult,
                                     Result_ReplicaAcceptResult,
-                                    Result_PingResult};
+                                    Result_PingResult,
+                                    Result_ResetResult};
     return values;
 }
 
 inline const char *const *EnumNamesResult() {
-    static const char *const names[8] = {"NONE",
+    static const char *const names[9] = {"NONE",
                                          "ClientFastGetResult",
                                          "ClientOperationResult",
                                          "ReplicaFastGetResult",
                                          "ReplicaProposeResult",
                                          "ReplicaAcceptResult",
                                          "PingResult",
+                                         "ResetResult",
                                          nullptr};
     return names;
 }
 
 inline const char *EnumNameResult(Result e) {
-    if (flatbuffers::IsOutRange(e, Result_NONE, Result_PingResult)) return "";
+    if (flatbuffers::IsOutRange(e, Result_NONE, Result_ResetResult)) return "";
     const size_t index = static_cast<size_t>(e);
     return EnumNamesResult()[index];
 }
@@ -105,6 +111,11 @@ struct ResultTraits<paxos_sgx::crash::ReplicaAcceptResult> {
 template <>
 struct ResultTraits<paxos_sgx::crash::PingResult> {
     static const Result enum_value = Result_PingResult;
+};
+
+template <>
+struct ResultTraits<paxos_sgx::crash::ResetResult> {
+    static const Result enum_value = Result_ResetResult;
 };
 
 bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj,
@@ -393,6 +404,35 @@ inline flatbuffers::Offset<PingResult> CreatePingResult(
     return builder_.Finish();
 }
 
+struct ResetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef ResetResultBuilder Builder;
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) && verifier.EndTable();
+    }
+};
+
+struct ResetResultBuilder {
+    typedef ResetResult Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    explicit ResetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    ResetResultBuilder &operator=(const ResetResultBuilder &);
+    flatbuffers::Offset<ResetResult> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<ResetResult>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<ResetResult> CreateResetResult(
+    flatbuffers::FlatBufferBuilder &_fbb) {
+    ResetResultBuilder builder_(_fbb);
+    return builder_.Finish();
+}
+
 struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef BasicResponseBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -456,6 +496,12 @@ struct BasicResponse FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                    ? static_cast<const paxos_sgx::crash::PingResult *>(result())
                    : nullptr;
     }
+    const paxos_sgx::crash::ResetResult *result_as_ResetResult() const {
+        return result_type() == paxos_sgx::crash::Result_ResetResult
+                   ? static_cast<const paxos_sgx::crash::ResetResult *>(
+                         result())
+                   : nullptr;
+    }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int8_t>(verifier, VT_TYPE) &&
@@ -501,6 +547,12 @@ template <>
 inline const paxos_sgx::crash::PingResult *
 BasicResponse::result_as<paxos_sgx::crash::PingResult>() const {
     return result_as_PingResult();
+}
+
+template <>
+inline const paxos_sgx::crash::ResetResult *
+BasicResponse::result_as<paxos_sgx::crash::ResetResult>() const {
+    return result_as_ResetResult();
 }
 
 struct BasicResponseBuilder {
@@ -583,6 +635,11 @@ inline bool VerifyResult(flatbuffers::Verifier &verifier, const void *obj,
         case Result_PingResult: {
             auto ptr =
                 reinterpret_cast<const paxos_sgx::crash::PingResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case Result_ResetResult: {
+            auto ptr =
+                reinterpret_cast<const paxos_sgx::crash::ResetResult *>(obj);
             return verifier.VerifyTable(ptr);
         }
         default:

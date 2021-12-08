@@ -184,6 +184,8 @@ int main(int argc, char** argv) {
         KILL("failed to init connection to QP");
     }
 
+    crash::reset();
+
     INFO("starting warmup");
     // warmup
     std::chrono::seconds warmup_duration(

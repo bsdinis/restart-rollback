@@ -62,6 +62,8 @@ int main(int argc, char** argv) {
     INFO("starting test");
     ASSERT_EQ(crash::init(global_config_path.c_str(), global_index), 0, "init");
 
+    crash::reset();
+
     test_fast_get();
     test_get();
     test_transfer();

@@ -96,6 +96,8 @@ int main(int argc, char** argv) {
         KILL("failed to init connection to QP");
     }
 
+    crash::reset();
+
     for (ssize_t i = 0; i < global_n_calls; i++) {
         auto const start = std::chrono::system_clock::now();
         funcs_by_op.at(global_op)();

@@ -29,6 +29,8 @@ table ReplicaAcceptResult { }
 
 table PingResult { }
 
+table ResetResult { }
+
 union Result {
     ClientFastGetResult,
     ClientOperationResult,
@@ -36,6 +38,7 @@ union Result {
     ReplicaProposeResult,
     ReplicaAcceptResult,
     PingResult,
+    ResetResult,
 }
 
 table BasicResponse {

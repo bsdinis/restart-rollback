@@ -8,4 +8,5 @@ enum ReqType:byte {
     replica_accept,
     ping,
     close,
+    reset,
 }

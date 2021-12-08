@@ -30,6 +30,8 @@ table PingArgs { }
 
 table CloseArgs { }
 
+table ResetArgs { }
+
 union ReqArgs {
     ClientFastGetArgs,
     OperationArgs,
@@ -38,6 +40,7 @@ union ReqArgs {
     ReplicaAcceptArgs,
     PingArgs,
     CloseArgs,
+    ResetArgs,
 }
 
 table BasicRequest {

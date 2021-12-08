@@ -17,11 +17,12 @@ enum ReqType {
   ReqType_replica_accept = 4,
   ReqType_ping = 5,
   ReqType_close = 6,
+  ReqType_reset = 7,
   ReqType_MIN = ReqType_client_fast_get,
-  ReqType_MAX = ReqType_close
+  ReqType_MAX = ReqType_reset
 };
 
-inline const ReqType (&EnumValuesReqType())[7] {
+inline const ReqType (&EnumValuesReqType())[8] {
   static const ReqType values[] = {
     ReqType_client_fast_get,
     ReqType_client_operation,
@@ -29,13 +30,14 @@ inline const ReqType (&EnumValuesReqType())[7] {
     ReqType_replica_propose,
     ReqType_replica_accept,
     ReqType_ping,
-    ReqType_close
+    ReqType_close,
+    ReqType_reset
   };
   return values;
 }
 
 inline const char * const *EnumNamesReqType() {
-  static const char * const names[8] = {
+  static const char * const names[9] = {
     "client_fast_get",
     "client_operation",
     "replica_fast_get",
@@ -43,13 +45,14 @@ inline const char * const *EnumNamesReqType() {
     "replica_accept",
     "ping",
     "close",
+    "reset",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameReqType(ReqType e) {
-  if (flatbuffers::IsOutRange(e, ReqType_client_fast_get, ReqType_close)) return "";
+  if (flatbuffers::IsOutRange(e, ReqType_client_fast_get, ReqType_reset)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesReqType()[index];
 }

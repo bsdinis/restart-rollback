@@ -57,6 +57,13 @@ int ping_handler_sync();
 int ping_handler_async(int64_t ticket);
 std::function<void(int64_t)> ping_callback = [](int64_t) {};
 
+// reset
+int64_t send_reset_request(peer &server, call_type type);
+int reset_handler(int64_t ticket);
+int reset_handler_sync();
+int reset_handler_async(int64_t ticket);
+std::function<void(int64_t)> reset_callback = [](int64_t) {};
+
 // protocol globals
 // ticket of the last call to be made
 int64_t call_ticket = 0;
@@ -231,6 +238,17 @@ void ping() {
     }
 }
 
+void reset() {
+    if (send_reset_request(*server, call_type::SYNC) == -1) {
+        ERROR("Failed to reset");
+        return;
+    }
+
+    if (block_until_return(*server) == -1) {
+        ERROR("failed to get a return from the basicQP");
+    }
+}
+
 // async api
 int64_t fast_get_async(int64_t account) {
     return send_fast_get_request(*server, account, call_type::ASYNC);
@@ -244,6 +262,7 @@ int64_t transfer_async(int64_t account, int64_t to, int64_t amount) {
                                  call_type::ASYNC);
 }
 int64_t ping_async() { return send_ping_request(*server, call_type::ASYNC); }
+int64_t reset_async() { return send_reset_request(*server, call_type::ASYNC); }
 
 // callback api
 int fast_get_set_cb(std::function<void(int64_t, int64_t, bool)> cb) {
@@ -272,6 +291,12 @@ int ping_set_cb(std::function<void(int64_t)> cb) {
     return 0;
 }
 int64_t ping_cb() { return send_ping_request(*server, call_type::CALLBACK); }
+
+int reset_set_cb(std::function<void(int64_t)> cb) {
+    reset_callback = cb;
+    return 0;
+}
+int64_t reset_cb() { return send_reset_request(*server, call_type::CALLBACK); }
 
 // functions to advance state
 poll_state poll(int64_t ticket) {
@@ -343,7 +368,7 @@ T get_reply(int64_t ticket) {
 // for fast, get, transfer
 template std::pair<int64_t, bool> get_reply(int64_t ticket);
 
-// for ping
+// for ping reset
 template <>
 void get_reply(int64_t ticket) {
     auto it = results_map.find(ticket);
@@ -457,6 +482,34 @@ int64_t send_ping_request(peer &server, call_type type) {
     return ticket;
 }
 
+int64_t send_reset_request(peer &server, call_type type) {
+    int64_t const ticket = gen_ticket(type);
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto reset_args = paxos_sgx::crash::CreatePingArgs(builder);
+
+    auto request = paxos_sgx::crash::CreateBasicRequest(
+        builder, paxos_sgx::crash::ReqType_reset, ticket,
+        paxos_sgx::crash::ReqArgs_PingArgs, reset_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (server.append(&size, 1) == -1) {
+        // encode message header
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+    if (server.append(payload, size) == -1) {  // then the segment itself
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+
+    calls_issued++;
+    return ticket;
+}
+
 // fast
 int fast_get_handler_sync(int64_t amount, bool success) {
     fast_get_amount_result = amount;
@@ -533,6 +586,26 @@ int ping_handler(int64_t ticket) {
     return -1;
 }
 
+// reset
+int reset_handler_sync() { return 0; }
+int reset_handler_async(int64_t ticket) {
+    results_map.emplace(ticket, std::make_unique<result>());
+    return 0;
+}
+int reset_handler(int64_t ticket) {
+    switch (ticket % 3) {
+        case 0:  // SYNC
+            return reset_handler_sync();
+        case 1:  // ASYNC
+            return reset_handler_async(ticket);
+        case 2:  // CALLBACK
+            reset_callback(ticket);
+            return 0;
+    }
+    // unreachable (could use __builtin_unreachable)
+    return -1;
+}
+
 bool has_result(int64_t ticket) {
     return results_map.find(ticket) != std::end(results_map);
 }
@@ -570,6 +643,10 @@ int handle_received_message(peer &p) {
             case paxos_sgx::crash::ReqType_ping:
                 FINE("ping response [ticket %ld]", response->ticket());
                 ping_handler(response->ticket());
+                break;
+            case paxos_sgx::crash::ReqType_reset:
+                FINE("reset response [ticket %ld]", response->ticket());
+                reset_handler(response->ticket());
                 break;
             default:
                 ERROR("Unknown request %d [ticket %ld]", response->type(),

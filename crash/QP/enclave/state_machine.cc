@@ -41,5 +41,9 @@ bool StateMachine::execute(OperationArgs const *operation, int64_t &account,
     return true;
 }
 
+void StateMachine::reset() {
+    this->m_wallets = ::std::unordered_map<int64_t, int64_t>();
+}
+
 }  // namespace crash
 }  // namespace paxos_sgx

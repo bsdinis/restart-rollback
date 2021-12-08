@@ -68,6 +68,7 @@ bool fast_get(int64_t account, int64_t &amount);
 bool get(int64_t account, int64_t &amount);
 bool transfer(int64_t account, int64_t to, int64_t amount, int64_t &final_amount);
 void ping(void);
+void reset(void);
 
 /**
  * async API
@@ -83,6 +84,7 @@ int64_t fast_get_async(int64_t account);
 int64_t get_async(int64_t account);
 int64_t transfer_async(int64_t account, int64_t to, int64_t amount);
 int64_t ping_async(void);
+int64_t reset_async(void);
 
 poll_state poll(int64_t ticket = -1);
 poll_state wait_for(int64_t ticket = -1);
@@ -114,6 +116,9 @@ int64_t transfer_cb(int64_t account, int64_t to, int64_t amount);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);
+
+int reset_set_cb(std::function<void(int64_t)> cb);
+int64_t reset_cb(void);
 
 } // namespace crash
 } // namespace paxos_sgx

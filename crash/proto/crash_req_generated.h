@@ -32,6 +32,9 @@ struct PingArgsBuilder;
 struct CloseArgs;
 struct CloseArgsBuilder;
 
+struct ResetArgs;
+struct ResetArgsBuilder;
+
 struct BasicRequest;
 struct BasicRequestBuilder;
 
@@ -44,11 +47,12 @@ enum ReqArgs {
   ReqArgs_ReplicaAcceptArgs = 5,
   ReqArgs_PingArgs = 6,
   ReqArgs_CloseArgs = 7,
+  ReqArgs_ResetArgs = 8,
   ReqArgs_MIN = ReqArgs_NONE,
-  ReqArgs_MAX = ReqArgs_CloseArgs
+  ReqArgs_MAX = ReqArgs_ResetArgs
 };
 
-inline const ReqArgs (&EnumValuesReqArgs())[8] {
+inline const ReqArgs (&EnumValuesReqArgs())[9] {
   static const ReqArgs values[] = {
     ReqArgs_NONE,
     ReqArgs_ClientFastGetArgs,
@@ -57,13 +61,14 @@ inline const ReqArgs (&EnumValuesReqArgs())[8] {
     ReqArgs_ReplicaProposeArgs,
     ReqArgs_ReplicaAcceptArgs,
     ReqArgs_PingArgs,
-    ReqArgs_CloseArgs
+    ReqArgs_CloseArgs,
+    ReqArgs_ResetArgs
   };
   return values;
 }
 
 inline const char * const *EnumNamesReqArgs() {
-  static const char * const names[9] = {
+  static const char * const names[10] = {
     "NONE",
     "ClientFastGetArgs",
     "OperationArgs",
@@ -72,13 +77,14 @@ inline const char * const *EnumNamesReqArgs() {
     "ReplicaAcceptArgs",
     "PingArgs",
     "CloseArgs",
+    "ResetArgs",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameReqArgs(ReqArgs e) {
-  if (flatbuffers::IsOutRange(e, ReqArgs_NONE, ReqArgs_CloseArgs)) return "";
+  if (flatbuffers::IsOutRange(e, ReqArgs_NONE, ReqArgs_ResetArgs)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesReqArgs()[index];
 }
@@ -113,6 +119,10 @@ template<> struct ReqArgsTraits<paxos_sgx::crash::PingArgs> {
 
 template<> struct ReqArgsTraits<paxos_sgx::crash::CloseArgs> {
   static const ReqArgs enum_value = ReqArgs_CloseArgs;
+};
+
+template<> struct ReqArgsTraits<paxos_sgx::crash::ResetArgs> {
+  static const ReqArgs enum_value = ReqArgs_ResetArgs;
 };
 
 bool VerifyReqArgs(flatbuffers::Verifier &verifier, const void *obj, ReqArgs type);
@@ -419,6 +429,36 @@ inline flatbuffers::Offset<CloseArgs> CreateCloseArgs(
   return builder_.Finish();
 }
 
+struct ResetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ResetArgsBuilder Builder;
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           verifier.EndTable();
+  }
+};
+
+struct ResetArgsBuilder {
+  typedef ResetArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  explicit ResetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ResetArgsBuilder &operator=(const ResetArgsBuilder &);
+  flatbuffers::Offset<ResetArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ResetArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ResetArgs> CreateResetArgs(
+    flatbuffers::FlatBufferBuilder &_fbb) {
+  ResetArgsBuilder builder_(_fbb);
+  return builder_.Finish();
+}
+
 struct BasicRequest FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef BasicRequestBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -461,6 +501,9 @@ struct BasicRequest FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const paxos_sgx::crash::CloseArgs *args_as_CloseArgs() const {
     return args_type() == paxos_sgx::crash::ReqArgs_CloseArgs ? static_cast<const paxos_sgx::crash::CloseArgs *>(args()) : nullptr;
   }
+  const paxos_sgx::crash::ResetArgs *args_as_ResetArgs() const {
+    return args_type() == paxos_sgx::crash::ReqArgs_ResetArgs ? static_cast<const paxos_sgx::crash::ResetArgs *>(args()) : nullptr;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int8_t>(verifier, VT_TYPE) &&
@@ -498,6 +541,10 @@ template<> inline const paxos_sgx::crash::PingArgs *BasicRequest::args_as<paxos_
 
 template<> inline const paxos_sgx::crash::CloseArgs *BasicRequest::args_as<paxos_sgx::crash::CloseArgs>() const {
   return args_as_CloseArgs();
+}
+
+template<> inline const paxos_sgx::crash::ResetArgs *BasicRequest::args_as<paxos_sgx::crash::ResetArgs>() const {
+  return args_as_ResetArgs();
 }
 
 struct BasicRequestBuilder {
@@ -573,6 +620,10 @@ inline bool VerifyReqArgs(flatbuffers::Verifier &verifier, const void *obj, ReqA
     }
     case ReqArgs_CloseArgs: {
       auto ptr = reinterpret_cast<const paxos_sgx::crash::CloseArgs *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case ReqArgs_ResetArgs: {
+      auto ptr = reinterpret_cast<const paxos_sgx::crash::ResetArgs *>(obj);
       return verifier.VerifyTable(ptr);
     }
     default: return true;
