@@ -378,5 +378,8 @@ void ocall_sgx_eolog(const char *str) {
 void ocall_sgx_olog(const char *str) {
     fprintf(stdout, "[SGX] %ld | %d | %s", my_idx, getpid(), str);
 }
+void ocall_sgx_elog(const char *str) {
+    fprintf(stderr, "[SGX] %ld | %d | %s", my_idx, getpid(), str);
+}
 
 void ocall_sgx_puts_e(const char *str) { fputs(str, stderr); }

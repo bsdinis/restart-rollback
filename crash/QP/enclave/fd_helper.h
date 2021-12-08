@@ -18,7 +18,9 @@ namespace crash {
 namespace net {
 
 // returns activity
-int select_list(int listen_socket, std::vector<peer> const &clnt_list);
+int select_list(int client_listen_socket, int replica_listen_socket,
+                std::vector<peer> const &client_list,
+                std::vector<peer> const &replica_list);
 
 }  // namespace net
 }  // namespace crash

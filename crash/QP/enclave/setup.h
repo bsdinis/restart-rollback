@@ -26,7 +26,8 @@ void setup(config_t* conf, ssize_t idx);
 void close();
 
 SSL_CTX* ssl_ctx();
-int listen_sock();
+int client_listen_sock();
+int replica_listen_sock();
 bool closed();
 
 }  // namespace setup

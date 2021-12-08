@@ -57,7 +57,7 @@ int handle_new_connection(int const listen_socket, std::vector<peer> &list) {
 }
 
 int handle_client_message(peer &p) {
-    FINE("recvd a message: %zu B", p.buffer().size());
+    FINE("recvd a client message: %zu B", p.buffer().size());
     while (p.buffer().size() > 0) {
         size_t const total_size = *(size_t *)(p.buffer().data());
         FINE("request size: %zu B", total_size);
@@ -78,6 +78,42 @@ int handle_client_message(peer &p) {
                                          request->args_as_OperationArgs());
                 perf_rec.add("client_operation", timer::elapsed_usec(begin));
                 break;
+            case paxos_sgx::crash::ReqType_ping:
+                ping_handler(p, request->ticket());
+                perf_rec.add("ping");
+                break;
+            case paxos_sgx::crash::ReqType_reset:
+                reset_handler(p, request->ticket());
+                perf_rec.add("reset");
+                break;
+            case paxos_sgx::crash::ReqType_close:
+                close_handler(p, request->ticket());
+                break;
+            default:
+                // XXX: CHANGE ME
+                // add other operation switch
+                // (don't forget the intrusive perf)
+                ERROR("Unknown client request %d [ticket %ld]", request->type(),
+                      request->ticket());
+        }
+        p.skip(sizeof(size_t) + total_size);
+    }
+
+    return 0;
+}
+
+int handle_replica_message(peer &p) {
+    FINE("recvd a replica message: %zu B", p.buffer().size());
+    while (p.buffer().size() > 0) {
+        size_t const total_size = *(size_t *)(p.buffer().data());
+        FINE("request size: %zu B", total_size);
+        if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
+
+        auto request = paxos_sgx::crash::GetBasicRequest(p.buffer().data() +
+                                                         sizeof(size_t));
+
+        auto const begin = timer::now();
+        switch (request->type()) {
             case paxos_sgx::crash::ReqType_replica_fast_get:
                 replica_fast_get_handler(p, request->ticket(),
                                          request->args_as_ReplicaFastGetArgs());
@@ -108,8 +144,8 @@ int handle_client_message(peer &p) {
                 // XXX: CHANGE ME
                 // add other operation switch
                 // (don't forget the intrusive perf)
-                ERROR("Unknown request %d [ticket %ld]", request->type(),
-                      request->ticket());
+                ERROR("Unknown replica request %d [ticket %ld]",
+                      request->type(), request->ticket());
         }
         p.skip(sizeof(size_t) + total_size);
     }
@@ -150,18 +186,18 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
     }
 
     while (!p.finished_handshake()) {
-        if (p.handshake() != 0) {
+        if (p.handshake() == -1) {
             ERROR("failed to do handshake");
             return -1;
         }
         if (p.want_write()) {
-            if (p.send() != 0) {
+            if (p.send() == -1) {
                 ERROR("failed to send on hanshake");
                 p.close();
                 return -1;
             }
         }
-        if (p.recv() != 0) {
+        if (p.recv() == -1) {
             ERROR("failed to recv on hanshake");
             p.close();
             return -1;

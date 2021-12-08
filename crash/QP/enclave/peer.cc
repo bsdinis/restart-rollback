@@ -33,14 +33,25 @@ inline bool ssl_status_fail(int status) {
 
 void peer::setup() {
     if (this->set) return;
-    this->rbio = BIO_new(BIO_s_mem());
-    this->wbio = BIO_new(BIO_s_mem());
-    this->ssl = SSL_new(this->ctx);
 
-    if (this->server)
+    this->rbio = BIO_new(BIO_s_mem());
+    if (this->rbio == NULL) {
+        ERROR("Failed to create read BIO");
+    }
+    this->wbio = BIO_new(BIO_s_mem());
+    if (this->wbio == NULL) {
+        ERROR("Failed to create write BIO");
+    }
+    this->ssl = SSL_new(this->ctx);
+    if (this->ssl == NULL) {
+        ERROR("Failed to create SSL");
+    }
+
+    if (this->server) {
         SSL_set_accept_state(this->ssl);
-    else
+    } else {
         SSL_set_connect_state(this->ssl);
+    }
 
     SSL_set_bio(this->ssl, this->rbio, this->wbio);
     this->set = true;
@@ -138,6 +149,15 @@ int peer::handshake() {
     int const status = SSL_get_error(this->ssl, ret);
 
     if (ssl_status_fail(status)) {
+        while (true) {
+            unsigned long error = ERR_get_error();
+            if (error == 0) {
+                break;
+            }
+
+            ERROR("SSL error: %s", ERR_error_string(error, NULL));
+        }
+
         // this is yet to be solved
         // see issue #1 on https://gitlab.mpi-sws.org/sybil/paxos_sgx
         ERROR("SSL has a failure status");
@@ -182,10 +202,6 @@ int peer::recv() {
             return -1;
         }
         errno = 0;
-        return 0;
-    } else if (nbytes == 0) {
-        INFO("closing socket %d: EOF", this->sock_);
-        this->close();
         return 0;
     }
 

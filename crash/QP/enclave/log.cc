@@ -15,7 +15,7 @@ void _priv_ereport(char const *file, int lineno, char const *prefix,
     va_end(ap);
 
     snprintf(buf2, BUFSIZ + 64, "[%s] %s:%d: %s\n", prefix, file, lineno, buf);
-    ocall_sgx_eolog(buf2);
+    ocall_sgx_elog(buf2);
 }
 
 void _priv_oreport(char const *file, int lineno, char const *prefix,

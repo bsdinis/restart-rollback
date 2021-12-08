@@ -26,10 +26,10 @@ perf::perf_recorder perf_rec;
 }  // namespace crash
 }  // namespace paxos_sgx
 
-namespace {
-// client list
-std::vector<peer> client_list;
+extern std::vector<peer> g_client_list;
+extern std::vector<peer> g_replica_list;
 
+namespace {
 int process_peer(peer &p);
 }  // anonymous namespace
 
@@ -39,11 +39,14 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
                          size_t buffer_size) {
     perf_rec = perf::perf_recorder(measure_buffer, buffer_size);
     setup::setup(&conf, my_idx);
-    INFO("setup on %s:%d", conf.nodes[my_idx].addr, conf.nodes[my_idx].port);
-    int const listen_sock = setup::listen_sock();
+    INFO("setup on %s:%d and %s:%d", conf.nodes[my_idx].addr,
+         conf.nodes[my_idx].port, conf.nodes[my_idx].addr,
+         conf.nodes[my_idx].port * 2);
+    int const client_listen_sock = setup::client_listen_sock();
+    int const replica_listen_sock = setup::replica_listen_sock();
 
     while (!setup::closed()) {
-        for (auto &peer : client_list) {
+        for (auto &peer : g_client_list) {
             if (peer.connected() && peer.want_read()) {
                 handler::handle_client_message(peer);
                 if (setup::closed()) return;
@@ -52,10 +55,20 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
             if (peer.want_flush()) peer.flush();
         }
 
-        int activity = net::select_list(listen_sock, client_list);
+        for (auto &peer : g_replica_list) {
+            if (peer.connected() && peer.want_read()) {
+                handler::handle_replica_message(peer);
+                if (setup::closed()) return;
+            }
 
-        int rd;
-        int err;
+            if (peer.want_flush()) peer.flush();
+        }
+
+        int activity = net::select_list(client_listen_sock, replica_listen_sock,
+                                        g_client_list, g_replica_list);
+
+        int rd = 0;
+        int err = 0;
         switch (activity) {
             case -1:
                 KILL("select returned -1");
@@ -66,20 +79,39 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
                 break;
 
             default:
-                ocall_needs_read(&rd, listen_sock);
-                ocall_needs_except(&err, listen_sock);
+                ocall_needs_read(&rd, client_listen_sock);
+                ocall_needs_except(&err, client_listen_sock);
                 if (rd) {
-                    if (handler::handle_new_connection(listen_sock,
-                                                       client_list) != 0) {
+                    if (handler::handle_new_connection(client_listen_sock,
+                                                       g_client_list) != 0) {
                         ERROR("Failed to handle new client connection");
                     }
                 }
                 if (err) {
-                    ERROR("Exception on listening socket %d", listen_sock);
+                    ERROR("Exception on listening socket %d",
+                          client_listen_sock);
+                    return;
+                }
+                rd = 0;
+                err = 0;
+
+                ocall_needs_read(&rd, replica_listen_sock);
+                ocall_needs_except(&err, replica_listen_sock);
+                if (rd) {
+                    if (handler::handle_new_connection(replica_listen_sock,
+                                                       g_replica_list) != 0) {
+                        ERROR("Failed to handle new replia connection");
+                    }
+                }
+                if (err) {
+                    ERROR("Exception on listening socket %d",
+                          replica_listen_sock);
                     return;
                 }
 
-                std::for_each(begin(client_list), end(client_list),
+                std::for_each(begin(g_client_list), end(g_client_list),
+                              process_peer);
+                std::for_each(begin(g_replica_list), end(g_replica_list),
                               process_peer);
         }
     }

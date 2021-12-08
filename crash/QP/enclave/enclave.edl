@@ -18,6 +18,7 @@ enclave {
   untrusted {
     void ocall_start_enclave_report([in, string]const char * str) propagate_errno;
     void ocall_sgx_olog([in, string]const char * str) propagate_errno;
+    void ocall_sgx_elog([in, string]const char * str) propagate_errno;
     void ocall_sgx_eolog([in, string]const char * str) propagate_errno;
     int ocall_sgx_gettimeofday([in, out, size=tv_size]void *tv, int tv_size) propagate_errno;
     int ocall_sgx_getsockopt(int s, int level, int optname, [out, size=optval_len]char *optval, int optval_len, [in,out, size=4]int* optlen) propagate_errno;

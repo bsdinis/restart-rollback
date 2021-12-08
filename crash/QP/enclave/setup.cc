@@ -25,17 +25,69 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+paxos_sgx::crash::StateMachine g_state_machine;
+std::vector<peer> g_client_list;
+std::vector<peer> g_replica_list;
+
 namespace {
-int listen_sock_ = -1;
+
+int client_listen_sock_ = -1;
+int replica_listen_sock_ = -1;
 SSL_CTX* ssl_server_ctx;
+SSL_CTX* ssl_client_ctx;
 bool closed_ = false;
 
 char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
 
-}  // anonymous namespace
+int connect_replica(config_node_t const& peer_config) {
+    g_replica_list.emplace_back(ssl_client_ctx, false);
+    peer& p = *(std::end(g_replica_list) - 1);
 
-paxos_sgx::crash::StateMachine g_state_machine;
+    char addr[50];
+    memset(addr, 0, sizeof(addr));
+    strncpy(addr, peer_config.addr, 49);
+
+    if (p.connect(addr, peer_config.port * 2) != 0) {
+        return -1;
+    }
+
+    while (!p.finished_handshake()) {
+        if (p.handshake() == -1) {
+            ERROR("failed to do handshake");
+            return -1;
+        }
+        if (p.want_write()) {
+            if (p.send() == -1) {
+                ERROR("failed to send on hanshake");
+                p.close();
+                return -1;
+            }
+        }
+        if (p.recv() == -1) {
+            ERROR("failed to recv on hanshake");
+            p.close();
+            return -1;
+        }
+    }
+
+    INFO("connected to peer on %s:%d", peer_config.addr, peer_config.port * 2);
+    return 0;
+}
+
+int connect_to_all_replicas(config_t const* config, ssize_t my_idx) {
+    for (ssize_t idx = 0; idx < my_idx; ++idx) {
+        if (connect_replica(config->nodes[idx]) != 0) {
+            ERROR("failed to connect to replica on %s:%d",
+                  config->nodes[idx].addr, config->nodes[idx].port * 2);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+}  // anonymous namespace
 
 // ========================================
 
@@ -54,35 +106,64 @@ void setup(config_t* conf, ssize_t idx) {
         KILL("cannot listen on IP %s, my IP is %s", node.addr, addr);
     }
 
-    sgx_status_t error =
-        ocall_net_start_listen_socket(&listen_sock_, addr, (uint16_t)node.port);
+    sgx_status_t error = ocall_net_start_listen_socket(
+        &client_listen_sock_, addr, (uint16_t)node.port);
     if (error != SGX_SUCCESS) {
         sgx_perror(error);
         ocall_sgx_exit(EXIT_FAILURE);
     }
-    if (listen_sock_ <= 0)
+    if (client_listen_sock_ <= 0) {
         KILL("failed to setup the listening socket on %s:%d", node.addr,
              node.port);
+    }
 
-    if (ssl::init_server_ssl_ctx(&ssl_server_ctx) != 0)
+    error = ocall_net_start_listen_socket(&replica_listen_sock_, addr,
+                                          (uint16_t)(node.port * 2));
+    if (error != SGX_SUCCESS) {
+        sgx_perror(error);
+        ocall_sgx_exit(EXIT_FAILURE);
+    }
+    if (replica_listen_sock_ <= 0) {
+        KILL("failed to setup the listening socket on %s:%d", node.addr,
+             node.port * 2);
+    }
+
+    if (ssl::init_server_ssl_ctx(&ssl_server_ctx) != 0) {
         KILL("failed to init SSL server");
+    }
 
-    if (ssl::load_certificates(ssl_server_ctx, server_crt, server_key) != 0)
+    if (ssl::init_client_ssl_ctx(&ssl_client_ctx) != 0) {
+        KILL("failed to init SSL client");
+    }
+
+    if (ssl::load_certificates(ssl_server_ctx, server_crt, server_key) != 0) {
         KILL("failed to load certificates for server SSL");
+    }
+    if (ssl::load_certificates(ssl_client_ctx, server_crt, server_key) != 0) {
+        KILL("failed to load certificates for client SSL");
+    }
+
+    if (connect_to_all_replicas(conf, idx) != 0) {
+        KILL("failed to connect to replicas");
+    }
 }
 
 void close() {
     INFO("closing the enclave");
     int ret = 0;
-    if (listen_sock_ > 0) ocall_sgx_close(&ret, listen_sock_);
+    if (client_listen_sock_ > 0) ocall_sgx_close(&ret, client_listen_sock_);
+    if (replica_listen_sock_ > 0) ocall_sgx_close(&ret, replica_listen_sock_);
     if (ssl_server_ctx) SSL_CTX_free(ssl_server_ctx);
-    listen_sock_ = -1;
+    if (ssl_client_ctx) SSL_CTX_free(ssl_client_ctx);
+    client_listen_sock_ = -1;
+    replica_listen_sock_ = -1;
     ssl_server_ctx = nullptr;
     closed_ = true;
 }
 
 SSL_CTX* ssl_ctx() { return ssl_server_ctx; }
-int listen_sock() { return listen_sock_; }
+int client_listen_sock() { return client_listen_sock_; }
+int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
 
 }  // namespace setup
