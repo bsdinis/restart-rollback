@@ -64,12 +64,13 @@ int main(int argc, char** argv) {
 
     crash::reset();
 
+    test_ping();
     test_fast_get();
     test_get();
     test_transfer();
-    test_ping();
     test_pipelining();
     test_cb();
+
     ASSERT_EQ(crash::close(), 0, "close");
     INFO("finished test");
 

@@ -40,7 +40,7 @@ int sgx_bind(int s, const struct sockaddr *addr, int addrlen);
 int sgx_listen(int s, int backlog);
 int sgx_connect(int s, const struct sockaddr *addr, int addrlen);
 int sgx_accept(int s, struct sockaddr *addr, int *addrlen);
-int sgx_shutdown(int fd, int how);
+int sgx_shutdown(int fd);
 int sgx_read(int fd, void *buf, int n);
 int sgx_write(int fd, const void *buf, int n);
 int sgx_close(int fd);

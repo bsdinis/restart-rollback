@@ -44,7 +44,7 @@ int ocall_sgx_connect(int s, const void *addr, int addrlen);
 int ocall_sgx_connect_block(int *s, const char *addr, uint16_t server_port);
 int ocall_sgx_accept(int s, void *addr, int addr_size, int *addrlen);
 int ocall_sgx_accept_block(int s);
-int ocall_sgx_shutdown(int fd, int how);
+int ocall_sgx_shutdown(int fd);
 int ocall_sgx_read(int fd, void *buf, int n);
 int ocall_sgx_write(int fd, const void *buf, int n);
 int ocall_sgx_close(int fd);

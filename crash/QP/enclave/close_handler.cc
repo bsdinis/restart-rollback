@@ -1,5 +1,6 @@
 #include "close_handler.h"
 
+#include "crash_generated.h"
 #include "log.h"
 #include "setup.h"
 

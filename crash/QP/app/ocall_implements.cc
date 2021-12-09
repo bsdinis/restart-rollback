@@ -139,7 +139,7 @@ int ocall_sgx_accept_block(int listen_socket) {
     return sock;
 }
 
-int ocall_sgx_shutdown(int fd, int how) { return shutdown(fd, how); }
+int ocall_sgx_shutdown(int fd) { return shutdown(fd, SHUT_RDWR); }
 
 int ocall_sgx_read(int fd, void *buf, int n) {
     errno = 0;

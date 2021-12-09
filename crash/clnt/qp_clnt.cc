@@ -12,8 +12,6 @@
 #include "ssl_util.h"
 
 #include "crash_generated.h"
-#include "crash_req_generated.h"
-#include "crash_resp_generated.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -159,10 +157,10 @@ int close(bool close_remote) {
     if (close_remote) {
         int64_t const ticket = gen_ticket(call_type::SYNC);
         flatbuffers::FlatBufferBuilder builder;
-        auto close_args = paxos_sgx::crash::CreatePingArgs(builder);
-        auto request = paxos_sgx::crash::CreateBasicRequest(
-            builder, paxos_sgx::crash::ReqType_close, ticket,
-            paxos_sgx::crash::ReqArgs_CloseArgs, close_args.Union());
+        auto close_args = paxos_sgx::crash::CreateEmpty(builder);
+        auto request = paxos_sgx::crash::CreateMessage(
+            builder, paxos_sgx::crash::MessageType_close_req, ticket,
+            paxos_sgx::crash::BasicMessage_Empty, close_args.Union());
         builder.Finish(request);
 
         size_t const size = builder.GetSize();
@@ -181,6 +179,8 @@ int close(bool close_remote) {
         server->flush();
         process_peer(*server, nullptr);  // block, gets released by EOF
     }
+
+    server->close();
 
     close_ssl_ctx(client_ctx);
     delete server;
@@ -399,12 +399,11 @@ int64_t send_fast_get_request(peer &server, int64_t account, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto fast_get_args =
-        paxos_sgx::crash::CreateClientFastGetArgs(builder, account);
+    auto fast_get_args = paxos_sgx::crash::CreateFastGetArgs(builder, account);
 
-    auto request = paxos_sgx::crash::CreateBasicRequest(
-        builder, paxos_sgx::crash::ReqType_client_fast_get, ticket,
-        paxos_sgx::crash::ReqArgs_ClientFastGetArgs, fast_get_args.Union());
+    auto request = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_client_fast_get_req, ticket,
+        paxos_sgx::crash::BasicMessage_FastGetArgs, fast_get_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -432,9 +431,9 @@ int64_t send_transfer_request(peer &server, int64_t account, int64_t to,
     auto transfer_args =
         paxos_sgx::crash::CreateOperationArgs(builder, account, to, amount);
 
-    auto request = paxos_sgx::crash::CreateBasicRequest(
-        builder, paxos_sgx::crash::ReqType_client_operation, ticket,
-        paxos_sgx::crash::ReqArgs_OperationArgs, transfer_args.Union());
+    auto request = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_client_operation_req, ticket,
+        paxos_sgx::crash::BasicMessage_OperationArgs, transfer_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -458,11 +457,11 @@ int64_t send_ping_request(peer &server, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto ping_args = paxos_sgx::crash::CreatePingArgs(builder);
+    auto ping_args = paxos_sgx::crash::CreateEmpty(builder);
 
-    auto request = paxos_sgx::crash::CreateBasicRequest(
-        builder, paxos_sgx::crash::ReqType_ping, ticket,
-        paxos_sgx::crash::ReqArgs_PingArgs, ping_args.Union());
+    auto request = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_ping_req, ticket,
+        paxos_sgx::crash::BasicMessage_Empty, ping_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -486,11 +485,11 @@ int64_t send_reset_request(peer &server, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto reset_args = paxos_sgx::crash::CreatePingArgs(builder);
+    auto reset_args = paxos_sgx::crash::CreateEmpty(builder);
 
-    auto request = paxos_sgx::crash::CreateBasicRequest(
-        builder, paxos_sgx::crash::ReqType_reset, ticket,
-        paxos_sgx::crash::ReqArgs_PingArgs, reset_args.Union());
+    auto request = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_reset_req, ticket,
+        paxos_sgx::crash::BasicMessage_Empty, reset_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -621,30 +620,30 @@ int handle_received_message(peer &p) {
         FINE("resp size: %zu B (according to header)", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
-        auto response = paxos_sgx::crash::GetBasicResponse(p.buffer().data() +
-                                                           sizeof(size_t));
+        auto response =
+            paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         calls_concluded++;
         switch (response->type()) {
-            case paxos_sgx::crash::ReqType_client_fast_get:
+            case paxos_sgx::crash::MessageType_client_fast_get_resp:
                 FINE("fast response [ticket %ld]", response->ticket());
                 fast_get_handler(
                     response->ticket(),
-                    response->result_as_ClientFastGetResult()->amount(),
-                    response->result_as_ClientFastGetResult()->success());
+                    response->message_as_ClientFastGetResult()->amount(),
+                    response->message_as_ClientFastGetResult()->success());
                 break;
-            case paxos_sgx::crash::ReqType_client_operation:
+            case paxos_sgx::crash::MessageType_client_operation_resp:
                 FINE("operation response [ticket %ld]", response->ticket());
                 transfer_handler(
                     response->ticket(),
-                    response->result_as_ClientOperationResult()->amount(),
-                    response->result_as_ClientOperationResult()->success());
+                    response->message_as_OperationResult()->amount(),
+                    response->message_as_OperationResult()->success());
                 break;
-            case paxos_sgx::crash::ReqType_ping:
+            case paxos_sgx::crash::MessageType_ping_resp:
                 FINE("ping response [ticket %ld]", response->ticket());
                 ping_handler(response->ticket());
                 break;
-            case paxos_sgx::crash::ReqType_reset:
+            case paxos_sgx::crash::MessageType_reset_resp:
                 FINE("reset response [ticket %ld]", response->ticket());
                 reset_handler(response->ticket());
                 break;
@@ -714,6 +713,8 @@ int connect_to_proxy(config_node_t const &peer_node) {
         }
     }
 
+    FINE("??? connected to peer in %s:%d", peer_node.addr, peer_node.port);
+
     while (server->connected() && !server->finished_handshake()) {
         if (process_peer(*server) == process_res::ERR) return -1;
     }
@@ -723,6 +724,8 @@ int connect_to_proxy(config_node_t const &peer_node) {
         server->close();
         return -1;
     }
+
+    FINE("connected to peer in %s:%d", peer_node.addr, peer_node.port);
 
     return 0;
 }

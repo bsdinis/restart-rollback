@@ -1,12 +1,88 @@
 namespace paxos_sgx.crash;
 
-enum ReqType:byte {
-    client_fast_get,
-    client_operation,
-    replica_fast_get,
+enum MessageType:byte {
+    client_fast_get_req,
+    client_fast_get_resp,
+
+    client_operation_req,
+    client_operation_resp,
+
+    replica_fast_get_req,
+    replica_fast_get_resp,
+
     replica_propose,
     replica_accept,
-    ping,
-    close,
-    reset,
+    replica_reject,
+
+    ping_req,
+    ping_resp,
+
+    reset_req,
+    reset_resp,
+
+    close_req,
 }
+
+table FastGetArgs {
+    account : int64;
+}
+
+table ClientFastGetResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaFastGetResult {
+    success : bool;
+    account : int64;
+    amount  : int64;
+    last_applied : int64;
+}
+
+table OperationArgs {
+    account : int64;
+    to      : int64;
+    amount  : int64;
+}
+
+table OperationResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaPropose {
+    operation_args: OperationArgs;
+    slot_number: int64;
+}
+
+table ReplicaAccept {
+    slot_number: int64;
+}
+
+table ReplicaReject {
+    slot_number: int64;
+}
+
+table Empty { }
+
+union BasicMessage {
+    FastGetArgs,
+    ClientFastGetResult,
+    ReplicaFastGetResult,
+    OperationArgs,
+    OperationResult,
+    ReplicaPropose,
+    ReplicaAccept,
+    ReplicaReject,
+    Empty,
+}
+
+table Message {
+    type    : MessageType;
+    ticket  : int64;
+    message : BasicMessage;
+}
+
+root_type Message;

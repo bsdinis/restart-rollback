@@ -64,7 +64,7 @@ int connect_replica(config_node_t const& peer_config) {
                 return -1;
             }
         }
-        if (p.recv() == -1) {
+        if (p.recv(true /* ignoreEOF */) == -1) {
             ERROR("failed to recv on hanshake");
             p.close();
             return -1;
@@ -72,6 +72,8 @@ int connect_replica(config_node_t const& peer_config) {
     }
 
     INFO("connected to peer on %s:%d", peer_config.addr, peer_config.port * 2);
+
+    FINE("processed: %zu", p.buffer().size());
     return 0;
 }
 
@@ -153,6 +155,7 @@ void close() {
     int ret = 0;
     if (client_listen_sock_ > 0) ocall_sgx_close(&ret, client_listen_sock_);
     if (replica_listen_sock_ > 0) ocall_sgx_close(&ret, replica_listen_sock_);
+
     if (ssl_server_ctx) SSL_CTX_free(ssl_server_ctx);
     if (ssl_client_ctx) SSL_CTX_free(ssl_client_ctx);
     client_listen_sock_ = -1;

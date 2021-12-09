@@ -127,7 +127,7 @@ int peer::accept(int listen_socket) {
 
 void peer::close() {
     if (!this->connected()) return;
-    if (this->sock_ != -1) ::close(this->sock_);
+    if (this->sock_ != -1) ::shutdown(this->sock_, SHUT_RDWR);
     this->sock_ = -1;
 
     this->cleartext_buf.clear();

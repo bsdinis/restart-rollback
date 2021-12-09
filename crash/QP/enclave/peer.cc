@@ -185,7 +185,7 @@ int peer::handshake() {
 }
 
 /* Read encrypted bytes from socket. */
-int peer::recv() {
+int peer::recv(bool ignoreEOF) {
     uint8_t buf[DEFAULT_BUF_SIZE];
     int nbytes;
     sgx_status_t status =
@@ -202,6 +202,11 @@ int peer::recv() {
             return -1;
         }
         errno = 0;
+        return 0;
+    } else if (nbytes == 0 && !ignoreEOF) {
+        // closed
+        INFO("closing socket %d: EOF", this->sock_);
+        this->close();
         return 0;
     }
 

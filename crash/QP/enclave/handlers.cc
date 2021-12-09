@@ -14,7 +14,6 @@
 #include "timer.h"
 
 #include "crash_generated.h"
-#include "crash_req_generated.h"
 
 // XXX: CHANGE ME
 // add other operation handlers
@@ -63,30 +62,30 @@ int handle_client_message(peer &p) {
         FINE("request size: %zu B", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
-        auto request = paxos_sgx::crash::GetBasicRequest(p.buffer().data() +
-                                                         sizeof(size_t));
+        auto request =
+            paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         auto const begin = timer::now();
         switch (request->type()) {
-            case paxos_sgx::crash::ReqType_client_fast_get:
+            case paxos_sgx::crash::MessageType_client_fast_get_req:
                 client_fast_get_handler(p, request->ticket(),
-                                        request->args_as_ClientFastGetArgs());
+                                        request->message_as_FastGetArgs());
                 perf_rec.add("client_fast_get", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::ReqType_client_operation:
+            case paxos_sgx::crash::MessageType_client_operation_req:
                 client_operation_handler(p, request->ticket(),
-                                         request->args_as_OperationArgs());
+                                         request->message_as_OperationArgs());
                 perf_rec.add("client_operation", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::ReqType_ping:
-                ping_handler(p, request->ticket());
+            case paxos_sgx::crash::MessageType_ping_req:
+                client_ping_handler(p, request->ticket());
                 perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::ReqType_reset:
+            case paxos_sgx::crash::MessageType_reset_req:
                 reset_handler(p, request->ticket());
                 perf_rec.add("reset");
                 break;
-            case paxos_sgx::crash::ReqType_close:
+            case paxos_sgx::crash::MessageType_close_req:
                 close_handler(p, request->ticket());
                 break;
             default:
@@ -106,47 +105,63 @@ int handle_replica_message(peer &p) {
     FINE("recvd a replica message: %zu B", p.buffer().size());
     while (p.buffer().size() > 0) {
         size_t const total_size = *(size_t *)(p.buffer().data());
-        FINE("request size: %zu B", total_size);
-        if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
+        FINE("incoming size: %zu B", total_size);
+        if (total_size + sizeof(size_t) > p.buffer().size()) {
+            return 0;
+        }
 
-        auto request = paxos_sgx::crash::GetBasicRequest(p.buffer().data() +
-                                                         sizeof(size_t));
-
+        auto message =
+            paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
         auto const begin = timer::now();
-        switch (request->type()) {
-            case paxos_sgx::crash::ReqType_replica_fast_get:
-                replica_fast_get_handler(p, request->ticket(),
-                                         request->args_as_ReplicaFastGetArgs());
+        switch (message->type()) {
+            case paxos_sgx::crash::MessageType_replica_fast_get_req:
+                replica_fast_get_handler(p, message->ticket(),
+                                         message->message_as_FastGetArgs());
                 perf_rec.add("replica_fast_get", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::ReqType_replica_propose:
-                replica_propose_handler(p, request->ticket(),
-                                        request->args_as_ReplicaProposeArgs());
+            case paxos_sgx::crash::MessageType_replica_fast_get_resp:
+                replica_fast_get_resp_handler(
+                    p, message->ticket(),
+                    message->message_as_ReplicaFastGetResult());
+                perf_rec.add("replica_fast_get_resp",
+                             timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::MessageType_replica_propose:
+                replica_propose_handler(p, message->ticket(),
+                                        message->message_as_ReplicaPropose());
                 perf_rec.add("replica_propose", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::ReqType_replica_accept:
-                replica_accept_handler(p, request->ticket(),
-                                       request->args_as_ReplicaAcceptArgs());
+            case paxos_sgx::crash::MessageType_replica_accept:
+                replica_accept_handler(p, message->ticket(),
+                                       message->message_as_ReplicaAccept());
                 perf_rec.add("replica_accept", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::ReqType_ping:
-                ping_handler(p, request->ticket());
+            case paxos_sgx::crash::MessageType_replica_reject:
+                replica_reject_handler(p, message->ticket(),
+                                       message->message_as_ReplicaReject());
+                perf_rec.add("replica_reject", timer::elapsed_usec(begin));
+                break;
+            case paxos_sgx::crash::MessageType_ping_req:
+                replica_ping_handler(p, message->ticket());
                 perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::ReqType_reset:
-                reset_handler(p, request->ticket());
-                perf_rec.add("reset");
+            case paxos_sgx::crash::MessageType_ping_resp:
+                INFO("ping response [%ld]", message->ticket());
+                perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::ReqType_close:
-                close_handler(p, request->ticket());
+            case paxos_sgx::crash::MessageType_reset_req:
+                reset_handler(p, message->ticket());
+                perf_rec.add("reset");
                 break;
             default:
                 // XXX: CHANGE ME
                 // add other operation switch
                 // (don't forget the intrusive perf)
-                ERROR("Unknown replica request %d [ticket %ld]",
-                      request->type(), request->ticket());
+                ERROR("Unknown replica message %d [ticket %ld]",
+                      message->type(), message->ticket());
+                return -1;
         }
+
         p.skip(sizeof(size_t) + total_size);
     }
 
@@ -197,7 +212,7 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
                 return -1;
             }
         }
-        if (p.recv() == -1) {
+        if (p.recv(true /* ignoreEOF */) == -1) {
             ERROR("failed to recv on hanshake");
             p.close();
             return -1;

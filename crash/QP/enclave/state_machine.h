@@ -8,7 +8,7 @@
 
 #include <cstdint>
 #include <unordered_map>
-#include "crash_req_generated.h"
+#include "crash_generated.h"
 
 namespace paxos_sgx {
 namespace crash {

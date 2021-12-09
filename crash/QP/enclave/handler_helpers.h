@@ -6,7 +6,7 @@
 #pragma once
 
 #include <stdint.h>
-#include "crash_resp_generated.h"
+#include "crash_generated.h"
 #include "peer.h"
 
 namespace paxos_sgx {

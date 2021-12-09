@@ -12,7 +12,8 @@ namespace paxos_sgx {
 namespace crash {
 namespace handler {
 
-int ping_handler(peer &p, int64_t ticket);
+int client_ping_handler(peer &p, int64_t ticket);
+int replica_ping_handler(peer &p, int64_t ticket);
 
 }  // namespace handler
 }  // namespace crash

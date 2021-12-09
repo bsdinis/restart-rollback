@@ -34,7 +34,7 @@ class peer {
     std::vector<uint8_t> const &buffer() const;
 
     int handshake();
-    int recv();
+    int recv(bool ignoreEOF = false);
     int send();
     int flush();
     void clear_buffer();
@@ -44,8 +44,9 @@ class peer {
     inline int append(T const *buf, S sz) {
         uint8_t const *ptr = reinterpret_cast<uint8_t const *>(buf);
         size_t const size = static_cast<size_t>(sz) * sizeof(T);
-        if (sz > 0)
+        if (sz > 0) {
             std::copy(ptr, ptr + size, std::back_inserter(this->cleartext_buf));
+        }
         return 0;
     }
 

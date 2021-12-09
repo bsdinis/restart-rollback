@@ -120,9 +120,9 @@ int sgx_accept(int s, struct sockaddr *addr, int *addrlen) {
     return retv;
 }
 
-int sgx_shutdown(int fd, int how) {
+int sgx_shutdown(int fd) {
     int retv;
-    ocall_sgx_shutdown(&retv, fd, how);
+    ocall_sgx_shutdown(&retv, fd);
     return retv;
 }
 

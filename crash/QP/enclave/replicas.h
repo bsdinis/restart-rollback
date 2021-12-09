@@ -3,6 +3,7 @@
  *
  * helpers to handle replicas
  */
+#pragma once
 
 #include <string.h>
 #include <cstdint>

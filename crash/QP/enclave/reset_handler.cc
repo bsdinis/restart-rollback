@@ -15,10 +15,10 @@ int reset_handler(peer &p, int64_t ticket) {
     g_state_machine.reset();
 
     flatbuffers::FlatBufferBuilder builder;
-    auto reset_res = paxos_sgx::crash::CreatePingResult(builder);
-    auto result = paxos_sgx::crash::CreateBasicResponse(
-        builder, paxos_sgx::crash::ReqType_reset, ticket,
-        paxos_sgx::crash::Result_PingResult, reset_res.Union());
+    auto reset_res = paxos_sgx::crash::CreateEmpty(builder);
+    auto result = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_reset_resp, ticket,
+        paxos_sgx::crash::BasicMessage_Empty, reset_res.Union());
     builder.Finish(result);
 
     size_t const size = builder.GetSize();
