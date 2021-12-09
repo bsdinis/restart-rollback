@@ -101,6 +101,8 @@ int peer::accept(int listen_socket) {
         return -1;
     }
 
+    LOG("accepted from listen socket %d: socket %d", listen_socket,
+        this->sock_);
     return 0;
 }
 

@@ -36,9 +36,9 @@ int process_peer(peer &p);
 using namespace paxos_sgx::crash;
 
 void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
-                         size_t buffer_size) {
+                         size_t buffer_size, size_t f) {
     perf_rec = perf::perf_recorder(measure_buffer, buffer_size);
-    setup::setup(&conf, my_idx);
+    setup::setup(&conf, my_idx, f);
     INFO("setup on %s:%d and %s:%d", conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port, conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port * 2);

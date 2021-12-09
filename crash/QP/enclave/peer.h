@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <vector>
+#include "log.h"
 
 class peer {
    public:
@@ -42,6 +43,7 @@ class peer {
 
     template <typename T, typename S>
     inline int append(T const *buf, S sz) {
+        LOG("appending %zuB", sz);
         uint8_t const *ptr = reinterpret_cast<uint8_t const *>(buf);
         size_t const size = static_cast<size_t>(sz) * sizeof(T);
         if (sz > 0) {

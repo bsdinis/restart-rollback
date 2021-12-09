@@ -1,11 +1,18 @@
 
+
 #include "client_handler.h"
+#include "call_map.h"
 #include "crash_generated.h"
 #include "handler_helpers.h"
 #include "log.h"
+#include "op_log.h"
+#include "replicas.h"
+#include "setup.h"
 #include "state_machine.h"
 
+extern paxos_sgx::crash::CallMap g_call_map;
 extern paxos_sgx::crash::StateMachine g_state_machine;
+extern paxos_sgx::crash::OpLog g_log;
 
 namespace paxos_sgx {
 namespace crash {
@@ -32,41 +39,28 @@ int client_operation_handler(peer &p, int64_t ticket,
                              paxos_sgx::crash::OperationArgs const *args) {
     LOG("client operation request [%ld]", ticket);
 
-    int64_t account;
-    int64_t amount;
-    bool success = g_state_machine.execute(args, account, amount);
+    size_t slot_n = g_log.propose_op(args);
+    while (g_log.get_accepts(slot_n) >=
+               paxos_sgx::crash::setup::quorum_size() &&
+           g_log.execution_cursor() == slot_n - 1) {
+        replicas::execute(slot_n);
+    }
+
+    g_call_map.add_call(slot_n, &p, ticket);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto client_operation_res = paxos_sgx::crash::CreateOperationResult(
-        builder, account, amount, success);
-    auto result = paxos_sgx::crash::CreateMessage(
-        builder, paxos_sgx::crash::MessageType_client_operation_resp, ticket,
-        paxos_sgx::crash::BasicMessage_OperationResult,
-        client_operation_res.Union());
-    builder.Finish(result);
+    auto op_args = paxos_sgx::crash::CreateOperationArgs(
+        builder, args->account(), args->to(), args->amount());
+    auto propose =
+        paxos_sgx::crash::CreateReplicaPropose(builder, op_args, slot_n);
+    auto message = paxos_sgx::crash::CreateMessage(
+        builder, paxos_sgx::crash::MessageType_replica_propose, ticket,
+        paxos_sgx::crash::BasicMessage_ReplicaPropose, propose.Union());
+    builder.Finish(message);
 
-    return paxos_sgx::crash::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return paxos_sgx::crash::replicas::broadcast_message(
+        builder.GetBufferPointer(), builder.GetSize());
 }
-
-/*
-int sum_handler(peer &p, int64_t ticket,
-                flatbuffers::Vector<int64_t> const &vec) {
-    LOG("sum request [%ld]: vector with %zu els", ticket, vec.size());
-    int64_t sum = 0;
-    for (const auto &el : vec) sum += el;
-
-    flatbuffers::FlatBufferBuilder builder;
-    auto sum_res = paxos_sgx::crash::CreateSumResult(builder, sum);
-    auto result = paxos_sgx::crash::CreateMessage(
-        builder, paxos_sgx::crash::MessageType_sum, ticket,
-        paxos_sgx::crash::Result_SumResult, sum_res.Union());
-    builder.Finish(result);
-
-    return paxos_sgx::crash::handler_helper::append_result(p,
-std::move(builder));
-}
-*/
 
 }  // namespace handler
 }  // namespace crash

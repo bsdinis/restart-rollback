@@ -49,6 +49,7 @@ int handle_new_connection(int const listen_socket, std::vector<peer> &list) {
     LOG("accepting new connection on socket %d", listen_socket);
     auto it = std::find_if_not(std::begin(list), std::end(list),
                                [](peer &p) -> bool { return p.connected(); });
+    LOG("index %zu", std::distance(std::begin(list), it));
     return it == std::end(list)
                ? peer_new_connection(listen_socket, list)
                : peer_new_connection(listen_socket, list,
@@ -184,12 +185,14 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
         }
 
         try {
+            LOG("adding to the end");
             list.emplace_back(paxos_sgx::crash::setup::ssl_ctx(), true);
         } catch (std::bad_alloc &) {
             ERROR("allocation failure: cannot add a new peer to list");
             return -1;
         }
     } else {
+        LOG("adding to the %zd", idx);
         list.emplace(std::begin(list) + idx, paxos_sgx::crash::setup::ssl_ctx(),
                      true);
     }

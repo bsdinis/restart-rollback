@@ -22,13 +22,16 @@ namespace paxos_sgx {
 namespace crash {
 namespace setup {
 
-void setup(config_t* conf, ssize_t idx);
+void setup(config_t* conf, ssize_t idx, size_t f);
 void close();
 
 SSL_CTX* ssl_ctx();
 int client_listen_sock();
 int replica_listen_sock();
 bool closed();
+
+size_t quorum_size();
+bool is_leader();
 
 }  // namespace setup
 }  // namespace crash

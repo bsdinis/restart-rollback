@@ -4,43 +4,46 @@
 
 #include "setup.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include "ssl_util.h"
-#include "state_machine.h"
-
-#include "error.h"
-
-#include <unistd.h>
-
-#include "log.h"
-#include "peer.h"
-
-#include "handlers.h"
-
-#include <sgx_trts_exception.h>
-#include "enclave_t.h"
-
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <sgx_trts_exception.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include "enclave_t.h"
 
+#include "call_map.h"
+#include "error.h"
+#include "handlers.h"
+#include "log.h"
+#include "op_log.h"
+#include "peer.h"
+#include "ssl_util.h"
+#include "state_machine.h"
+
+paxos_sgx::crash::CallMap g_call_map;
 paxos_sgx::crash::StateMachine g_state_machine;
+paxos_sgx::crash::OpLog g_log;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
 
 namespace {
 
+int g_my_idx = -1;
 int client_listen_sock_ = -1;
 int replica_listen_sock_ = -1;
 SSL_CTX* ssl_server_ctx;
 SSL_CTX* ssl_client_ctx;
 bool closed_ = false;
 
+size_t g_fault_tolerance = 0;
+
 char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
 
 int connect_replica(config_node_t const& peer_config) {
+    FINE("connecting to %s:%d", peer_config.addr, peer_config.port * 2);
     g_replica_list.emplace_back(ssl_client_ctx, false);
     peer& p = *(std::end(g_replica_list) - 1);
 
@@ -99,10 +102,15 @@ namespace setup {
 
 using namespace paxos_sgx::crash;
 
-void setup(config_t* conf, ssize_t idx) {
+void setup(config_t* conf, ssize_t idx, size_t f) {
+    g_my_idx = idx;
+    g_fault_tolerance = f;
     config_node_t& node = conf->nodes[idx];
     char addr[50];
     ocall_net_get_my_ipv4_addr(addr, 50);
+
+    g_replica_list.reserve(conf->size);
+    g_client_list.reserve(100);
 
     if (strncmp(addr, node.addr, 50) != 0) {
         KILL("cannot listen on IP %s, my IP is %s", node.addr, addr);
@@ -168,6 +176,9 @@ SSL_CTX* ssl_ctx() { return ssl_server_ctx; }
 int client_listen_sock() { return client_listen_sock_; }
 int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
+
+size_t quorum_size() { return g_fault_tolerance + 1; }
+bool is_leader() { return g_my_idx == 0; }
 
 }  // namespace setup
 }  // namespace crash

@@ -14,15 +14,15 @@ int64_t StateMachine::get(int64_t account) {
     return account_it->second;
 }
 
-bool StateMachine::execute(OperationArgs const *operation, int64_t &account,
+bool StateMachine::execute(Operation const *operation, int64_t &account,
                            int64_t &res_amount) {
-    account = operation->account();
+    account = operation->m_account;
     int64_t cur_amount = this->get(account);
-    auto amount = operation->amount();
+    auto amount = operation->m_amount;
 
     // actual transfer
     if (amount > 0) {
-        auto to = operation->to();
+        auto to = operation->m_to;
         this->get(to);
 
         if (cur_amount >= amount) {

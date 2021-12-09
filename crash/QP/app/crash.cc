@@ -78,7 +78,8 @@ int SGX_CDECL main(int argc, char *argv[]) {
     LOG("config setup");
 
     INFO("starting enclave");
-    crash_enclave_start(global_eid, conf, my_idx, stats.data(), stats.size());
+    crash_enclave_start(global_eid, conf, my_idx, stats.data(), stats.size(),
+                        (conf.size - 1) / 2);
     config_free(&conf);
 }
 

@@ -8,7 +8,7 @@
 
 #include <cstdint>
 #include <unordered_map>
-#include "crash_generated.h"
+#include "op_log.h"
 
 namespace paxos_sgx {
 namespace crash {
@@ -21,8 +21,7 @@ class StateMachine {
 
    public:
     // return the amount in the account being operated on
-    bool execute(OperationArgs const *operation_args, int64_t &account,
-                 int64_t &amount);
+    bool execute(Operation const *operation, int64_t &account, int64_t &amount);
     int64_t get(int64_t account);
     void reset();
 };
