@@ -23,11 +23,11 @@ int client_fast_get_handler(peer &p, int64_t ticket,
     LOG("client fast get request [%ld]: account %ld", ticket, args->account());
 
     flatbuffers::FlatBufferBuilder builder;
-    auto client_fast_get_res = paxos_sgx::crash::CreateClientFastGetResult(
+    auto client_fast_get_res = paxos_sgx::crash::CreateFastGetResult(
         builder, args->account(), g_state_machine.get(args->account()), true);
     auto result = paxos_sgx::crash::CreateMessage(
         builder, paxos_sgx::crash::MessageType_client_fast_get_resp, ticket,
-        paxos_sgx::crash::BasicMessage_ClientFastGetResult,
+        paxos_sgx::crash::BasicMessage_FastGetResult,
         client_fast_get_res.Union());
     builder.Finish(result);
 

@@ -629,8 +629,8 @@ int handle_received_message(peer &p) {
                 FINE("fast response [ticket %ld]", response->ticket());
                 fast_get_handler(
                     response->ticket(),
-                    response->message_as_ClientFastGetResult()->amount(),
-                    response->message_as_ClientFastGetResult()->success());
+                    response->message_as_FastGetResult()->amount(),
+                    response->message_as_FastGetResult()->success());
                 break;
             case paxos_sgx::crash::MessageType_client_operation_resp:
                 FINE("operation response [ticket %ld]", response->ticket());

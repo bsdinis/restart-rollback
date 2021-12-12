@@ -115,18 +115,6 @@ int handle_replica_message(peer &p) {
             paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
         auto const begin = timer::now();
         switch (message->type()) {
-            case paxos_sgx::crash::MessageType_replica_fast_get_req:
-                replica_fast_get_handler(p, message->ticket(),
-                                         message->message_as_FastGetArgs());
-                perf_rec.add("replica_fast_get", timer::elapsed_usec(begin));
-                break;
-            case paxos_sgx::crash::MessageType_replica_fast_get_resp:
-                replica_fast_get_resp_handler(
-                    p, message->ticket(),
-                    message->message_as_ReplicaFastGetResult());
-                perf_rec.add("replica_fast_get_resp",
-                             timer::elapsed_usec(begin));
-                break;
             case paxos_sgx::crash::MessageType_replica_propose:
                 replica_propose_handler(p, message->ticket(),
                                         message->message_as_ReplicaPropose());

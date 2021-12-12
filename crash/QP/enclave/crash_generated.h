@@ -11,11 +11,8 @@ namespace crash {
 struct FastGetArgs;
 struct FastGetArgsBuilder;
 
-struct ClientFastGetResult;
-struct ClientFastGetResultBuilder;
-
-struct ReplicaFastGetResult;
-struct ReplicaFastGetResultBuilder;
+struct FastGetResult;
+struct FastGetResultBuilder;
 
 struct OperationArgs;
 struct OperationArgsBuilder;
@@ -32,9 +29,6 @@ struct ReplicaAcceptBuilder;
 struct ReplicaReject;
 struct ReplicaRejectBuilder;
 
-struct CloseArgs;
-struct CloseArgsBuilder;
-
 struct Empty;
 struct EmptyBuilder;
 
@@ -46,27 +40,23 @@ enum MessageType {
     MessageType_client_fast_get_resp = 1,
     MessageType_client_operation_req = 2,
     MessageType_client_operation_resp = 3,
-    MessageType_replica_fast_get_req = 4,
-    MessageType_replica_fast_get_resp = 5,
-    MessageType_replica_propose = 6,
-    MessageType_replica_accept = 7,
-    MessageType_replica_reject = 8,
-    MessageType_ping_req = 9,
-    MessageType_ping_resp = 10,
-    MessageType_reset_req = 11,
-    MessageType_reset_resp = 12,
-    MessageType_close_req = 13,
+    MessageType_replica_propose = 4,
+    MessageType_replica_accept = 5,
+    MessageType_replica_reject = 6,
+    MessageType_ping_req = 7,
+    MessageType_ping_resp = 8,
+    MessageType_reset_req = 9,
+    MessageType_reset_resp = 10,
+    MessageType_close_req = 11,
     MessageType_MIN = MessageType_client_fast_get_req,
     MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[14] {
+inline const MessageType (&EnumValuesMessageType())[12] {
     static const MessageType values[] = {MessageType_client_fast_get_req,
                                          MessageType_client_fast_get_resp,
                                          MessageType_client_operation_req,
                                          MessageType_client_operation_resp,
-                                         MessageType_replica_fast_get_req,
-                                         MessageType_replica_fast_get_resp,
                                          MessageType_replica_propose,
                                          MessageType_replica_accept,
                                          MessageType_replica_reject,
@@ -79,12 +69,10 @@ inline const MessageType (&EnumValuesMessageType())[14] {
 }
 
 inline const char *const *EnumNamesMessageType() {
-    static const char *const names[15] = {"client_fast_get_req",
+    static const char *const names[13] = {"client_fast_get_req",
                                           "client_fast_get_resp",
                                           "client_operation_req",
                                           "client_operation_resp",
-                                          "replica_fast_get_req",
-                                          "replica_fast_get_resp",
                                           "replica_propose",
                                           "replica_accept",
                                           "replica_reject",
@@ -108,47 +96,36 @@ inline const char *EnumNameMessageType(MessageType e) {
 enum BasicMessage {
     BasicMessage_NONE = 0,
     BasicMessage_FastGetArgs = 1,
-    BasicMessage_ClientFastGetResult = 2,
-    BasicMessage_ReplicaFastGetResult = 3,
-    BasicMessage_OperationArgs = 4,
-    BasicMessage_OperationResult = 5,
-    BasicMessage_ReplicaPropose = 6,
-    BasicMessage_ReplicaAccept = 7,
-    BasicMessage_ReplicaReject = 8,
-    BasicMessage_CloseArgs = 9,
-    BasicMessage_Empty = 10,
+    BasicMessage_FastGetResult = 2,
+    BasicMessage_OperationArgs = 3,
+    BasicMessage_OperationResult = 4,
+    BasicMessage_ReplicaPropose = 5,
+    BasicMessage_ReplicaAccept = 6,
+    BasicMessage_ReplicaReject = 7,
+    BasicMessage_Empty = 8,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[11] {
+inline const BasicMessage (&EnumValuesBasicMessage())[9] {
     static const BasicMessage values[] = {BasicMessage_NONE,
                                           BasicMessage_FastGetArgs,
-                                          BasicMessage_ClientFastGetResult,
-                                          BasicMessage_ReplicaFastGetResult,
+                                          BasicMessage_FastGetResult,
                                           BasicMessage_OperationArgs,
                                           BasicMessage_OperationResult,
                                           BasicMessage_ReplicaPropose,
                                           BasicMessage_ReplicaAccept,
                                           BasicMessage_ReplicaReject,
-                                          BasicMessage_CloseArgs,
                                           BasicMessage_Empty};
     return values;
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[12] = {"NONE",
-                                          "FastGetArgs",
-                                          "ClientFastGetResult",
-                                          "ReplicaFastGetResult",
-                                          "OperationArgs",
-                                          "OperationResult",
-                                          "ReplicaPropose",
-                                          "ReplicaAccept",
-                                          "ReplicaReject",
-                                          "CloseArgs",
-                                          "Empty",
-                                          nullptr};
+    static const char *const names[10] = {
+        "NONE",          "FastGetArgs",     "FastGetResult",
+        "OperationArgs", "OperationResult", "ReplicaPropose",
+        "ReplicaAccept", "ReplicaReject",   "Empty",
+        nullptr};
     return names;
 }
 
@@ -170,13 +147,8 @@ struct BasicMessageTraits<paxos_sgx::crash::FastGetArgs> {
 };
 
 template <>
-struct BasicMessageTraits<paxos_sgx::crash::ClientFastGetResult> {
-    static const BasicMessage enum_value = BasicMessage_ClientFastGetResult;
-};
-
-template <>
-struct BasicMessageTraits<paxos_sgx::crash::ReplicaFastGetResult> {
-    static const BasicMessage enum_value = BasicMessage_ReplicaFastGetResult;
+struct BasicMessageTraits<paxos_sgx::crash::FastGetResult> {
+    static const BasicMessage enum_value = BasicMessage_FastGetResult;
 };
 
 template <>
@@ -202,11 +174,6 @@ struct BasicMessageTraits<paxos_sgx::crash::ReplicaAccept> {
 template <>
 struct BasicMessageTraits<paxos_sgx::crash::ReplicaReject> {
     static const BasicMessage enum_value = BasicMessage_ReplicaReject;
-};
-
-template <>
-struct BasicMessageTraits<paxos_sgx::crash::CloseArgs> {
-    static const BasicMessage enum_value = BasicMessage_CloseArgs;
 };
 
 template <>
@@ -260,121 +227,64 @@ inline flatbuffers::Offset<FastGetArgs> CreateFastGetArgs(
     return builder_.Finish();
 }
 
-struct ClientFastGetResult FLATBUFFERS_FINAL_CLASS
-    : private flatbuffers::Table {
-    typedef ClientFastGetResultBuilder Builder;
+struct FastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef FastGetResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_ACCOUNT = 4,
         VT_AMOUNT = 6,
-        VT_SUCCESS = 8
-    };
-    int64_t account() const { return GetField<int64_t>(VT_ACCOUNT, 0); }
-    int64_t amount() const { return GetField<int64_t>(VT_AMOUNT, 0); }
-    bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
-    bool Verify(flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
-               VerifyField<int64_t>(verifier, VT_AMOUNT) &&
-               VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
-               verifier.EndTable();
-    }
-};
-
-struct ClientFastGetResultBuilder {
-    typedef ClientFastGetResult Table;
-    flatbuffers::FlatBufferBuilder &fbb_;
-    flatbuffers::uoffset_t start_;
-    void add_account(int64_t account) {
-        fbb_.AddElement<int64_t>(ClientFastGetResult::VT_ACCOUNT, account, 0);
-    }
-    void add_amount(int64_t amount) {
-        fbb_.AddElement<int64_t>(ClientFastGetResult::VT_AMOUNT, amount, 0);
-    }
-    void add_success(bool success) {
-        fbb_.AddElement<uint8_t>(ClientFastGetResult::VT_SUCCESS,
-                                 static_cast<uint8_t>(success), 0);
-    }
-    explicit ClientFastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
-    ClientFastGetResultBuilder &operator=(const ClientFastGetResultBuilder &);
-    flatbuffers::Offset<ClientFastGetResult> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = flatbuffers::Offset<ClientFastGetResult>(end);
-        return o;
-    }
-};
-
-inline flatbuffers::Offset<ClientFastGetResult> CreateClientFastGetResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t account = 0,
-    int64_t amount = 0, bool success = false) {
-    ClientFastGetResultBuilder builder_(_fbb);
-    builder_.add_amount(amount);
-    builder_.add_account(account);
-    builder_.add_success(success);
-    return builder_.Finish();
-}
-
-struct ReplicaFastGetResult FLATBUFFERS_FINAL_CLASS
-    : private flatbuffers::Table {
-    typedef ReplicaFastGetResultBuilder Builder;
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_SUCCESS = 4,
-        VT_ACCOUNT = 6,
-        VT_AMOUNT = 8,
+        VT_SUCCESS = 8,
         VT_LAST_APPLIED = 10
     };
-    bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
     int64_t account() const { return GetField<int64_t>(VT_ACCOUNT, 0); }
     int64_t amount() const { return GetField<int64_t>(VT_AMOUNT, 0); }
+    bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
     int64_t last_applied() const {
         return GetField<int64_t>(VT_LAST_APPLIED, 0);
     }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
                VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
                VerifyField<int64_t>(verifier, VT_AMOUNT) &&
+               VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
                VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
                verifier.EndTable();
     }
 };
 
-struct ReplicaFastGetResultBuilder {
-    typedef ReplicaFastGetResult Table;
+struct FastGetResultBuilder {
+    typedef FastGetResult Table;
     flatbuffers::FlatBufferBuilder &fbb_;
     flatbuffers::uoffset_t start_;
-    void add_success(bool success) {
-        fbb_.AddElement<uint8_t>(ReplicaFastGetResult::VT_SUCCESS,
-                                 static_cast<uint8_t>(success), 0);
-    }
     void add_account(int64_t account) {
-        fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_ACCOUNT, account, 0);
+        fbb_.AddElement<int64_t>(FastGetResult::VT_ACCOUNT, account, 0);
     }
     void add_amount(int64_t amount) {
-        fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_AMOUNT, amount, 0);
+        fbb_.AddElement<int64_t>(FastGetResult::VT_AMOUNT, amount, 0);
+    }
+    void add_success(bool success) {
+        fbb_.AddElement<uint8_t>(FastGetResult::VT_SUCCESS,
+                                 static_cast<uint8_t>(success), 0);
     }
     void add_last_applied(int64_t last_applied) {
-        fbb_.AddElement<int64_t>(ReplicaFastGetResult::VT_LAST_APPLIED,
-                                 last_applied, 0);
+        fbb_.AddElement<int64_t>(FastGetResult::VT_LAST_APPLIED, last_applied,
+                                 0);
     }
-    explicit ReplicaFastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+    explicit FastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    ReplicaFastGetResultBuilder &operator=(const ReplicaFastGetResultBuilder &);
-    flatbuffers::Offset<ReplicaFastGetResult> Finish() {
+    FastGetResultBuilder &operator=(const FastGetResultBuilder &);
+    flatbuffers::Offset<FastGetResult> Finish() {
         const auto end = fbb_.EndTable(start_);
-        auto o = flatbuffers::Offset<ReplicaFastGetResult>(end);
+        auto o = flatbuffers::Offset<FastGetResult>(end);
         return o;
     }
 };
 
-inline flatbuffers::Offset<ReplicaFastGetResult> CreateReplicaFastGetResult(
-    flatbuffers::FlatBufferBuilder &_fbb, bool success = false,
-    int64_t account = 0, int64_t amount = 0, int64_t last_applied = 0) {
-    ReplicaFastGetResultBuilder builder_(_fbb);
+inline flatbuffers::Offset<FastGetResult> CreateFastGetResult(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t account = 0,
+    int64_t amount = 0, bool success = false, int64_t last_applied = 0) {
+    FastGetResultBuilder builder_(_fbb);
     builder_.add_last_applied(last_applied);
     builder_.add_amount(amount);
     builder_.add_account(account);
@@ -622,46 +532,6 @@ inline flatbuffers::Offset<ReplicaReject> CreateReplicaReject(
     return builder_.Finish();
 }
 
-struct CloseArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-    typedef CloseArgsBuilder Builder;
-    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_SHUTDOWN = 4
-    };
-    bool shutdown() const { return GetField<uint8_t>(VT_SHUTDOWN, 0) != 0; }
-    bool Verify(flatbuffers::Verifier &verifier) const {
-        return VerifyTableStart(verifier) &&
-               VerifyField<uint8_t>(verifier, VT_SHUTDOWN) &&
-               verifier.EndTable();
-    }
-};
-
-struct CloseArgsBuilder {
-    typedef CloseArgs Table;
-    flatbuffers::FlatBufferBuilder &fbb_;
-    flatbuffers::uoffset_t start_;
-    void add_shutdown(bool shutdown) {
-        fbb_.AddElement<uint8_t>(CloseArgs::VT_SHUTDOWN,
-                                 static_cast<uint8_t>(shutdown), 0);
-    }
-    explicit CloseArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-        start_ = fbb_.StartTable();
-    }
-    CloseArgsBuilder &operator=(const CloseArgsBuilder &);
-    flatbuffers::Offset<CloseArgs> Finish() {
-        const auto end = fbb_.EndTable(start_);
-        auto o = flatbuffers::Offset<CloseArgs>(end);
-        return o;
-    }
-};
-
-inline flatbuffers::Offset<CloseArgs> CreateCloseArgs(
-    flatbuffers::FlatBufferBuilder &_fbb, bool shutdown = false) {
-    CloseArgsBuilder builder_(_fbb);
-    builder_.add_shutdown(shutdown);
-    return builder_.Finish();
-}
-
 struct Empty FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef EmptyBuilder Builder;
     bool Verify(flatbuffers::Verifier &verifier) const {
@@ -716,20 +586,9 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                          message())
                    : nullptr;
     }
-    const paxos_sgx::crash::ClientFastGetResult *
-    message_as_ClientFastGetResult() const {
-        return message_type() ==
-                       paxos_sgx::crash::BasicMessage_ClientFastGetResult
-                   ? static_cast<const paxos_sgx::crash::ClientFastGetResult *>(
-                         message())
-                   : nullptr;
-    }
-    const paxos_sgx::crash::ReplicaFastGetResult *
-    message_as_ReplicaFastGetResult() const {
-        return message_type() ==
-                       paxos_sgx::crash::BasicMessage_ReplicaFastGetResult
-                   ? static_cast<
-                         const paxos_sgx::crash::ReplicaFastGetResult *>(
+    const paxos_sgx::crash::FastGetResult *message_as_FastGetResult() const {
+        return message_type() == paxos_sgx::crash::BasicMessage_FastGetResult
+                   ? static_cast<const paxos_sgx::crash::FastGetResult *>(
                          message())
                    : nullptr;
     }
@@ -764,11 +623,6 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                          message())
                    : nullptr;
     }
-    const paxos_sgx::crash::CloseArgs *message_as_CloseArgs() const {
-        return message_type() == paxos_sgx::crash::BasicMessage_CloseArgs
-                   ? static_cast<const paxos_sgx::crash::CloseArgs *>(message())
-                   : nullptr;
-    }
     const paxos_sgx::crash::Empty *message_as_Empty() const {
         return message_type() == paxos_sgx::crash::BasicMessage_Empty
                    ? static_cast<const paxos_sgx::crash::Empty *>(message())
@@ -792,15 +646,9 @@ Message::message_as<paxos_sgx::crash::FastGetArgs>() const {
 }
 
 template <>
-inline const paxos_sgx::crash::ClientFastGetResult *
-Message::message_as<paxos_sgx::crash::ClientFastGetResult>() const {
-    return message_as_ClientFastGetResult();
-}
-
-template <>
-inline const paxos_sgx::crash::ReplicaFastGetResult *
-Message::message_as<paxos_sgx::crash::ReplicaFastGetResult>() const {
-    return message_as_ReplicaFastGetResult();
+inline const paxos_sgx::crash::FastGetResult *
+Message::message_as<paxos_sgx::crash::FastGetResult>() const {
+    return message_as_FastGetResult();
 }
 
 template <>
@@ -831,12 +679,6 @@ template <>
 inline const paxos_sgx::crash::ReplicaReject *
 Message::message_as<paxos_sgx::crash::ReplicaReject>() const {
     return message_as_ReplicaReject();
-}
-
-template <>
-inline const paxos_sgx::crash::CloseArgs *
-Message::message_as<paxos_sgx::crash::CloseArgs>() const {
-    return message_as_CloseArgs();
 }
 
 template <>
@@ -900,15 +742,9 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
                 reinterpret_cast<const paxos_sgx::crash::FastGetArgs *>(obj);
             return verifier.VerifyTable(ptr);
         }
-        case BasicMessage_ClientFastGetResult: {
+        case BasicMessage_FastGetResult: {
             auto ptr =
-                reinterpret_cast<const paxos_sgx::crash::ClientFastGetResult *>(
-                    obj);
-            return verifier.VerifyTable(ptr);
-        }
-        case BasicMessage_ReplicaFastGetResult: {
-            auto ptr = reinterpret_cast<
-                const paxos_sgx::crash::ReplicaFastGetResult *>(obj);
+                reinterpret_cast<const paxos_sgx::crash::FastGetResult *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_OperationArgs: {
@@ -935,11 +771,6 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         case BasicMessage_ReplicaReject: {
             auto ptr =
                 reinterpret_cast<const paxos_sgx::crash::ReplicaReject *>(obj);
-            return verifier.VerifyTable(ptr);
-        }
-        case BasicMessage_CloseArgs: {
-            auto ptr =
-                reinterpret_cast<const paxos_sgx::crash::CloseArgs *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_Empty: {

@@ -7,9 +7,6 @@ enum MessageType:byte {
     client_operation_req,
     client_operation_resp,
 
-    replica_fast_get_req,
-    replica_fast_get_resp,
-
     replica_propose,
     replica_accept,
     replica_reject,
@@ -27,16 +24,10 @@ table FastGetArgs {
     account : int64;
 }
 
-table ClientFastGetResult {
+table FastGetResult {
     account : int64;
     amount  : int64;
     success : bool;
-}
-
-table ReplicaFastGetResult {
-    success : bool;
-    account : int64;
-    amount  : int64;
     last_applied : int64;
 }
 
@@ -69,8 +60,7 @@ table Empty { }
 
 union BasicMessage {
     FastGetArgs,
-    ClientFastGetResult,
-    ReplicaFastGetResult,
+    FastGetResult,
     OperationArgs,
     OperationResult,
     ReplicaPropose,

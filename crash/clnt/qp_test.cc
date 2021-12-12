@@ -10,34 +10,34 @@
 
 static int test_n = 1;
 
-#define ASSERT_EQ(val, CONSTANT, description)                     \
-    {                                                             \
-        do {                                                      \
-            fprintf(stderr, "test %d: ", test_n);                 \
-            fflush(stderr);                                       \
-            if (val == CONSTANT) {                                \
-                fprintf(stderr, "success \t| %s\n", description); \
-            } else {                                              \
-                fprintf(stderr, "fail  \t\t| %s\n", description); \
-                fflush(stderr);                                   \
-                exit(EXIT_FAILURE);                               \
-            }                                                     \
-            test_n++;                                             \
-        } while (false);                                          \
+#define ASSERT_EQ(val, CONSTANT, description)                              \
+    {                                                                      \
+        do {                                                               \
+            fprintf(stderr, "test %4d: ", test_n);                         \
+            fflush(stderr);                                                \
+            if (val == CONSTANT) {                                         \
+                fprintf(stderr, "%10s\t\t| %s\n", "success", description); \
+            } else {                                                       \
+                fprintf(stderr, "%10s\t\t| %s\n", "fail", description);    \
+                fflush(stderr);                                            \
+                exit(EXIT_FAILURE);                                        \
+            }                                                              \
+            test_n++;                                                      \
+        } while (false);                                                   \
     }
 
-#define EXPECT_EQ(val, CONSTANT, description)                      \
-    {                                                              \
-        do {                                                       \
-            fprintf(stderr, "test %d: ", test_n);                  \
-            fflush(stderr);                                        \
-            if (val == CONSTANT) {                                 \
-                fprintf(stderr, "success  \t| %s\n", description); \
-            } else {                                               \
-                fprintf(stderr, "fail  \t\t| %s\n", description);  \
-            }                                                      \
-            test_n++;                                              \
-        } while (false);                                           \
+#define EXPECT_EQ(val, CONSTANT, description)                              \
+    {                                                                      \
+        do {                                                               \
+            fprintf(stderr, "test %4d: ", test_n);                         \
+            fflush(stderr);                                                \
+            if (val == CONSTANT) {                                         \
+                fprintf(stderr, "%10s\t\t| %s\n", "success", description); \
+            } else {                                                       \
+                fprintf(stderr, "%10s\t\t| %s\n", "fail", description);    \
+            }                                                              \
+            test_n++;                                                      \
+        } while (false);                                                   \
     }
 
 namespace {
