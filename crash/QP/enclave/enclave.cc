@@ -51,8 +51,6 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
                 handler::handle_client_message(peer);
                 if (setup::closed()) return;
             }
-
-            if (peer.want_flush()) peer.flush();
         }
 
         for (auto &peer : g_replica_list) {
@@ -61,6 +59,13 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *measure_buffer,
                 if (setup::closed()) return;
             }
 
+            if (peer.want_flush()) peer.flush();
+        }
+
+        for (auto &peer : g_client_list) {
+            if (peer.want_flush()) peer.flush();
+        }
+        for (auto &peer : g_replica_list) {
             if (peer.want_flush()) peer.flush();
         }
 

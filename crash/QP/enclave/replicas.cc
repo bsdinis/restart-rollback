@@ -34,7 +34,6 @@ void execute(size_t slot_number) {
     g_log.executed(slot_number);
 
     if (paxos_sgx::crash::setup::is_leader()) {
-        LOG("returning %zu to client", slot_number);
         g_call_map.resolve_call(slot_number, account, amount, success);
     }
 }

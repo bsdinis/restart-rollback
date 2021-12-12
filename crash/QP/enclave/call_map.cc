@@ -19,16 +19,14 @@ void CallMap::resolve_call(size_t slot_n, int64_t account, int64_t amount,
     }
 
     flatbuffers::FlatBufferBuilder builder;
-    auto result = paxos_sgx::crash::CreateOperationResult(builder, account,
-                                                          amount, success);
-    auto message = paxos_sgx::crash::CreateMessage(
+    auto client_operation_res = paxos_sgx::crash::CreateOperationResult(
+        builder, account, amount, success);
+    auto result = paxos_sgx::crash::CreateMessage(
         builder, paxos_sgx::crash::MessageType_client_operation_resp,
         it->second.m_ticket, paxos_sgx::crash::BasicMessage_OperationResult,
-        result.Union());
+        client_operation_res.Union());
     builder.Finish(result);
 
-    LOG("replying to ticket %zd (peer %p)", it->second.m_ticket,
-        it->second.m_client);
     if (paxos_sgx::crash::handler_helper::append_result(
             *it->second.m_client, std::move(builder)) == -1) {
         ERROR("failed to find send response for slot %zu to client", slot_n);

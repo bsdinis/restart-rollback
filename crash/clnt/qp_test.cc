@@ -64,12 +64,19 @@ int main(int argc, char** argv) {
 
     crash::reset();
 
-    test_ping();
-    test_fast_get();
-    test_get();
-    test_transfer();
-    test_pipelining();
-    test_cb();
+    if (argc > 10) {
+        test_ping();
+        test_fast_get();
+        test_get();
+        test_transfer();
+        test_pipelining();
+        test_cb();
+    }
+
+    for (int i = 0; i < 100; ++i) {
+        int64_t amount = 0;
+        EXPECT_EQ(crash::get(1, amount), true, "get");
+    }
 
     ASSERT_EQ(crash::close(), 0, "close");
     INFO("finished test");
