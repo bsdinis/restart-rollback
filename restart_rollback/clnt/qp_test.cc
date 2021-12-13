@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
     setlinebuf(stdout);
 
     INFO("starting test");
-    ASSERT_EQ(restart_rollback::init(global_config_path.c_str(), global_index), 0, "init");
+    ASSERT_EQ(restart_rollback::init(global_config_path.c_str(), global_index),
+              0, "init");
 
     restart_rollback::reset();
 
@@ -82,18 +83,21 @@ void test_fast_get() {
     // sync test
     {
         int64_t amount = 0;
-        EXPECT_EQ(restart_rollback::fast_get((int64_t)1, amount), true, "fast_get");
+        EXPECT_EQ(restart_rollback::fast_get((int64_t)1, amount), true,
+                  "fast_get");
         EXPECT_EQ(amount, (int64_t)1000, "fast_get");
     }
 
     // async test
     {
         int64_t const ticket = restart_rollback::fast_get_async((int64_t)1);
-        if (restart_rollback::wait_for(ticket) == restart_rollback::poll_state::ERR) {
+        if (restart_rollback::wait_for(ticket) ==
+            restart_rollback::poll_state::ERR) {
             ERROR("failed to wait for fast_get");
             return;
         }
-        auto reply = restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto reply =
+            restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
         auto expected = std::make_pair<int64_t, bool>((int64_t)1000, true);
         EXPECT_EQ(reply, expected, "fast_get_async");
     }
@@ -110,11 +114,13 @@ void test_get() {
     // async test
     {
         int64_t const ticket = restart_rollback::get_async(2);
-        if (restart_rollback::wait_for(ticket) == restart_rollback::poll_state::ERR) {
+        if (restart_rollback::wait_for(ticket) ==
+            restart_rollback::poll_state::ERR) {
             ERROR("failed to wait for get");
             return;
         }
-        auto reply = restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto reply =
+            restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
         auto expected = std::make_pair<int64_t, bool>(1000, true);
         EXPECT_EQ(reply, expected, "get_async");
     }
@@ -124,7 +130,8 @@ void test_transfer() {
     // sync test
     {
         int64_t amount = 0;
-        EXPECT_EQ(restart_rollback::transfer(3, 4, 100, amount), true, "transfer");
+        EXPECT_EQ(restart_rollback::transfer(3, 4, 100, amount), true,
+                  "transfer");
         EXPECT_EQ(amount, (int64_t)900, "transfer");
         EXPECT_EQ(restart_rollback::get(3, amount), true, "transfer");
         EXPECT_EQ(amount, (int64_t)900, "transfer");
@@ -135,11 +142,13 @@ void test_transfer() {
     // async test
     {
         int64_t const ticket = restart_rollback::transfer_async(5, 6, 100);
-        if (restart_rollback::wait_for(ticket) == restart_rollback::poll_state::ERR) {
+        if (restart_rollback::wait_for(ticket) ==
+            restart_rollback::poll_state::ERR) {
             ERROR("failed to wait for transfer");
             return;
         }
-        auto reply = restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
+        auto reply =
+            restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket);
         auto expected = std::make_pair<int64_t, bool>(900, true);
         EXPECT_EQ(reply, expected, "transfer_async");
 
@@ -161,7 +170,8 @@ void test_ping() {
     // async test
     {
         int64_t const ticket = restart_rollback::ping_async();
-        if (restart_rollback::wait_for(ticket) == restart_rollback::poll_state::ERR) {
+        if (restart_rollback::wait_for(ticket) ==
+            restart_rollback::poll_state::ERR) {
             ERROR("failed to wait for ping");
             return;
         }
@@ -192,7 +202,8 @@ void test_pipelining() {
                 get_tickets.emplace_back(restart_rollback::get_async(8));
                 break;
             case 2:
-                transfer_tickets.emplace_back(restart_rollback::transfer_async(9, 10, 1));
+                transfer_tickets.emplace_back(
+                    restart_rollback::transfer_async(9, 10, 1));
                 break;
             case 3:
             default:
@@ -203,18 +214,20 @@ void test_pipelining() {
     while (/*std::any_of(
                std::cbegin(fast_get_tickets), std::cend(fast_get_tickets),
                [](int64_t ticket) {
-                   return restart_rollback::poll(ticket) == restart_rollback::poll_state::PENDING;
+                   return restart_rollback::poll(ticket) ==
+              restart_rollback::poll_state::PENDING;
                }) || */
            std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
                            return restart_rollback::poll(ticket) ==
                                   restart_rollback::poll_state::PENDING;
                        }) ||
-           std::any_of(
-               std::cbegin(transfer_tickets), std::cend(transfer_tickets),
-               [](int64_t ticket) {
-                   return restart_rollback::poll(ticket) == restart_rollback::poll_state::PENDING;
-               }) ||
+           std::any_of(std::cbegin(transfer_tickets),
+                       std::cend(transfer_tickets),
+                       [](int64_t ticket) {
+                           return restart_rollback::poll(ticket) ==
+                                  restart_rollback::poll_state::PENDING;
+                       }) ||
            std::any_of(std::cbegin(ping_tickets), std::cend(ping_tickets),
                        [](int64_t ticket) {
                            return restart_rollback::poll(ticket) ==
@@ -228,16 +241,18 @@ for (int64_t const ticket : fast_get_tickets)
               (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
               */
     for (int64_t const ticket : get_tickets)
-        ASSERT_EQ((restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket)),
-                  (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
+        ASSERT_EQ(
+            (restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket)),
+            (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
 
     int64_t amount = 1000;
     for (int64_t const ticket : transfer_tickets) {
         amount -= 1;
         int64_t rv_amount = amount;
-        ASSERT_EQ((restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket)),
-                  (std::make_pair<int64_t, bool>(std::move(rv_amount), true)),
-                  "pipelining");
+        ASSERT_EQ(
+            (restart_rollback::get_reply<std::pair<int64_t, bool>>(ticket)),
+            (std::make_pair<int64_t, bool>(std::move(rv_amount), true)),
+            "pipelining");
     }
     for (int64_t const ticket : ping_tickets) {
         restart_rollback::get_reply<void>(ticket);
@@ -258,8 +273,8 @@ void test_cb() {
     ASSERT_EQ(restart_rollback::transfer_set_cb(
                   [&transfer_n](int64_t, int64_t, bool) { transfer_n++; }),
               0, "transfer_set_cb");
-    ASSERT_EQ(restart_rollback::ping_set_cb([&ping_n](int64_t) { ping_n++; }), 0,
-              "ping_set_cb");
+    ASSERT_EQ(restart_rollback::ping_set_cb([&ping_n](int64_t) { ping_n++; }),
+              0, "ping_set_cb");
 
     restart_rollback::fast_get_cb((int64_t)1);
     restart_rollback::ping_cb();
@@ -275,10 +290,10 @@ void test_cb() {
     EXPECT_EQ(fast_get_n, 2, "callback fast get test");
     EXPECT_EQ(transfer_n, 4, "callback transfer test");
     EXPECT_EQ(ping_n, 3, "callback ping test");
-    ASSERT_EQ(restart_rollback::fast_get_set_cb([](int64_t, int64_t, bool) {}), 0,
-              "fast_get_set_cb");
-    ASSERT_EQ(restart_rollback::transfer_set_cb([](int64_t, int64_t, bool) {}), 0,
-              "transfer_set_cb");
+    ASSERT_EQ(restart_rollback::fast_get_set_cb([](int64_t, int64_t, bool) {}),
+              0, "fast_get_set_cb");
+    ASSERT_EQ(restart_rollback::transfer_set_cb([](int64_t, int64_t, bool) {}),
+              0, "transfer_set_cb");
     ASSERT_EQ(restart_rollback::ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
 

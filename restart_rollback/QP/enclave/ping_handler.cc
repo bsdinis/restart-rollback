@@ -1,8 +1,8 @@
 #include "ping_handler.h"
-#include "restart_rollback_generated.h"
 #include "handler_helpers.h"
 #include "log.h"
 #include "replicas.h"
+#include "restart_rollback_generated.h"
 
 namespace paxos_sgx {
 namespace restart_rollback {
@@ -31,8 +31,8 @@ int client_ping_handler(peer &p, int64_t ticket) {
         paxos_sgx::restart_rollback::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return paxos_sgx::restart_rollback::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return paxos_sgx::restart_rollback::handler_helper::append_result(
+        p, std::move(builder));
 }
 
 int replica_ping_handler(peer &p, int64_t ticket) {
@@ -45,8 +45,8 @@ int replica_ping_handler(peer &p, int64_t ticket) {
         paxos_sgx::restart_rollback::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return paxos_sgx::restart_rollback::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return paxos_sgx::restart_rollback::handler_helper::append_result(
+        p, std::move(builder));
 }
 
 }  // namespace handler

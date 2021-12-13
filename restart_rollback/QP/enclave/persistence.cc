@@ -25,7 +25,8 @@ class PersistentBlock {
         }
 
         memcpy(g_previous_mac, m_mac, sizeof(sgx_aes_gcm_128bit_tag_t));
-        return paxos_sgx::restart_rollback::crypto::padded_size(sizeof(PersistentBlock));
+        return paxos_sgx::restart_rollback::crypto::padded_size(
+            sizeof(PersistentBlock));
     }
 
    private:

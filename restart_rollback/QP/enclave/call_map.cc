@@ -1,7 +1,7 @@
 #include "call_map.h"
-#include "restart_rollback_generated.h"
 #include "handler_helpers.h"
 #include "log.h"
+#include "restart_rollback_generated.h"
 
 namespace paxos_sgx {
 namespace restart_rollback {
@@ -19,11 +19,13 @@ void CallMap::resolve_call(size_t slot_n, int64_t account, int64_t amount,
     }
 
     flatbuffers::FlatBufferBuilder builder;
-    auto client_operation_res = paxos_sgx::restart_rollback::CreateOperationResult(
-        builder, account, amount, success);
+    auto client_operation_res =
+        paxos_sgx::restart_rollback::CreateOperationResult(builder, account,
+                                                           amount, success);
     auto result = paxos_sgx::restart_rollback::CreateMessage(
         builder, paxos_sgx::restart_rollback::MessageType_client_operation_resp,
-        it->second.m_ticket, paxos_sgx::restart_rollback::BasicMessage_OperationResult,
+        it->second.m_ticket,
+        paxos_sgx::restart_rollback::BasicMessage_OperationResult,
         client_operation_res.Union());
     builder.Finish(result);
 

@@ -116,7 +116,8 @@ void warmup(std::chrono::seconds duration) {
         while ((std::chrono::system_clock::now() - tick_start) <
                wtick_duration) {
             restart_rollback::poll();
-            print_progress(restart_rollback::n_calls_concluded(), restart_rollback::n_calls_issued());
+            print_progress(restart_rollback::n_calls_concluded(),
+                           restart_rollback::n_calls_issued());
         }
     }
     restart_rollback::wait_for();
@@ -142,8 +143,9 @@ void load_test(std::chrono::seconds duration) {
 
         while ((std::chrono::system_clock::now() - tick_start) <
                tick_duration) {
-            print_progress(restart_rollback::n_calls_concluded() - baseline_calls,
-                           restart_rollback::n_calls_issued() - baseline_calls);
+            print_progress(
+                restart_rollback::n_calls_concluded() - baseline_calls,
+                restart_rollback::n_calls_issued() - baseline_calls);
             restart_rollback::poll();
         }
     }
@@ -179,7 +181,8 @@ int main(int argc, char** argv) {
     fflush(stdout);
 
     if (global_config_path.empty()) {
-        if (restart_rollback::init() != 0) KILL("failed to init connection to QP");
+        if (restart_rollback::init() != 0)
+            KILL("failed to init connection to QP");
     } else if (restart_rollback::init(global_config_path.c_str()) != 0) {
         KILL("failed to init connection to QP");
     }

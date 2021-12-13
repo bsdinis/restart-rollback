@@ -24,8 +24,8 @@ int reset_handler(peer &p, int64_t ticket) {
     size_t const size = builder.GetSize();
     uint8_t const *payload = builder.GetBufferPointer();
 
-    return paxos_sgx::restart_rollback::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return paxos_sgx::restart_rollback::handler_helper::append_result(
+        p, std::move(builder));
 }
 
 }  // namespace handler

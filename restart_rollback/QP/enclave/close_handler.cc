@@ -1,7 +1,7 @@
 #include "close_handler.h"
 
-#include "restart_rollback_generated.h"
 #include "log.h"
+#include "restart_rollback_generated.h"
 #include "setup.h"
 
 namespace paxos_sgx {

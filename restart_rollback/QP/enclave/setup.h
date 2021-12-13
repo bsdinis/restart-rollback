@@ -22,8 +22,8 @@ namespace paxos_sgx {
 namespace restart_rollback {
 namespace setup {
 
-void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
-           size_t f);
+void setup(config_t* conf, ssize_t idx, void* file_mapping,
+           size_t mapping_size);
 void close();
 
 SSL_CTX* ssl_ctx();
@@ -31,7 +31,10 @@ int client_listen_sock();
 int replica_listen_sock();
 bool closed();
 
-size_t quorum_size();
+size_t write_quorum_size();
+size_t read_quorum_size(size_t s);
+size_t max_quorum_size(size_t suspicions);
+bool is_suspicious();
 bool is_leader();
 
 }  // namespace setup

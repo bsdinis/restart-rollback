@@ -63,8 +63,8 @@ int handle_client_message(peer &p) {
         FINE("request size: %zu B", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
-        auto request =
-            paxos_sgx::restart_rollback::GetMessage(p.buffer().data() + sizeof(size_t));
+        auto request = paxos_sgx::restart_rollback::GetMessage(
+            p.buffer().data() + sizeof(size_t));
 
         auto const begin = timer::now();
         switch (request->type()) {
@@ -111,8 +111,8 @@ int handle_replica_message(peer &p) {
             return 0;
         }
 
-        auto message =
-            paxos_sgx::restart_rollback::GetMessage(p.buffer().data() + sizeof(size_t));
+        auto message = paxos_sgx::restart_rollback::GetMessage(
+            p.buffer().data() + sizeof(size_t));
         auto const begin = timer::now();
         switch (message->type()) {
             case paxos_sgx::restart_rollback::MessageType_replica_propose:
@@ -124,6 +124,7 @@ int handle_replica_message(peer &p) {
                 replica_accept_handler(p, message->ticket(),
                                        message->message_as_ReplicaAccept());
                 perf_rec.add("replica_accept", timer::elapsed_usec(begin));
+                LOG("finished replica accept");
                 break;
             case paxos_sgx::restart_rollback::MessageType_replica_reject:
                 replica_reject_handler(p, message->ticket(),
@@ -174,15 +175,16 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
 
         try {
             LOG("adding to the end");
-            list.emplace_back(paxos_sgx::restart_rollback::setup::ssl_ctx(), true);
+            list.emplace_back(paxos_sgx::restart_rollback::setup::ssl_ctx(),
+                              true);
         } catch (std::bad_alloc &) {
             ERROR("allocation failure: cannot add a new peer to list");
             return -1;
         }
     } else {
         LOG("adding to the %zd", idx);
-        list.emplace(std::begin(list) + idx, paxos_sgx::restart_rollback::setup::ssl_ctx(),
-                     true);
+        list.emplace(std::begin(list) + idx,
+                     paxos_sgx::restart_rollback::setup::ssl_ctx(), true);
     }
     peer &p = idx == -1 ? *(std::end(list) - 1) : list[idx];
 

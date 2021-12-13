@@ -26,6 +26,19 @@
 #include <numeric>
 #include <unordered_map>
 
+size_t g_rollback_faults = 0;
+size_t g_crash_faults = 0;
+
+size_t write_quorum_size() {
+    return std::max<size_t>(g_rollback_faults, g_crash_faults) + 1;
+}
+size_t read_quorum_size(size_t suspicions) {
+    return std::min<size_t>(g_rollback_faults, suspicions) + 1;
+}
+size_t max_quorum_size(size_t suspicions) {
+    return std::max<size_t>(write_quorum_size(), read_quorum_size(suspicions));
+}
+
 namespace paxos_sgx {
 namespace restart_rollback {
 
@@ -35,13 +48,16 @@ enum class call_type { SYNC, ASYNC, CALLBACK };
 // fast
 int64_t send_fast_get_request(int64_t account, call_type type);
 int fast_get_handler(int64_t ticket, int64_t amount, int64_t last_applied,
-                     int64_t last_accepted);
+                     int64_t last_accepted, int64_t last_seen, bool suspicious);
 int fast_get_handler_sync(int64_t ticket, int64_t amount, int64_t last_applied,
-                          int64_t last_accepted);
+                          int64_t last_accepted, int64_t last_seen,
+                          bool suspicious);
 int fast_get_handler_async(int64_t ticket, int64_t amount, int64_t last_applied,
-                           int64_t last_accepted);
+                           int64_t last_accepted, int64_t last_seen,
+                           bool suspicious);
 int fast_get_handler_cb(int64_t ticket, int64_t amount, int64_t last_applied,
-                        int64_t last_accepted);
+                        int64_t last_accepted, int64_t last_seen,
+                        bool suspicious);
 std::function<void(int64_t, int64_t, bool)> fast_get_callback =
     [](int64_t, int64_t, bool) {};
 
@@ -106,8 +122,6 @@ SSL_CTX *client_ctx = nullptr;
 std::vector<peer> g_servers;
 timeval global_timeout;
 
-inline size_t quorum_size() { return (g_servers.size() / 2) + 1; }
-
 // network helpers
 enum class process_res { HANDLED_MSG, NOOP, ERR };
 int handle_received_message(peer &p);
@@ -138,6 +152,8 @@ int init(
     }
 
     g_servers.reserve(conf.size);
+    g_rollback_faults = conf.r;
+    g_crash_faults = conf.f;
 
     if (init_client_ssl_ctx(&client_ctx) == -1) {
         ERROR("failed to setup ssl ctx");
@@ -175,7 +191,8 @@ int close(bool close_remote) {
         auto close_args = paxos_sgx::restart_rollback::CreateEmpty(builder);
         auto request = paxos_sgx::restart_rollback::CreateMessage(
             builder, paxos_sgx::restart_rollback::MessageType_close_req, ticket,
-            paxos_sgx::restart_rollback::BasicMessage_Empty, close_args.Union());
+            paxos_sgx::restart_rollback::BasicMessage_Empty,
+            close_args.Union());
         builder.Finish(request);
 
         size_t const size = builder.GetSize();
@@ -452,11 +469,13 @@ int64_t send_fast_get_request(int64_t account, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto fast_get_args = paxos_sgx::restart_rollback::CreateFastGetArgs(builder, account);
+    auto fast_get_args =
+        paxos_sgx::restart_rollback::CreateFastGetArgs(builder, account);
 
     auto request = paxos_sgx::restart_rollback::CreateMessage(
-        builder, paxos_sgx::restart_rollback::MessageType_client_fast_get_req, ticket,
-        paxos_sgx::restart_rollback::BasicMessage_FastGetArgs, fast_get_args.Union());
+        builder, paxos_sgx::restart_rollback::MessageType_client_fast_get_req,
+        ticket, paxos_sgx::restart_rollback::BasicMessage_FastGetArgs,
+        fast_get_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -483,12 +502,13 @@ int64_t send_transfer_request(peer &server, int64_t account, int64_t to,
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto transfer_args =
-        paxos_sgx::restart_rollback::CreateOperationArgs(builder, account, to, amount);
+    auto transfer_args = paxos_sgx::restart_rollback::CreateOperationArgs(
+        builder, account, to, amount);
 
     auto request = paxos_sgx::restart_rollback::CreateMessage(
-        builder, paxos_sgx::restart_rollback::MessageType_client_operation_req, ticket,
-        paxos_sgx::restart_rollback::BasicMessage_OperationArgs, transfer_args.Union());
+        builder, paxos_sgx::restart_rollback::MessageType_client_operation_req,
+        ticket, paxos_sgx::restart_rollback::BasicMessage_OperationArgs,
+        transfer_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -566,17 +586,19 @@ int64_t send_reset_request(peer &server, call_type type) {
 
 // fast
 int fast_get_handler_sync(int64_t ticket, int64_t amount, int64_t last_applied,
-                          int64_t last_accepted) {
+                          int64_t last_accepted, int64_t last_seen,
+                          bool suspicious) {
     if (ticket != fast_get_sync_ticket) {
         FINE("already finished %ld (%ld)", ticket, fast_get_sync_ticket);
         return 0;
     }
-    if (!g_fast_get_sync_ctx.add_call(amount, last_applied, last_accepted)) {
+    if (!g_fast_get_sync_ctx.add_call(amount, last_applied, last_accepted,
+                                      last_seen, suspicious)) {
         fast_get_amount_result = -1;
         fast_get_success_result = false;
         fast_get_sync_ticket = -1;
         calls_concluded++;
-    } else if (g_fast_get_sync_ctx.ready(quorum_size())) {
+    } else if (g_fast_get_sync_ctx.ready()) {
         fast_get_amount_result = amount;
         fast_get_success_result = true;
         fast_get_sync_ticket = -1;
@@ -585,13 +607,15 @@ int fast_get_handler_sync(int64_t ticket, int64_t amount, int64_t last_applied,
     return 0;
 }
 int fast_get_handler_async(int64_t ticket, int64_t amount, int64_t last_applied,
-                           int64_t last_accepted) {
+                           int64_t last_accepted, int64_t last_seen,
+                           bool suspicious) {
     auto it = g_fast_get_ctx_map.find(ticket);
     if (it == g_fast_get_ctx_map.end()) {
         return 0;  // call done
     }
 
-    if (!it->second.add_call(amount, last_applied, last_accepted)) {
+    if (!it->second.add_call(amount, last_applied, last_accepted, last_seen,
+                             suspicious)) {
         results_map.emplace(
             ticket,
             std::unique_ptr<result>(
@@ -600,7 +624,7 @@ int fast_get_handler_async(int64_t ticket, int64_t amount, int64_t last_applied,
                         std::make_pair(-1, false)))));
         g_fast_get_ctx_map.erase(it);
         calls_concluded++;
-    } else if (it->second.ready(quorum_size())) {
+    } else if (it->second.ready()) {
         results_map.emplace(
             ticket,
             std::unique_ptr<result>(
@@ -614,17 +638,19 @@ int fast_get_handler_async(int64_t ticket, int64_t amount, int64_t last_applied,
     return 0;
 }
 int fast_get_handler_cb(int64_t ticket, int64_t amount, int64_t last_applied,
-                        int64_t last_accepted) {
+                        int64_t last_accepted, int64_t last_seen,
+                        bool suspicious) {
     auto it = g_fast_get_ctx_map.find(ticket);
     if (it == g_fast_get_ctx_map.end()) {
         return 0;  // call done
     }
 
-    if (!it->second.add_call(amount, last_applied, last_accepted)) {
+    if (!it->second.add_call(amount, last_applied, last_accepted, last_seen,
+                             suspicious)) {
         fast_get_callback(ticket, -1, false);
         g_fast_get_ctx_map.erase(it);
         calls_concluded++;
-    } else if (it->second.ready(quorum_size())) {
+    } else if (it->second.ready()) {
         fast_get_callback(ticket, amount, true);
         g_fast_get_ctx_map.erase(it);
         calls_concluded++;
@@ -633,16 +659,18 @@ int fast_get_handler_cb(int64_t ticket, int64_t amount, int64_t last_applied,
     return 0;
 }
 int fast_get_handler(int64_t ticket, int64_t amount, int64_t last_applied,
-                     int64_t last_accepted) {
+                     int64_t last_accepted, int64_t last_seen,
+                     bool suspicious) {
     switch (ticket % 3) {
         case 0:  // SYNC
             return fast_get_handler_sync(ticket, amount, last_applied,
-                                         last_accepted);
+                                         last_accepted, last_seen, suspicious);
         case 1:  // ASYNC
             return fast_get_handler_async(ticket, amount, last_applied,
-                                          last_accepted);
+                                          last_accepted, last_seen, suspicious);
         case 2:  // CALLBACK
-            fast_get_handler_cb(ticket, amount, last_applied, last_accepted);
+            fast_get_handler_cb(ticket, amount, last_applied, last_accepted,
+                                last_seen, suspicious);
             return 0;
     }
     // unreachable (could use __builtin_unreachable)
@@ -733,8 +761,8 @@ int handle_received_message(peer &p) {
         FINE("resp size: %zu B (according to header)", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
-        auto response =
-            paxos_sgx::restart_rollback::GetMessage(p.buffer().data() + sizeof(size_t));
+        auto response = paxos_sgx::restart_rollback::GetMessage(
+            p.buffer().data() + sizeof(size_t));
 
         switch (response->type()) {
             case paxos_sgx::restart_rollback::MessageType_client_fast_get_resp:
@@ -743,7 +771,9 @@ int handle_received_message(peer &p) {
                     response->ticket(),
                     response->message_as_FastGetResult()->amount(),
                     response->message_as_FastGetResult()->last_applied(),
-                    response->message_as_FastGetResult()->last_accepted());
+                    response->message_as_FastGetResult()->last_accepted(),
+                    response->message_as_FastGetResult()->last_seen(),
+                    response->message_as_FastGetResult()->suspicious());
                 break;
             case paxos_sgx::restart_rollback::MessageType_client_operation_resp:
                 calls_concluded++;

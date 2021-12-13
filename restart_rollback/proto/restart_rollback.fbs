@@ -29,6 +29,8 @@ table FastGetResult {
     amount  : int64;
     last_applied : int64;
     last_accepted : int64;
+    last_seen : int64;
+    suspicious : bool;
 }
 
 table OperationArgs {
@@ -46,10 +48,12 @@ table OperationResult {
 table ReplicaPropose {
     operation_args: OperationArgs;
     slot_number: int64;
+    suspicious : bool;
 }
 
 table ReplicaAccept {
     slot_number: int64;
+    suspicious : bool;
 }
 
 table ReplicaReject {

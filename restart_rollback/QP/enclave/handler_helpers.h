@@ -6,8 +6,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "restart_rollback_generated.h"
 #include "peer.h"
+#include "restart_rollback_generated.h"
 
 namespace paxos_sgx {
 namespace restart_rollback {

@@ -65,8 +65,8 @@ int SGX_CDECL main(int argc, char *argv[]) {
         KILL("failed to setup signals");
     if (setup_signals(ignore_handler, 2, SIGPIPE, SIGCHLD) == -1)
         KILL("failed to setup signals");
-    if (setup_signals(restart_rollback_handler, 6, SIGSEGV, SIGFPE, SIGQUIT, SIGTSTP,
-                      SIGURG, SIGXCPU) == -1)
+    if (setup_signals(restart_rollback_handler, 6, SIGSEGV, SIGFPE, SIGQUIT,
+                      SIGTSTP, SIGURG, SIGXCPU) == -1)
         KILL("failed to setup signals");
 
     if (on_exit(shutdown_properly, NULL) == -1)
@@ -89,8 +89,8 @@ int SGX_CDECL main(int argc, char *argv[]) {
 
     INFO("starting enclave");
     restart_rollback_enclave_start(global_eid, conf, my_idx,
-                        create_mapping(mapping_filename), MAPPED_SIZE,
-                        stats.data(), stats.size(), (conf.size - 1) / 2);
+                                   create_mapping(mapping_filename),
+                                   MAPPED_SIZE, stats.data(), stats.size());
     config_free(&conf);
 }
 

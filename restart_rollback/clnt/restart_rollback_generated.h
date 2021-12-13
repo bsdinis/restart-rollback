@@ -234,7 +234,9 @@ struct FastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_ACCOUNT = 4,
     VT_AMOUNT = 6,
     VT_LAST_APPLIED = 8,
-    VT_LAST_ACCEPTED = 10
+    VT_LAST_ACCEPTED = 10,
+    VT_LAST_SEEN = 12,
+    VT_SUSPICIOUS = 14
   };
   int64_t account() const {
     return GetField<int64_t>(VT_ACCOUNT, 0);
@@ -248,12 +250,20 @@ struct FastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   int64_t last_accepted() const {
     return GetField<int64_t>(VT_LAST_ACCEPTED, 0);
   }
+  int64_t last_seen() const {
+    return GetField<int64_t>(VT_LAST_SEEN, 0);
+  }
+  bool suspicious() const {
+    return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
            VerifyField<int64_t>(verifier, VT_AMOUNT) &&
            VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
            VerifyField<int64_t>(verifier, VT_LAST_ACCEPTED) &&
+           VerifyField<int64_t>(verifier, VT_LAST_SEEN) &&
+           VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
            verifier.EndTable();
   }
 };
@@ -274,6 +284,12 @@ struct FastGetResultBuilder {
   void add_last_accepted(int64_t last_accepted) {
     fbb_.AddElement<int64_t>(FastGetResult::VT_LAST_ACCEPTED, last_accepted, 0);
   }
+  void add_last_seen(int64_t last_seen) {
+    fbb_.AddElement<int64_t>(FastGetResult::VT_LAST_SEEN, last_seen, 0);
+  }
+  void add_suspicious(bool suspicious) {
+    fbb_.AddElement<uint8_t>(FastGetResult::VT_SUSPICIOUS, static_cast<uint8_t>(suspicious), 0);
+  }
   explicit FastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -291,12 +307,16 @@ inline flatbuffers::Offset<FastGetResult> CreateFastGetResult(
     int64_t account = 0,
     int64_t amount = 0,
     int64_t last_applied = 0,
-    int64_t last_accepted = 0) {
+    int64_t last_accepted = 0,
+    int64_t last_seen = 0,
+    bool suspicious = false) {
   FastGetResultBuilder builder_(_fbb);
+  builder_.add_last_seen(last_seen);
   builder_.add_last_accepted(last_accepted);
   builder_.add_last_applied(last_applied);
   builder_.add_amount(amount);
   builder_.add_account(account);
+  builder_.add_suspicious(suspicious);
   return builder_.Finish();
 }
 
@@ -428,7 +448,8 @@ struct ReplicaPropose FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef ReplicaProposeBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_OPERATION_ARGS = 4,
-    VT_SLOT_NUMBER = 6
+    VT_SLOT_NUMBER = 6,
+    VT_SUSPICIOUS = 8
   };
   const paxos_sgx::restart_rollback::OperationArgs *operation_args() const {
     return GetPointer<const paxos_sgx::restart_rollback::OperationArgs *>(VT_OPERATION_ARGS);
@@ -436,11 +457,15 @@ struct ReplicaPropose FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   int64_t slot_number() const {
     return GetField<int64_t>(VT_SLOT_NUMBER, 0);
   }
+  bool suspicious() const {
+    return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_OPERATION_ARGS) &&
            verifier.VerifyTable(operation_args()) &&
            VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+           VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
            verifier.EndTable();
   }
 };
@@ -454,6 +479,9 @@ struct ReplicaProposeBuilder {
   }
   void add_slot_number(int64_t slot_number) {
     fbb_.AddElement<int64_t>(ReplicaPropose::VT_SLOT_NUMBER, slot_number, 0);
+  }
+  void add_suspicious(bool suspicious) {
+    fbb_.AddElement<uint8_t>(ReplicaPropose::VT_SUSPICIOUS, static_cast<uint8_t>(suspicious), 0);
   }
   explicit ReplicaProposeBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -470,24 +498,31 @@ struct ReplicaProposeBuilder {
 inline flatbuffers::Offset<ReplicaPropose> CreateReplicaPropose(
     flatbuffers::FlatBufferBuilder &_fbb,
     flatbuffers::Offset<paxos_sgx::restart_rollback::OperationArgs> operation_args = 0,
-    int64_t slot_number = 0) {
+    int64_t slot_number = 0,
+    bool suspicious = false) {
   ReplicaProposeBuilder builder_(_fbb);
   builder_.add_slot_number(slot_number);
   builder_.add_operation_args(operation_args);
+  builder_.add_suspicious(suspicious);
   return builder_.Finish();
 }
 
 struct ReplicaAccept FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef ReplicaAcceptBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_SLOT_NUMBER = 4
+    VT_SLOT_NUMBER = 4,
+    VT_SUSPICIOUS = 6
   };
   int64_t slot_number() const {
     return GetField<int64_t>(VT_SLOT_NUMBER, 0);
   }
+  bool suspicious() const {
+    return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0;
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+           VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
            verifier.EndTable();
   }
 };
@@ -498,6 +533,9 @@ struct ReplicaAcceptBuilder {
   flatbuffers::uoffset_t start_;
   void add_slot_number(int64_t slot_number) {
     fbb_.AddElement<int64_t>(ReplicaAccept::VT_SLOT_NUMBER, slot_number, 0);
+  }
+  void add_suspicious(bool suspicious) {
+    fbb_.AddElement<uint8_t>(ReplicaAccept::VT_SUSPICIOUS, static_cast<uint8_t>(suspicious), 0);
   }
   explicit ReplicaAcceptBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -513,9 +551,11 @@ struct ReplicaAcceptBuilder {
 
 inline flatbuffers::Offset<ReplicaAccept> CreateReplicaAccept(
     flatbuffers::FlatBufferBuilder &_fbb,
-    int64_t slot_number = 0) {
+    int64_t slot_number = 0,
+    bool suspicious = false) {
   ReplicaAcceptBuilder builder_(_fbb);
   builder_.add_slot_number(slot_number);
+  builder_.add_suspicious(suspicious);
   return builder_.Finish();
 }
 

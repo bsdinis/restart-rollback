@@ -91,7 +91,8 @@ int main(int argc, char** argv) {
             global_prefix.c_str(), std::ctime(&now));
 
     if (global_config_path.empty()) {
-        if (restart_rollback::init() != 0) KILL("failed to init connection to QP");
+        if (restart_rollback::init() != 0)
+            KILL("failed to init connection to QP");
     } else if (restart_rollback::init(global_config_path.c_str()) != 0) {
         KILL("failed to init connection to QP");
     }

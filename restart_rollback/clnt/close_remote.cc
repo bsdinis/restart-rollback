@@ -19,7 +19,8 @@ int main(int argc, char** argv) {
     parse_cli_args(argc, argv);
     setlinebuf(stdout);
 
-    if (restart_rollback::init(global_config_path.c_str(), global_index) == -1) {
+    if (restart_rollback::init(global_config_path.c_str(), global_index) ==
+        -1) {
         INFO("could not connect [config = %s, idx = %zd]",
              global_config_path.c_str(), global_index);
         return -1;

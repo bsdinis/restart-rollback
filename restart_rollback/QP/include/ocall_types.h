@@ -1,6 +1,7 @@
 #ifndef _OCALL_TYPES_H_
 #define _OCALL_TYPES_H_
 
+#include <stdbool.h>
 #include <sys/types.h>
 //#include <sys/stat.h>
 #include <unistd.h>

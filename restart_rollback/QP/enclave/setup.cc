@@ -39,7 +39,9 @@ SSL_CTX* ssl_server_ctx;
 SSL_CTX* ssl_client_ctx;
 bool closed_ = false;
 
-size_t g_fault_tolerance = 0;
+size_t g_crash_faults = 0;
+size_t g_rollback_faults = 0;
+bool g_is_fresh = false;
 
 char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
@@ -104,13 +106,17 @@ namespace setup {
 
 using namespace paxos_sgx::restart_rollback;
 
-void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
-           size_t f) {
+void setup(config_t* conf, ssize_t idx, void* file_mapping,
+           size_t mapping_size) {
     g_my_idx = idx;
+
     g_persistent_array = file_mapping;
     g_persistent_array_size = mapping_size;
-    g_fault_tolerance = f;
-    config_node_t& node = conf->nodes[idx];
+    g_rollback_faults = conf->r;
+    g_crash_faults = conf->f;
+
+    config_node_t const& node = conf->nodes[idx];
+    g_is_fresh = node.fresh;
     char addr[50];
     ocall_net_get_my_ipv4_addr(addr, 50);
 
@@ -182,8 +188,17 @@ int client_listen_sock() { return client_listen_sock_; }
 int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
 
-size_t quorum_size() { return g_fault_tolerance + 1; }
+size_t write_quorum_size() {
+    return std::max<size_t>(g_rollback_faults, g_crash_faults) + 1;
+}
+size_t read_quorum_size(size_t suspicions) {
+    return std::min<size_t>(g_rollback_faults, suspicions) + 1;
+}
+size_t max_quorum_size(size_t suspicions) {
+    return std::max<size_t>(write_quorum_size(), read_quorum_size(suspicions));
+}
 bool is_leader() { return g_my_idx == 0; }
+bool is_suspicious() { return !g_is_fresh; }
 
 }  // namespace setup
 }  // namespace restart_rollback
