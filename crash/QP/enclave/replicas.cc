@@ -40,6 +40,10 @@ void execute(size_t slot_number) {
 
 void add_accept(size_t slot_number) {
     g_log.add_accept(slot_number);
+    if (g_log.get_accepts(slot_number) >=
+        paxos_sgx::crash::setup::quorum_size()) {
+        g_log.accepted(slot_number);
+    }
     while (g_log.get_accepts(slot_number) >=
                paxos_sgx::crash::setup::quorum_size() &&
            g_log.execution_cursor() == slot_number - 1) {

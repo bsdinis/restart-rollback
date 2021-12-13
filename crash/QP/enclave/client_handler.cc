@@ -24,7 +24,8 @@ int client_fast_get_handler(peer &p, int64_t ticket,
 
     flatbuffers::FlatBufferBuilder builder;
     auto client_fast_get_res = paxos_sgx::crash::CreateFastGetResult(
-        builder, args->account(), g_state_machine.get(args->account()), true);
+        builder, args->account(), g_state_machine.get(args->account()),
+        g_log.execution_cursor(), g_log.accepted_cursor());
     auto result = paxos_sgx::crash::CreateMessage(
         builder, paxos_sgx::crash::MessageType_client_fast_get_resp, ticket,
         paxos_sgx::crash::BasicMessage_FastGetResult,

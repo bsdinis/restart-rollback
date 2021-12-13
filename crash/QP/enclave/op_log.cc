@@ -47,12 +47,18 @@ bool OpLog::add_op(size_t slot_n, Operation op) {
 }
 void OpLog::add_accept(size_t slot_n) { m_log[slot_n].add_accept(); }
 
+void OpLog::accepted(size_t slot_n) {
+    if (((ssize_t)slot_n) > m_accepted) {
+        m_accepted = slot_n;
+    }
+}
 void OpLog::executed(size_t slot_n) { m_executed = slot_n; }
 
 size_t OpLog::get_accepts(size_t slot_n) const {
     return m_log[slot_n].accepts();
 }
 ssize_t OpLog::execution_cursor() const { return m_executed; }
+ssize_t OpLog::accepted_cursor() const { return m_accepted; }
 Operation const *OpLog::get_operation(size_t slot_n) const {
     return m_log[slot_n].operation();
 }

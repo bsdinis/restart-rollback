@@ -64,19 +64,12 @@ int main(int argc, char** argv) {
 
     crash::reset();
 
-    if (argc > 10) {
-        test_ping();
-        test_fast_get();
-        test_get();
-        test_transfer();
-        test_pipelining();
-        test_cb();
-    }
-
-    for (int i = 0; i < 100; ++i) {
-        int64_t amount = 0;
-        EXPECT_EQ(crash::get(1, amount), true, "get");
-    }
+    test_ping();
+    test_fast_get();
+    test_get();
+    test_transfer();
+    test_pipelining();
+    test_cb();
 
     ASSERT_EQ(crash::close(), 0, "close");
     INFO("finished test");
@@ -185,16 +178,16 @@ void test_ping() {
  * the server
  */
 void test_pipelining() {
-    std::vector<int64_t> fast_get_tickets;
+    // std::vector<int64_t> fast_get_tickets;
     std::vector<int64_t> get_tickets;
     std::vector<int64_t> transfer_tickets;
     std::vector<int64_t> ping_tickets;
     for (int i = 0; i < 10; i++) {
         switch (i % 4) {
             case 0:
-                fast_get_tickets.emplace_back(
-                    crash::fast_get_async((int64_t)7));
-                break;
+                // fast_get_tickets.emplace_back(
+                // crash::fast_get_async((int64_t)7));
+                // break;
             case 1:
                 get_tickets.emplace_back(crash::get_async(8));
                 break;
@@ -207,11 +200,11 @@ void test_pipelining() {
         }
     }
 
-    while (std::any_of(
+    while (/*std::any_of(
                std::cbegin(fast_get_tickets), std::cend(fast_get_tickets),
                [](int64_t ticket) {
                    return crash::poll(ticket) == crash::poll_state::PENDING;
-               }) ||
+               }) || */
            std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
                            return crash::poll(ticket) ==
@@ -229,9 +222,11 @@ void test_pipelining() {
                        }))
         ;
 
-    for (int64_t const ticket : fast_get_tickets)
-        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
-                  (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
+    /*
+for (int64_t const ticket : fast_get_tickets)
+    ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
+              (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
+              */
     for (int64_t const ticket : get_tickets)
         ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
                   (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
@@ -254,14 +249,16 @@ void test_pipelining() {
  * this test tries to verify that the callbacks are being properly executed
  */
 void test_cb() {
-    int cbd_funcs = 0;
+    int fast_get_n = 0;
+    int transfer_n = 0;
+    int ping_n = 0;
     ASSERT_EQ(crash::fast_get_set_cb(
-                  [&cbd_funcs](int64_t, int64_t, bool) { cbd_funcs++; }),
+                  [&fast_get_n](int64_t, int64_t, bool) { fast_get_n++; }),
               0, "fast_get_set_cb");
     ASSERT_EQ(crash::transfer_set_cb(
-                  [&cbd_funcs](int64_t, int64_t, bool) { cbd_funcs++; }),
+                  [&transfer_n](int64_t, int64_t, bool) { transfer_n++; }),
               0, "transfer_set_cb");
-    ASSERT_EQ(crash::ping_set_cb([&cbd_funcs](int64_t) { cbd_funcs++; }), 0,
+    ASSERT_EQ(crash::ping_set_cb([&ping_n](int64_t) { ping_n++; }), 0,
               "ping_set_cb");
 
     crash::fast_get_cb((int64_t)1);
@@ -275,7 +272,9 @@ void test_cb() {
     crash::transfer_cb((int64_t)6, (int64_t)4, (int64_t)1);
     crash::wait_for();
 
-    EXPECT_EQ(cbd_funcs, 9, "callback test");
+    EXPECT_EQ(fast_get_n, 2, "callback fast get test");
+    EXPECT_EQ(transfer_n, 4, "callback transfer test");
+    EXPECT_EQ(ping_n, 3, "callback ping test");
     ASSERT_EQ(crash::fast_get_set_cb([](int64_t, int64_t, bool) {}), 0,
               "fast_get_set_cb");
     ASSERT_EQ(crash::transfer_set_cb([](int64_t, int64_t, bool) {}), 0,

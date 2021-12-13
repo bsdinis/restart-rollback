@@ -27,8 +27,8 @@ table FastGetArgs {
 table FastGetResult {
     account : int64;
     amount  : int64;
-    success : bool;
     last_applied : int64;
+    last_accepted : int64;
 }
 
 table OperationArgs {

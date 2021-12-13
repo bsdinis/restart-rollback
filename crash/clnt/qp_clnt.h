@@ -42,7 +42,6 @@ enum class poll_state {
 // initialize the connection
 int init(
         char const * config = "../QP/default.conf",
-        ssize_t idx = 0,
         size_t concurrent_hint = 1<<15,   // hint for number of concurrent calls permitted
         struct timeval timeout = { 0, 0 }, // timeout for select
         char const * cert_path = "certs/client.crt",

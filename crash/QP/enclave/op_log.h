@@ -51,7 +51,9 @@ class OpLog {
     void add_accept(size_t slot_n);
 
     void executed(size_t slot_n);
+    void accepted(size_t slot_n);
     ssize_t execution_cursor() const;
+    ssize_t accepted_cursor() const;
 
     size_t get_accepts(size_t slot_n) const;
     Operation const *get_operation(size_t slot_n) const;
@@ -59,6 +61,7 @@ class OpLog {
    private:
     std::vector<Slot> m_log;
     ssize_t m_executed = -1;
+    ssize_t m_accepted = -1;
 };
 
 }  // namespace crash

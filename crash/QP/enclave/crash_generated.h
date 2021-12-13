@@ -232,21 +232,23 @@ struct FastGetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_ACCOUNT = 4,
         VT_AMOUNT = 6,
-        VT_SUCCESS = 8,
-        VT_LAST_APPLIED = 10
+        VT_LAST_APPLIED = 8,
+        VT_LAST_ACCEPTED = 10
     };
     int64_t account() const { return GetField<int64_t>(VT_ACCOUNT, 0); }
     int64_t amount() const { return GetField<int64_t>(VT_AMOUNT, 0); }
-    bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
     int64_t last_applied() const {
         return GetField<int64_t>(VT_LAST_APPLIED, 0);
+    }
+    int64_t last_accepted() const {
+        return GetField<int64_t>(VT_LAST_ACCEPTED, 0);
     }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_ACCOUNT) &&
                VerifyField<int64_t>(verifier, VT_AMOUNT) &&
-               VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
                VerifyField<int64_t>(verifier, VT_LAST_APPLIED) &&
+               VerifyField<int64_t>(verifier, VT_LAST_ACCEPTED) &&
                verifier.EndTable();
     }
 };
@@ -261,12 +263,12 @@ struct FastGetResultBuilder {
     void add_amount(int64_t amount) {
         fbb_.AddElement<int64_t>(FastGetResult::VT_AMOUNT, amount, 0);
     }
-    void add_success(bool success) {
-        fbb_.AddElement<uint8_t>(FastGetResult::VT_SUCCESS,
-                                 static_cast<uint8_t>(success), 0);
-    }
     void add_last_applied(int64_t last_applied) {
         fbb_.AddElement<int64_t>(FastGetResult::VT_LAST_APPLIED, last_applied,
+                                 0);
+    }
+    void add_last_accepted(int64_t last_accepted) {
+        fbb_.AddElement<int64_t>(FastGetResult::VT_LAST_ACCEPTED, last_accepted,
                                  0);
     }
     explicit FastGetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
@@ -283,12 +285,12 @@ struct FastGetResultBuilder {
 
 inline flatbuffers::Offset<FastGetResult> CreateFastGetResult(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t account = 0,
-    int64_t amount = 0, bool success = false, int64_t last_applied = 0) {
+    int64_t amount = 0, int64_t last_applied = 0, int64_t last_accepted = 0) {
     FastGetResultBuilder builder_(_fbb);
+    builder_.add_last_accepted(last_accepted);
     builder_.add_last_applied(last_applied);
     builder_.add_amount(amount);
     builder_.add_account(account);
-    builder_.add_success(success);
     return builder_.Finish();
 }
 
