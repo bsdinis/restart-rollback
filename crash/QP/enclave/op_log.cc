@@ -32,10 +32,18 @@ size_t Slot::accepts() const { return m_accepts; }
 Operation const *Slot::operation() const { return &m_op; }
 
 size_t OpLog::propose_op(Operation op) {
+    if (paxos_sgx::crash::persistence::log_accepted(
+            m_log.size(), op.m_account, op.m_amount, op.m_to) == -1) {
+        ERROR("failed to log accepted slot %zu", m_log.size());
+    }
     m_log.emplace_back(op);
     return m_log.size() - 1;
 }
 bool OpLog::add_op(size_t slot_n, Operation op) {
+    if (paxos_sgx::crash::persistence::log_accepted(
+            slot_n, op.m_account, op.m_amount, op.m_to) == -1) {
+        ERROR("failed to log accepted slot %zu", slot_n);
+    }
     if (slot_n < m_log.size()) {
         return m_log[slot_n].replace_op(op);
     }
@@ -54,10 +62,6 @@ void OpLog::accepted(size_t slot_n) {
     }
 
     Operation const *op = m_log[slot_n].operation();
-    if (paxos_sgx::crash::persistence::log_accepted(
-            slot_n, op->m_account, op->m_amount, op->m_to) == -1) {
-        ERROR("failed to log accepted slot %zu", slot_n);
-    }
 }
 void OpLog::executed(size_t slot_n) { m_executed = slot_n; }
 
