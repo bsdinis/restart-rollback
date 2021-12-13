@@ -51,11 +51,13 @@ class OpLog {
     void add_accept(size_t slot_n);
 
     void executed(size_t slot_n);
-    void accepted(size_t slot_n);
     ssize_t execution_cursor() const;
     ssize_t accepted_cursor() const;
 
-    size_t get_accepts(size_t slot_n) const;
+    bool is_accepted(size_t slot_n) const;
+    bool is_executed(size_t slot_n) const;
+    bool can_execute(size_t slot_n) const;
+
     Operation const *get_operation(size_t slot_n) const;
 
    private:

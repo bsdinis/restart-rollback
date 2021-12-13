@@ -7,6 +7,7 @@
 #include "op_log.h"
 #include "log.h"
 #include "persistence.h"
+#include "setup.h"
 
 namespace paxos_sgx {
 namespace crash {
@@ -54,20 +55,28 @@ bool OpLog::add_op(size_t slot_n, Operation op) {
 
     return true;
 }
-void OpLog::add_accept(size_t slot_n) { m_log[slot_n].add_accept(); }
-
-void OpLog::accepted(size_t slot_n) {
-    if (((ssize_t)slot_n) > m_accepted) {
+void OpLog::add_accept(size_t slot_n) {
+    m_log[slot_n].add_accept();
+    if (slot_n > m_accepted &&
+        m_log[slot_n].accepts() > paxos_sgx::crash::setup::quorum_size()) {
         m_accepted = slot_n;
     }
-
-    Operation const *op = m_log[slot_n].operation();
 }
+
 void OpLog::executed(size_t slot_n) { m_executed = slot_n; }
 
-size_t OpLog::get_accepts(size_t slot_n) const {
-    return m_log[slot_n].accepts();
+bool OpLog::is_accepted(size_t slot_n) const {
+    return slot_n < m_log.size() &&
+           m_log[slot_n].accepts() > paxos_sgx::crash::setup::quorum_size();
 }
+bool OpLog::is_executed(size_t slot_n) const {
+    return ((ssize_t)slot_n) <= m_executed;
+}
+bool OpLog::can_execute(size_t slot_n) const {
+    return ((ssize_t)slot_n) > m_executed && is_accepted(slot_n) &&
+           (slot_n == 0 || is_executed(slot_n - 1));
+}
+
 ssize_t OpLog::execution_cursor() const { return m_executed; }
 ssize_t OpLog::accepted_cursor() const { return m_accepted; }
 Operation const *OpLog::get_operation(size_t slot_n) const {
