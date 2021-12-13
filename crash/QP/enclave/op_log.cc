@@ -6,6 +6,7 @@
 
 #include "op_log.h"
 #include "log.h"
+#include "persistence.h"
 
 namespace paxos_sgx {
 namespace crash {
@@ -50,6 +51,12 @@ void OpLog::add_accept(size_t slot_n) { m_log[slot_n].add_accept(); }
 void OpLog::accepted(size_t slot_n) {
     if (((ssize_t)slot_n) > m_accepted) {
         m_accepted = slot_n;
+    }
+
+    Operation const *op = m_log[slot_n].operation();
+    if (paxos_sgx::crash::persistence::log_accepted(
+            slot_n, op->m_account, op->m_amount, op->m_to) == -1) {
+        ERROR("failed to log accepted slot %zu", slot_n);
     }
 }
 void OpLog::executed(size_t slot_n) { m_executed = slot_n; }

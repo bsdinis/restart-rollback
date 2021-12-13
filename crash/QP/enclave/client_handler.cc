@@ -41,6 +41,9 @@ int client_operation_handler(peer &p, int64_t ticket,
     LOG("client operation request [%ld]", ticket);
 
     size_t slot_n = g_log.propose_op(args);
+    if (g_log.get_accepts(slot_n) >= paxos_sgx::crash::setup::quorum_size()) {
+        g_log.accepted(slot_n);
+    }
     while (g_log.get_accepts(slot_n) >=
                paxos_sgx::crash::setup::quorum_size() &&
            g_log.execution_cursor() == slot_n - 1) {

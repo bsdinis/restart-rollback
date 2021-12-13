@@ -27,6 +27,8 @@ paxos_sgx::crash::StateMachine g_state_machine;
 paxos_sgx::crash::OpLog g_log;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
+void* g_persistent_array = NULL;
+size_t g_persistent_array_size = 0;
 
 namespace {
 
@@ -102,8 +104,11 @@ namespace setup {
 
 using namespace paxos_sgx::crash;
 
-void setup(config_t* conf, ssize_t idx, size_t f) {
+void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
+           size_t f) {
     g_my_idx = idx;
+    g_persistent_array = file_mapping;
+    g_persistent_array_size = mapping_size;
     g_fault_tolerance = f;
     config_node_t& node = conf->nodes[idx];
     char addr[50];

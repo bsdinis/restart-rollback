@@ -95,6 +95,7 @@ int64_t fast_get_sync_ticket = -1;
 
 int64_t transfer_amount_result;
 bool transfer_success_result;
+int64_t transfer_sync_ticket = -1;
 
 // async results
 std::unordered_map<int64_t, std::unique_ptr<result>> results_map;
@@ -239,14 +240,17 @@ bool get(int64_t account, int64_t &amount) {
 
 bool transfer(int64_t account, int64_t to, int64_t amount,
               int64_t &final_amount) {
-    if (send_transfer_request(g_servers[0], account, to, amount,
-                              call_type::SYNC) == -1) {
+    transfer_sync_ticket = send_transfer_request(g_servers[0], account, to,
+                                                 amount, call_type::SYNC);
+    if (transfer_sync_ticket == -1) {
         ERROR("Failed to transfer");
         return false;
     }
-    if (block_until_return(g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
-        return false;
+    while (transfer_sync_ticket != -1) {
+        if (block_until_return(g_servers[0]) == -1) {
+            ERROR("failed to get a return from the basicQP");
+            return false;
+        }
     }
 
     final_amount = transfer_amount_result;
@@ -649,6 +653,7 @@ int fast_get_handler(int64_t ticket, int64_t amount, int64_t last_applied,
 int transfer_handler_sync(int64_t amount, bool success) {
     transfer_amount_result = amount;
     transfer_success_result = success;
+    transfer_sync_ticket = -1;
     return 0;
 }
 int transfer_handler_async(int64_t ticket, int64_t amount, bool success) {

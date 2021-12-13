@@ -15,14 +15,20 @@
 #include <execinfo.h>
 #include <unistd.h>
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <sys/mman.h>
 #include <sys/signal.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 using namespace paxos_sgx::crash;
 
 ssize_t my_idx = -1;
+constexpr size_t MAPPED_SIZE = 1 << 20;
 
 namespace {
 // SGX enclave ID
@@ -43,14 +49,15 @@ void clean_exit_handler(int sig_number);
 void ignore_handler(int sig_number);
 void crash_handler(int sig_number);
 void shutdown_properly(int code, void *__);
+void *create_mapping(char const *filename);
 
 }  // anonymous namespace
 
 // app entry poing
 int SGX_CDECL main(int argc, char *argv[]) {
     setlinebuf(stdout);
-    if (argc != 3) {
-        ERROR("usage: %s <config_file> <idx>", argv[0]);
+    if (argc != 4) {
+        ERROR("usage: %s <config_file> <store_file> <idx>", argv[0]);
         return -1;
     }
     if (setup_signals(clean_exit_handler, 8, SIGINT, SIGTERM, SIGABRT, SIGALRM,
@@ -65,7 +72,10 @@ int SGX_CDECL main(int argc, char *argv[]) {
     if (on_exit(shutdown_properly, NULL) == -1)
         KILL("failed to register shutdown function");
 
-    my_idx = atoi(argv[2]);
+    my_idx = atoi(argv[3]);
+    char mapping_filename[1024];
+    mapping_filename[1023] = 0;
+    snprintf(mapping_filename, 1023, "%zd_%s", my_idx, argv[2]);
 
     LOG("initial setup done");
     if (sgx_init_enclave() < 0) {
@@ -78,8 +88,9 @@ int SGX_CDECL main(int argc, char *argv[]) {
     LOG("config setup");
 
     INFO("starting enclave");
-    crash_enclave_start(global_eid, conf, my_idx, stats.data(), stats.size(),
-                        (conf.size - 1) / 2);
+    crash_enclave_start(global_eid, conf, my_idx,
+                        create_mapping(mapping_filename), MAPPED_SIZE,
+                        stats.data(), stats.size(), (conf.size - 1) / 2);
     config_free(&conf);
 }
 
@@ -187,6 +198,29 @@ void shutdown_properly(int code, void *__) {
     }
     FINE("closed the enclave", my_idx, getpid());
     LOG("shutdown crash properly");
+}
+
+void *create_mapping(char const *filename) {
+    int fd = open(filename, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+        KILL("failed to open file %s: %s", filename, strerror(errno));
+    }
+
+    if (ftruncate(fd, MAPPED_SIZE) == -1) {
+        KILL("failed to truncate file %s: %s", filename, strerror(errno));
+    }
+
+    void *addr =
+        mmap(NULL, MAPPED_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    if (addr == MAP_FAILED) {
+        KILL("failed to mmap file %s: %s", filename, strerror(errno));
+    }
+
+    if (close(fd) == -1) {
+        KILL("failed to close file %s: %s", filename, strerror(errno));
+    }
+
+    return addr;
 }
 
 }  // anonymous namespace

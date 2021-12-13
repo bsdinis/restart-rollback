@@ -10,6 +10,8 @@ enclave {
   trusted {
     public void crash_enclave_start(config_t conf,
         ssize_t my_idx,
+        [user_check] void * mmaped_addr,
+        size_t addr_size,
         [user_check] void * measure_buffer,
         size_t buffer_size,
         size_t f

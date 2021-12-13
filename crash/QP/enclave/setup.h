@@ -22,7 +22,8 @@ namespace paxos_sgx {
 namespace crash {
 namespace setup {
 
-void setup(config_t* conf, ssize_t idx, size_t f);
+void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
+           size_t f);
 void close();
 
 SSL_CTX* ssl_ctx();
