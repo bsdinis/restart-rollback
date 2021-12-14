@@ -75,7 +75,7 @@ void OpLog::executed(size_t slot_n) { m_executed = slot_n; }
 
 bool OpLog::is_accepted(size_t slot_n) const {
     return slot_n < m_log.size() &&
-           m_log[slot_n].accepts() >
+           m_log[slot_n].accepts() >=
                paxos_sgx::restart_rollback::setup::max_quorum_size(
                    m_log[slot_n].suspicions());
 }

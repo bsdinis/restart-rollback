@@ -286,13 +286,14 @@ void ping() {
 }
 
 void reset() {
-    if (send_reset_request(g_servers[0], call_type::SYNC) == -1) {
-        ERROR("Failed to reset");
-        return;
-    }
-
-    if (block_until_return(g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
+    for (auto &server: g_servers) {
+        if (send_reset_request(server, call_type::SYNC) == -1) {
+            ERROR("Failed to reset");
+            return;
+        }
+        if (block_until_return(server) == -1) {
+            ERROR("failed to get a return from the basicQP");
+        }
     }
 }
 

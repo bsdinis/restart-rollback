@@ -67,7 +67,7 @@ void OpLog::executed(size_t slot_n) { m_executed = slot_n; }
 
 bool OpLog::is_accepted(size_t slot_n) const {
     return slot_n < m_log.size() &&
-           m_log[slot_n].accepts() > paxos_sgx::crash::setup::quorum_size();
+           m_log[slot_n].accepts() >= paxos_sgx::crash::setup::quorum_size();
 }
 bool OpLog::is_executed(size_t slot_n) const {
     return ((ssize_t)slot_n) <= m_executed;
