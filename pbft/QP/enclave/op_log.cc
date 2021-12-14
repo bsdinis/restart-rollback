@@ -36,19 +36,17 @@ size_t Slot::commits() const { return m_commits; }
 Operation const *Slot::operation() const { return &m_op; }
 
 size_t OpLog::pre_prepare_op(Operation op) {
-    // TODO: fix
-    if (paxos_sgx::pbft::persistence::log_accepted(
+    if (paxos_sgx::pbft::persistence::log_prepared(
             m_log.size(), op.m_account, op.m_amount, op.m_to) == -1) {
-        ERROR("failed to log accepted slot %zu", m_log.size());
+        ERROR("failed to log prepared slot %zu", m_log.size());
     }
     m_log.emplace_back(op);
     return m_log.size() - 1;
 }
 bool OpLog::add_op(size_t slot_n, Operation op) {
-    // TODO: fix
-    if (paxos_sgx::pbft::persistence::log_accepted(
+    if (paxos_sgx::pbft::persistence::log_prepared(
             slot_n, op.m_account, op.m_amount, op.m_to) == -1) {
-        ERROR("failed to log accepted slot %zu", slot_n);
+        ERROR("failed to log prepared slot %zu", slot_n);
     }
 
     if (slot_n < m_log.size()) {
@@ -74,6 +72,11 @@ void OpLog::add_commit(size_t slot_n) {
     m_log[slot_n].add_commit();
     if (is_committed(slot_n)) {
         m_commited = slot_n;
+        Operation const *op = get_operation(slot_n);
+        if (paxos_sgx::pbft::persistence::log_prepared(
+                slot_n, op->m_account, op->m_amount, op->m_to) == -1) {
+            ERROR("failed to log prepared slot %zu", slot_n);
+        }
     }
 }
 
