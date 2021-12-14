@@ -269,7 +269,7 @@ void ping() {
 }
 
 void reset() {
-    for (auto &server: g_servers) {
+    for (auto &server : g_servers) {
         if (send_reset_request(server, call_type::SYNC) == -1) {
             ERROR("Failed to reset");
             return;

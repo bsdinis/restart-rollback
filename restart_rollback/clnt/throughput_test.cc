@@ -17,6 +17,7 @@
 #include <map>
 #include <numeric>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "log.h"
@@ -30,10 +31,12 @@ std::string global_config_path = "";
 
 // cli options
 int64_t global_load = 1000;           // ops/sec
+int64_t global_pct_read = 0;          // [0..100]
 double global_duration = 5.0;         // sec
 double global_warmup_duration = 1.0;  // sec
 int64_t global_tick_duration = -1;    // usec
-std::string global_op = "ping";
+
+std::unordered_map<int64_t, int64_t> g_get_translation_ticket;
 
 // number of microseconds since epoch
 inline uint64_t now_usecs() {
@@ -53,45 +56,43 @@ using cb_func = std::function<int64_t()>;
 // the second is a lambda to call the operation
 // the third is a lambda to set the callback after the warmup
 std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
-    {"ping",
-     {[]() -> int64_t { return restart_rollback::ping_cb(); },
-      []() {
-          auto ping_callbck = [](int64_t ticket) {
-              fprintf(stdout, "%lu, %ld, %ld, %ld, PING\n", now_usecs(),
-                      global_load, global_tick_duration, ticket);
-          };
-          if (restart_rollback::ping_set_cb(ping_callbck) == -1) {
-              KILL("failed to set ping callback");
-          }
-      }}},
     {"fast_get",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
       []() -> int64_t { return restart_rollback::fast_get_cb(1); },
       []() {
-          auto fast_get_callbck = [](int64_t ticket, int64_t, bool) {
-              fprintf(stdout, "%lu, %ld, %ld, %ld, FAST_GET\n", now_usecs(),
-                      global_load, global_tick_duration, ticket);
+          auto fast_get_callbck = [](int64_t ticket, int64_t amount,
+                                     bool success) {
+              if (success) {
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, GET\n", now_usecs(),
+                          global_load, global_tick_duration, ticket);
+              } else {
+                  int64_t new_ticket = restart_rollback::get_cb(1);
+                  g_get_translation_ticket.emplace(new_ticket, ticket);
+              }
           };
           if (restart_rollback::fast_get_set_cb(fast_get_callbck) == -1) {
               KILL("failed to set fast get callback");
           }
       }}},
-    {"get",
-     {// if you need to use more intricate things for the arguments, you can add
-      // global variables
-      []() -> int64_t { return restart_rollback::fast_get_cb(1); }, []() {}}},
     {"transfer",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
       []() -> int64_t { return restart_rollback::transfer_cb(3, 4, 1); },
       []() {
           auto transfer_callbck = [](int64_t ticket, int64_t, bool) {
-              fprintf(stdout, "%lu, %ld, %ld, %ld, FAST_GET\n", now_usecs(),
-                      global_load, global_tick_duration, ticket);
+              auto it = g_get_translation_ticket.find(ticket);
+              if (it != std::end(g_get_translation_ticket)) {
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, GET\n", now_usecs(),
+                          global_load, global_tick_duration, it->second);
+                  g_get_translation_ticket.erase(it);
+              } else {
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, TRANSFER\n", now_usecs(),
+                          global_load, global_tick_duration, ticket);
+              }
           };
           if (restart_rollback::transfer_set_cb(transfer_callbck) == -1) {
-              KILL("failed to set fast get callback");
+              KILL("failed to set transfer callback");
           }
       }}},
 };
@@ -110,8 +111,13 @@ void warmup(std::chrono::seconds duration) {
     auto const start = std::chrono::system_clock::now();
     while ((std::chrono::system_clock::now() - start) < duration) {
         auto const tick_start = std::chrono::system_clock::now();
-        for (int i = 0; i < 100; i++)
-            (funcs_by_op.at(global_op).first)();  // call lambda
+        for (int i = 0; i < 100; i++) {
+            if (i % 100 < global_pct_read) {
+                (funcs_by_op.at("fast_get").first)();  // call lambda
+            } else {
+                (funcs_by_op.at("transfer").first)();  // call lambda
+            }
+        }
 
         while ((std::chrono::system_clock::now() - tick_start) <
                wtick_duration) {
@@ -134,11 +140,17 @@ void load_test(std::chrono::seconds duration) {
     while ((std::chrono::system_clock::now() - start) < duration) {
         auto const tick_start = std::chrono::system_clock::now();
         for (size_t i = 0; i < n_ops; i++) {
-            int64_t const ticket =
-                (funcs_by_op.at(global_op).first)();  // call lambda
-            fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
-                    global_load, global_tick_duration, ticket,
-                    global_op.c_str());
+            if (i % 100 < global_pct_read) {
+                int64_t const ticket =
+                    (funcs_by_op.at("fast_get").first)();  // call lambda
+                fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
+                        global_load, global_tick_duration, ticket, "GET");
+            } else {
+                int64_t const ticket =
+                    (funcs_by_op.at("transfer").first)();  // call lambda
+                fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
+                        global_load, global_tick_duration, ticket, "TRANSFER");
+            }
         }
 
         while ((std::chrono::system_clock::now() - tick_start) <
@@ -157,26 +169,26 @@ int main(int argc, char** argv) {
     setlinebuf(stderr);
     parse_cli_args(argc, argv);
     fprintf(stderr,
-            " %s throughput test\n"
+            " %ld %% test\n"
             " | load: %zd\n"
             " | configuration: %s\n"
             " | duration: %lf\n"
             " | tick duration: %ld\n",
-            global_op.c_str(), global_load, global_config_path.c_str(),
+            global_pct_read, global_load, global_config_path.c_str(),
             global_duration, global_tick_duration);
 
     std::time_t const now =
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
     fprintf(stdout,
-            "# %s throughput test\n"
+            " %ld %% test\n"
             "# | load: %zd\n"
             "# | configuration: %s\n"
             "# | duration: %lf\n"
             "# | tick duration: %ld\n"
             "# | began at %s"
             "# | everything in us\n",
-            global_op.c_str(), global_load, global_config_path.c_str(),
+            global_pct_read, global_load, global_config_path.c_str(),
             global_duration, global_tick_duration, std::ctime(&now));
     fflush(stdout);
 
@@ -196,8 +208,9 @@ int main(int argc, char** argv) {
     warmup(warmup_duration);
     INFO("finished warmup");
 
-    // change the callback
-    (funcs_by_op.at(global_op).second)();  // call lambda
+    // change the callbacks
+    (funcs_by_op.at("fast_get").second)();
+    (funcs_by_op.at("transfer").second)();
 
     // test
     std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
@@ -218,8 +231,7 @@ void usage(char* arg0) {
             global_config_path.c_str());
     fprintf(stderr, "\t-d [duration = %3.4f sec]\n", global_duration);
     fprintf(stderr, "\t-l [load = %ld ops/sec]\n", global_load);
-    fprintf(stderr, "\t-o [op = %s (%s)]\n", global_op.c_str(),
-            known_ops.c_str());
+    fprintf(stderr, "\t-o [op = %ld (0..100)]\n", global_pct_read);
     fprintf(stderr, "\t-t [tick duration = %ld usec]\n", global_tick_duration);
     fprintf(stderr, "\t-w [warmup duration = %3.4f sec]\n",
             global_warmup_duration);
@@ -267,14 +279,9 @@ void parse_cli_args(int argc, char** argv) {
                 break;
 
             case 'o':
-                global_op = std::string(optarg, strlen(optarg));
-                if (funcs_by_op.find(global_op) == std::end(funcs_by_op)) {
-                    std::string known_ops = "|";
-                    for (auto const& pair : funcs_by_op) {
-                        known_ops += pair.first + "|";
-                    }
-                    KILL("Operation %s is unknown. Know these: %s",
-                         global_op.c_str(), known_ops.c_str());
+                global_pct_read = std::stoll(optarg);
+                if (global_pct_read < 0 || global_pct_read > 100) {
+                    KILL("invalid pct: %ld global_pct_read", global_pct_read);
                 }
                 break;
 
