@@ -1,0 +1,81 @@
+namespace paxos_sgx.pbft;
+
+enum MessageType:byte {
+    client_fast_get_req,
+    client_fast_get_resp,
+
+    client_operation_req,
+    client_operation_resp,
+
+    replica_pre_prepare,
+    replica_prepare,
+    replica_commit,
+
+    ping_req,
+    ping_resp,
+
+    reset_req,
+    reset_resp,
+
+    close_req,
+}
+
+table FastGetArgs {
+    account : int64;
+}
+
+table FastGetResult {
+    account : int64;
+    amount  : int64;
+    last_applied : int64;
+    last_accepted : int64;
+}
+
+table OperationArgs {
+    account : int64;
+    to      : int64;
+    amount  : int64;
+}
+
+table OperationResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaPrePrepare {
+    slot_number: int64;
+    operation: OperationArgs;
+    digest: [ubyte];
+}
+
+table ReplicaPrepare {
+    slot_number: int64;
+    operation: OperationArgs;
+}
+
+table ReplicaCommit {
+    slot_number: int64;
+    operation: OperationArgs;
+}
+
+table Empty { }
+
+union BasicMessage {
+    FastGetArgs,
+    FastGetResult,
+    OperationArgs,
+    OperationResult,
+    ReplicaPrePrepare,
+    ReplicaPrepare,
+    ReplicaCommit,
+    Empty,
+}
+
+table Message {
+    type    : MessageType;
+    ticket  : int64;
+    message : BasicMessage;
+}
+
+root_type Message;
