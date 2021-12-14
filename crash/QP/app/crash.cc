@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include <fcntl.h>
+#include <libgen.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -75,7 +76,7 @@ int SGX_CDECL main(int argc, char *argv[]) {
     my_idx = atoi(argv[3]);
     char mapping_filename[1024];
     mapping_filename[1023] = 0;
-    snprintf(mapping_filename, 1023, "%zd_%s", my_idx, argv[2]);
+    snprintf(mapping_filename, 1023, "%s/%zd_%s", dirname(argv[2]), my_idx, basename(argv[2]));
 
     LOG("initial setup done");
     if (sgx_init_enclave() < 0) {
