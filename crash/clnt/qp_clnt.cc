@@ -106,7 +106,7 @@ SSL_CTX *client_ctx = nullptr;
 std::vector<peer> g_servers;
 timeval global_timeout;
 
-inline size_t quorum_size() { return (g_servers.size() / 2) + 1; }
+inline size_t quorum_size() { return ((g_servers.size() - 1) / 2) + 1; }
 
 // network helpers
 enum class process_res { HANDLED_MSG, NOOP, ERR };
