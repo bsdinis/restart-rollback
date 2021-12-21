@@ -40,11 +40,13 @@ int client_operation_handler(peer &p, int64_t ticket,
                              paxos_sgx::crash::OperationArgs const *args) {
     LOG("client operation request [%ld]", ticket);
 
-    size_t slot_n = g_log.propose_op(args);
-    size_t execution_slot = slot_n;
-    while (g_log.can_execute(execution_slot)) {
-        replicas::execute(execution_slot);
-        execution_slot += 1;
+    size_t const slot_n = g_log.propose_op(args);
+    {
+        size_t execution_slot = slot_n;
+        while (g_log.can_execute(execution_slot)) {
+            replicas::execute(execution_slot);
+            execution_slot += 1;
+        }
     }
 
     g_call_map.add_call(slot_n, &p, ticket);

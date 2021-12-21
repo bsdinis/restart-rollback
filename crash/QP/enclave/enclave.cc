@@ -43,6 +43,7 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *file_mapping,
     INFO("setup on %s:%d and %s:%d", conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port, conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port * 2);
+    INFO("quorum size: %zu", setup::quorum_size());
     int const client_listen_sock = setup::client_listen_sock();
     int const replica_listen_sock = setup::replica_listen_sock();
 

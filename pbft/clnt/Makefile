@@ -2,8 +2,8 @@
 CC := clang
 CXX := clang++
 INCLUDES := -I.
-CFLAGS := -fdiagnostics-color=always -fsanitize=address $(INCLUDES)
-LDFLAGS := -L. -fsanitize=address $(INCLUDES)
+CFLAGS := -fdiagnostics-color=always $(INCLUDES) # -fsanitize=address
+LDFLAGS := -L. $(INCLUDES) # -fsanitize=address
 LDLIBS += -lssl -lcrypto
 LDLIBS += -lstdc++ -lm
 LDLIBS += -lflatbuffers

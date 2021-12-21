@@ -43,6 +43,8 @@ void restart_rollback_enclave_start(config_t conf, ssize_t my_idx,
     INFO("setup on %s:%d and %s:%d", conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port, conf.nodes[my_idx].addr,
          conf.nodes[my_idx].port * 2);
+    INFO("write quorum: %zu |\t read quorum: %zu + s",
+         setup::write_quorum_size(), setup::read_quorum_size(0));
     int const client_listen_sock = setup::client_listen_sock();
     int const replica_listen_sock = setup::replica_listen_sock();
 

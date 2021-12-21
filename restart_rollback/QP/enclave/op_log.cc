@@ -12,6 +12,10 @@
 namespace paxos_sgx {
 namespace restart_rollback {
 
+// =================================================
+// Operation
+// =================================================
+
 Operation::Operation(paxos_sgx::restart_rollback::OperationArgs const *op) {
     m_account = op->account();
     m_to = op->to();
@@ -20,35 +24,61 @@ Operation::Operation(paxos_sgx::restart_rollback::OperationArgs const *op) {
 
 bool Operation::valid() const { return m_account != -1; }
 
-bool Slot::replace_op(Operation op, bool sus) {
-    if (m_op.valid()) {
-        return false;
-    }
-    m_op = op;
-    m_accepts = 1;
-    if (sus) {
-        m_suspicions = 1;
-    }
-    return true;
-}
+// =================================================
+// Slot
+// =================================================
+Operation const *Slot::operation() const { return &m_op; }
+
+size_t Slot::accepts() const { return m_accepts; }
+
+size_t Slot::suspicions() const { return m_suspicions; }
+
 void Slot::add_accept(bool sus) {
     m_accepts += 1;
     if (sus) {
         m_suspicions += 1;
     }
 }
-size_t Slot::accepts() const { return m_accepts; }
-size_t Slot::suspicions() const { return m_suspicions; }
-Operation const *Slot::operation() const { return &m_op; }
+bool Slot::replace_op(Operation op, bool sus) {
+    if (m_op.valid()) {
+        return false;
+    }
+    m_op = op;
+    m_accepts += 1;
+    if (sus) {
+        m_suspicions += 1;
+    }
+    return true;
+}
+
+// =================================================
+// OpLog
+// =================================================
+void OpLog::add_empty_slot() {
+    try {
+        m_log.emplace_back();
+    } catch (std::bad_alloc const &) {
+        KILL("OOM: operation log: empty slot");
+    }
+}
+
+void OpLog::add_slot(Operation &&op, bool sus) {
+    try {
+        m_log.emplace_back(op, sus);
+    } catch (std::bad_alloc const &) {
+        KILL("OOM: operation log");
+    }
+}
 
 size_t OpLog::propose_op(Operation op, bool sus) {
     if (paxos_sgx::restart_rollback::persistence::log_accepted(
             m_log.size(), op.m_account, op.m_amount, op.m_to) == -1) {
         ERROR("failed to log accepted slot %zu", m_log.size());
     }
-    m_log.emplace_back(op, sus);
+    this->add_slot(std::move(op), sus);
     return m_log.size() - 1;
 }
+
 bool OpLog::add_op(size_t slot_n, Operation op, bool sus) {
     if (paxos_sgx::restart_rollback::persistence::log_accepted(
             slot_n, op.m_account, op.m_amount, op.m_to) == -1) {
@@ -58,13 +88,16 @@ bool OpLog::add_op(size_t slot_n, Operation op, bool sus) {
         return m_log[slot_n].replace_op(op, sus);
     }
     while (slot_n > m_log.size()) {
-        m_log.emplace_back();
+        this->add_empty_slot();
     }
-    m_log.emplace_back(op, sus);
+    this->add_slot(std::move(op), sus);
 
     return true;
 }
 void OpLog::add_accept(size_t slot_n, bool sus) {
+    while (slot_n >= m_log.size()) {
+        this->add_empty_slot();
+    }
     m_log[slot_n].add_accept(sus);
     if (slot_n > m_accepted && is_accepted(slot_n)) {
         m_accepted = slot_n;
@@ -79,17 +112,22 @@ bool OpLog::is_accepted(size_t slot_n) const {
                paxos_sgx::restart_rollback::setup::max_quorum_size(
                    m_log[slot_n].suspicions());
 }
+
 bool OpLog::is_executed(size_t slot_n) const {
     return ((ssize_t)slot_n) <= m_executed;
 }
+
 bool OpLog::can_execute(size_t slot_n) const {
     return ((ssize_t)slot_n) > m_executed && is_accepted(slot_n) &&
            (slot_n == 0 || is_executed(slot_n - 1));
 }
 
 ssize_t OpLog::execution_cursor() const { return m_executed; }
+
 ssize_t OpLog::accepted_cursor() const { return m_accepted; }
+
 ssize_t OpLog::last_seen() const { return m_log.size() - 1; }
+
 Operation const *OpLog::get_operation(size_t slot_n) const {
     return m_log[slot_n].operation();
 }

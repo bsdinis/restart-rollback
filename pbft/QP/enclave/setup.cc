@@ -111,7 +111,6 @@ void setup(config_t* conf, ssize_t idx, void* file_mapping,
     g_persistent_array_size = mapping_size;
     g_fault_tolerance = (conf->size - 1) / 3;
 
-    LOG("f = %zu | QUORUM %zu", g_fault_tolerance, quorum_size());
     config_node_t& node = conf->nodes[idx];
     char addr[50];
     ocall_net_get_my_ipv4_addr(addr, 50);

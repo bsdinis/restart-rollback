@@ -144,12 +144,12 @@ void load_test(std::chrono::seconds duration) {
                 int64_t const ticket =
                     (funcs_by_op.at("fast_get").first)();  // call lambda
                 fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
-                        global_load, global_tick_duration, ticket, "GET");
+                        global_load, global_tick_duration, ticket, "get");
             } else {
                 int64_t const ticket =
                     (funcs_by_op.at("transfer").first)();  // call lambda
                 fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
-                        global_load, global_tick_duration, ticket, "TRANSFER");
+                        global_load, global_tick_duration, ticket, "transfer");
             }
         }
 

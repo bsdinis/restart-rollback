@@ -6,7 +6,7 @@ CXX := clang++
 ######## SGX SDK Settings ########
 
 SGX_SDK = /opt/intel/sgxsdk
-SGX_MODE = HW
+SGX_MODE ?= HW
 SGX_PRERELEASE ?= 0
 SGX_ARCH = x64
 SGX_DEBUG ?= 1

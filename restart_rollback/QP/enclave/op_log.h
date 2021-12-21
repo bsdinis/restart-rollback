@@ -65,6 +65,9 @@ class OpLog {
     Operation const *get_operation(size_t slot_n) const;
 
    private:
+    void add_empty_slot();
+    void add_slot(Operation &&op, bool sus);
+
     std::vector<Slot> m_log;
     ssize_t m_executed = -1;
     ssize_t m_accepted = -1;
