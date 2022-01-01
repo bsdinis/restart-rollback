@@ -8,17 +8,19 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <ctime>
 #include <functional>
 #include <map>
 #include <numeric>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <thread>
+#include <unistd.h>
 
 #include "log.h"
 #include "qp_clnt.h"
@@ -142,11 +144,13 @@ void load_test(std::chrono::seconds duration) {
             if (i % 100 < global_pct_read) {
                 int64_t const ticket =
                     (funcs_by_op.at("fast_get").first)();  // call lambda
+                LOG("get: %zd", ticket);
                 fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
                         global_load, global_tick_duration, ticket, "get");
             } else {
                 int64_t const ticket =
                     (funcs_by_op.at("transfer").first)();  // call lambda
+                LOG("op: %zd", ticket);
                 fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
                         global_load, global_tick_duration, ticket, "transfer");
             }
@@ -159,7 +163,7 @@ void load_test(std::chrono::seconds duration) {
             crash::poll();
         }
     }
-    crash::wait_for();
+    //crash::wait_for();
 }
 }  // anonymous namespace
 
@@ -167,7 +171,7 @@ int main(int argc, char** argv) {
     setlinebuf(stderr);
     parse_cli_args(argc, argv);
     fprintf(stderr,
-            " %ld %% test\n"
+            " | %ld %% test\n"
             " | load: %zd\n"
             " | configuration: %s\n"
             " | duration: %lf\n"
@@ -179,7 +183,7 @@ int main(int argc, char** argv) {
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
     fprintf(stdout,
-            " %ld %% test\n"
+            "# | %ld %% test\n"
             "# | load: %zd\n"
             "# | configuration: %s\n"
             "# | duration: %lf\n"
@@ -213,7 +217,7 @@ int main(int argc, char** argv) {
     std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
     load_test(test_duration);
     INFO("finished test");
-    crash::close(true);  // force close
+    crash::close();
 }
 
 namespace {

@@ -303,7 +303,8 @@ int ocall_needs_write(int sock) { return FD_ISSET(sock, &write_fds) ? 1 : 0; }
 int ocall_needs_except(int sock) { return FD_ISSET(sock, &except_fds) ? 1 : 0; }
 
 int ocall_sgx_select(int high_sock) {
-    return select(high_sock, &read_fds, &write_fds, &except_fds, NULL);
+    struct timeval timeout = {0 , 0};
+    return select(high_sock, &read_fds, &write_fds, &except_fds, &timeout);
 }
 
 int ocall_select_list(selected_t *list, ssize_t list_sz) {
@@ -322,8 +323,9 @@ int ocall_select_list(selected_t *list, ssize_t list_sz) {
         if (list[i].sockfd > high_sock) high_sock = list[i].sockfd;
     }
 
+    struct timeval timeout = {0 , 0};
     int activity =
-        select(high_sock + 1, &read_fds, &write_fds, &except_fds, NULL);
+        select(high_sock + 1, &read_fds, &write_fds, &except_fds, &timeout);
     if (activity == -1) ERROR("select returned -1: %s", strerror(errno));
 
     return activity;

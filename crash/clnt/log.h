@@ -13,7 +13,7 @@ extern "C" {
 
 // this can be used to tune the loggin on a per file basis
 #ifndef log_level
-#define log_level 1
+#define log_level 0
 #endif
 
 #define ERROR(...)                                                    \
@@ -46,7 +46,7 @@ extern "C" {
     {                                                                 \
         char buf[2048];                                               \
         snprintf(buf, 2048, __VA_ARGS__);                             \
-        fprintf(stdout, "[%d] | [LOG] %s:%d: %s\n", \
+        fprintf(stderr, "[%d] | [LOG] %s:%d: %s\n", \
                 getpid(), __FILE__, __LINE__, buf);                   \
     }
 #else

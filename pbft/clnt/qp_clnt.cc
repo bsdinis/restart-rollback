@@ -879,7 +879,8 @@ int build_all_fd_sets(fd_set *read_fds, fd_set *write_fds, fd_set *except_fds) {
 int block_until_return(peer &server) {
     /* event loop */
     while (1) {
-        auto res = process_peer(server);
+        struct timeval timeout = global_timeout;
+        auto res = process_peer(server, &timeout);
         if (res == process_res::ERR)
             return -1;
         else if (res == process_res::HANDLED_MSG)
@@ -917,7 +918,8 @@ int connect_to_proxy(config_node_t const &peer_node) {
     }
 
     while (server.connected() && !server.finished_handshake()) {
-        if (process_peer(server) == process_res::ERR) return -1;
+        struct timeval timeout = global_timeout;
+        if (process_peer(server, &timeout) == process_res::ERR) return -1;
     }
 
     if (!server.connected()) {

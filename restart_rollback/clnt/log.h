@@ -13,7 +13,7 @@ extern "C" {
 
 // this can be used to tune the loggin on a per file basis
 #ifndef log_level
-#define log_level 1
+#define log_level 0
 #endif
 
 #define ERROR(...)                                                    \

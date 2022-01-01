@@ -20,7 +20,7 @@ void _priv_oreport(char const *file, int lineno, char const *prefix,
 
 // this can be used to tune the loggin on a per file basis
 #ifndef log_level
-#define log_level 2
+#define log_level 0
 #endif
 
 #define ERROR(...) _priv_ereport(__FILE__, __LINE__, "ERR", __VA_ARGS__)

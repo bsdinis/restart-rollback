@@ -125,7 +125,6 @@ void warmup(std::chrono::seconds duration) {
             print_progress(pbft::n_calls_concluded(), pbft::n_calls_issued());
         }
     }
-    pbft::wait_for();
 }
 
 // XXX: CHANGE ME
@@ -167,7 +166,7 @@ int main(int argc, char** argv) {
     setlinebuf(stderr);
     parse_cli_args(argc, argv);
     fprintf(stderr,
-            " %ld %% test\n"
+            " | %ld %% test\n"
             " | load: %zd\n"
             " | configuration: %s\n"
             " | duration: %lf\n"
@@ -179,7 +178,7 @@ int main(int argc, char** argv) {
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
     fprintf(stdout,
-            " %ld %% test\n"
+            "# | %ld %% test\n"
             "# | load: %zd\n"
             "# | configuration: %s\n"
             "# | duration: %lf\n"
@@ -213,7 +212,7 @@ int main(int argc, char** argv) {
     std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
     load_test(test_duration);
     INFO("finished test");
-    pbft::close(true);  // force close
+    pbft::close();
 }
 
 namespace {
