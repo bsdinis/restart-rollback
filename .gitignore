@@ -1,6 +1,6 @@
 *.prof
 result
-#temp
+bench
 experimental
 
 # executable: test
