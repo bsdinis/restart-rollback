@@ -36,6 +36,8 @@ double global_duration = 5.0;         // sec
 double global_warmup_duration = 1.0;  // sec
 int64_t global_tick_duration = -1;    // usec
 
+int64_t g_curr_tick = 0;
+
 std::unordered_map<int64_t, int64_t> g_get_translation_ticket;
 
 // number of microseconds since epoch
@@ -64,8 +66,8 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
           auto fast_get_callbck = [](int64_t ticket, int64_t amount,
                                      bool success) {
               if (success) {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, GET\n", now_usecs(),
-                          global_load, global_tick_duration, ticket);
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, rr get, reply,\n", now_usecs(),
+                          global_load, global_tick_duration, g_curr_tick, ticket);
               } else {
                   int64_t new_ticket = pbft::get_cb(1);
                   g_get_translation_ticket.emplace(new_ticket, ticket);
@@ -83,12 +85,12 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
           auto transfer_callbck = [](int64_t ticket, int64_t, bool) {
               auto it = g_get_translation_ticket.find(ticket);
               if (it != std::end(g_get_translation_ticket)) {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, GET\n", now_usecs(),
-                          global_load, global_tick_duration, it->second);
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, rr get, reply,\n", now_usecs(),
+                          global_load, global_tick_duration, g_curr_tick, it->second);
                   g_get_translation_ticket.erase(it);
               } else {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, TRANSFER\n", now_usecs(),
-                          global_load, global_tick_duration, ticket);
+                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, rr transfer, reply,\n", now_usecs(),
+                          global_load, global_tick_duration, g_curr_tick, ticket);
               }
           };
           if (pbft::transfer_set_cb(transfer_callbck) == -1) {
@@ -125,6 +127,7 @@ void warmup(std::chrono::seconds duration) {
             print_progress(pbft::n_calls_concluded(), pbft::n_calls_issued());
         }
     }
+    pbft::wait_for();
 }
 
 // XXX: CHANGE ME
@@ -141,13 +144,13 @@ void load_test(std::chrono::seconds duration) {
             if (i % 100 < global_pct_read) {
                 int64_t const ticket =
                     (funcs_by_op.at("fast_get").first)();  // call lambda
-                fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
-                        global_load, global_tick_duration, ticket, "get");
+                fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, rr get, request,\n", now_usecs(),
+                      global_load, global_tick_duration, g_curr_tick, ticket);
             } else {
                 int64_t const ticket =
                     (funcs_by_op.at("transfer").first)();  // call lambda
-                fprintf(stdout, "%lu, %ld, %ld, %ld, %s\n", now_usecs(),
-                        global_load, global_tick_duration, ticket, "transfer");
+                fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, rr transfer, request,\n", now_usecs(),
+                        global_load, global_tick_duration, g_curr_tick, ticket);
             }
         }
 
@@ -157,8 +160,8 @@ void load_test(std::chrono::seconds duration) {
                            pbft::n_calls_issued() - baseline_calls);
             pbft::poll();
         }
+        g_curr_tick += 1;
     }
-    pbft::wait_for();
 }
 }  // anonymous namespace
 
