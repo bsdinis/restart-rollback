@@ -2,4 +2,4 @@
 
 # compiles flatbuffer files
 
-flatc -c crash*.fbs
+flatc -c --gen-mutable crash*.fbs

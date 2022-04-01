@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 
 struct CallContext {
@@ -21,13 +21,12 @@ struct CallContext {
 
 class CallMap {
    public:
-    void add_call(size_t slot_n, peer* client, int64_t ticket);
-    void resolve_call(size_t slot_n, int64_t account, int64_t amount,
-                      bool success);
+    void add_call(peer* client, int64_t ticket);
+    void resolve_call(int64_t ticket);
 
    private:
-    std::unordered_map<size_t, CallContext> m_map;
+    std::unordered_map<int64_t, CallContext> m_map;
 };
 
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

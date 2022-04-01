@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace __utils {
 
@@ -16,4 +16,4 @@ char const *net_get_my_ipv4_addr(
 
 }  // namespace __utils
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

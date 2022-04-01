@@ -20,7 +20,7 @@ static uint8_t const strawman_key[KEY_LEN] = {
     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
     0x09, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16};
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace crypto {
 
@@ -67,4 +67,4 @@ int decrypt(uint8_t const *enc_val, void *val, size_t size, uint64_t counter,
 
 }  // namespace crypto
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

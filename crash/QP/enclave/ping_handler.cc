@@ -4,7 +4,7 @@
 #include "log.h"
 #include "replicas.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace handler {
 
@@ -12,43 +12,43 @@ int client_ping_handler(peer &p, int64_t ticket) {
     INFO("ping request [%ld]", ticket);
 
     flatbuffers::FlatBufferBuilder ping_builder;
-    auto ping_args = paxos_sgx::crash::CreateEmpty(ping_builder);
+    auto ping_args = register_sgx::crash::CreateEmpty(ping_builder);
 
-    auto request = paxos_sgx::crash::CreateMessage(
-        ping_builder, paxos_sgx::crash::MessageType_ping_req, ticket,
-        paxos_sgx::crash::BasicMessage_Empty, ping_args.Union());
+    auto request = register_sgx::crash::CreateMessage(
+        ping_builder, register_sgx::crash::MessageType_ping_req, ticket,
+        register_sgx::crash::BasicMessage_Empty, ping_args.Union());
     ping_builder.Finish(request);
 
-    if (paxos_sgx::crash::replicas::broadcast_message(
+    if (register_sgx::crash::replicas::broadcast_message(
             ping_builder.GetBufferPointer(), ping_builder.GetSize()) == -1) {
         return -1;
     }
 
     flatbuffers::FlatBufferBuilder builder;
-    auto ping_res = paxos_sgx::crash::CreateEmpty(builder);
-    auto result = paxos_sgx::crash::CreateMessage(
-        builder, paxos_sgx::crash::MessageType_ping_resp, ticket,
-        paxos_sgx::crash::BasicMessage_Empty, ping_res.Union());
+    auto ping_res = register_sgx::crash::CreateEmpty(builder);
+    auto result = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_ping_resp, ticket,
+        register_sgx::crash::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return paxos_sgx::crash::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return register_sgx::crash::handler_helper::append_result(
+        p, std::move(builder));
 }
 
 int replica_ping_handler(peer &p, int64_t ticket) {
     INFO("ping request [%ld]", ticket);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto ping_res = paxos_sgx::crash::CreateEmpty(builder);
-    auto result = paxos_sgx::crash::CreateMessage(
-        builder, paxos_sgx::crash::MessageType_ping_resp, ticket,
-        paxos_sgx::crash::BasicMessage_Empty, ping_res.Union());
+    auto ping_res = register_sgx::crash::CreateEmpty(builder);
+    auto result = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_ping_resp, ticket,
+        register_sgx::crash::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return paxos_sgx::crash::handler_helper::append_result(p,
-                                                           std::move(builder));
+    return register_sgx::crash::handler_helper::append_result(
+        p, std::move(builder));
 }
 
 }  // namespace handler
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

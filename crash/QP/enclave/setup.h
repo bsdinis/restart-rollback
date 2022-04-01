@@ -18,7 +18,7 @@
 #include <vector>
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace setup {
 
@@ -36,6 +36,6 @@ bool is_leader();
 
 }  // namespace setup
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 #endif  //__SETUP_HEADER__

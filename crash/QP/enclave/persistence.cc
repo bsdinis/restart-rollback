@@ -19,13 +19,14 @@ class PersistentBlock {
         : m_slot_n(slot_n), m_account(account), m_amount(amount), m_to(to) {}
 
     ssize_t encrypt(uint8_t *ptr) {
-        if (paxos_sgx::crash::crypto::encrypt(
+        if (register_sgx::crash::crypto::encrypt(
                 ptr, this, sizeof(PersistentBlock), m_slot_n, &m_mac) == -1) {
             return -1;
         }
 
         memcpy(g_previous_mac, m_mac, sizeof(sgx_aes_gcm_128bit_tag_t));
-        return paxos_sgx::crash::crypto::padded_size(sizeof(PersistentBlock));
+        return register_sgx::crash::crypto::padded_size(
+            sizeof(PersistentBlock));
     }
 
    private:
@@ -41,14 +42,16 @@ class PersistentBlock {
 extern void *g_persistent_array;
 extern size_t g_persistent_array_size;
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace persistence {
 
 int log_accepted(size_t slot_n, int64_t account, int64_t amount, int64_t to) {
     if (g_offset == 0) {
         memset(g_previous_mac, 0, sizeof(sgx_aes_gcm_128bit_tag_t));
-    } else if (g_offset + paxos_sgx::crash::crypto::padded_size(sizeof(PersistentBlock))  >= g_persistent_array_size) {
+    } else if (g_offset + register_sgx::crash::crypto::padded_size(
+                              sizeof(PersistentBlock)) >=
+               g_persistent_array_size) {
         ERROR("Out of space for persistent log: rolling around");
         g_offset = 0;
     }
@@ -67,4 +70,4 @@ int log_accepted(size_t slot_n, int64_t account, int64_t amount, int64_t to) {
 
 }  // namespace persistence
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

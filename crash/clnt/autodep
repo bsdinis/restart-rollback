@@ -2,8 +2,12 @@ close_remote.o: close_remote.cc log.h qp_clnt.h
 config.o: config.cc config.h log.h
 latency_test.o: latency_test.cc log.h qp_clnt.h
 peer.o: peer.cc log.h peer.h ssl_util.h
-qp_clnt.o: qp_clnt.cc qp_clnt.h log.h qp_result.h config.h peer.h \
-  ssl_util.h crash_generated.h
+qp_clnt.o: qp_clnt.cc qp_clnt.h qp_context.h qp_helpers.h peer.h \
+  qp_network.h config.h qp_result.h log.h ssl_util.h crash_generated.h
+qp_helpers.o: qp_helpers.cc qp_helpers.h peer.h qp_context.h qp_network.h \
+  config.h qp_result.h log.h crash_generated.h
+qp_network.o: qp_network.cc qp_network.h config.h peer.h qp_helpers.h \
+  log.h ssl_util.h
 qp_test.o: qp_test.cc log.h qp_clnt.h
 ssl_util.o: ssl_util.cc ssl_util.h log.h
 throughput_test.o: throughput_test.cc log.h qp_clnt.h

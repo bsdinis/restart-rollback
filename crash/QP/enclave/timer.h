@@ -21,7 +21,7 @@ struct timeval {
 #endif
 #endif
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace timer {
 
@@ -32,4 +32,4 @@ double elapsed_msec(struct timeval const begin);
 
 }  // namespace timer
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

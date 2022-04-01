@@ -2,7 +2,7 @@
 
 extern ssize_t my_idx;
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace perf {
 
@@ -50,4 +50,4 @@ void perf_stats::print(FILE* stream) {
 
 }  // namespace perf
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

@@ -12,7 +12,7 @@
 #include <limits>
 #include "log.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace perf {
 
@@ -121,6 +121,6 @@ class perf_recorder {
 
 } // perf
 } // crash
-} // paxos_sgx
+} // register_sgx
 
 #endif  // _PERF_APP_STATS_

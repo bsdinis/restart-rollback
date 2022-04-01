@@ -1,7 +1,7 @@
 /**
  * latency test
  *
- * this test measures the latency of an operation
+ * this test measures the latency of an put
  *
  * it is meant to be changed at will
  */
@@ -22,7 +22,7 @@
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace paxos_sgx;  // namespace sanity
+using namespace register_sgx;  // namespace sanity
 
 namespace {
 void parse_cli_args(int argc, char** argv);
@@ -41,26 +41,24 @@ using do_func = std::function<void()>;
 //
 // when adding a new test, just a new entry to this map
 //
-// the key is the string which identifies the operation
-// the second is a lambda to call the operation
+// the key is the string which identifies the put
+// the second is a lambda to call the put
 std::map<std::string, do_func> funcs_by_op = {
     {"ping", []() { crash::ping(); }},
     // if you need to use more intricate things for the arguments, you can add
     // global variables
-    {"fast_get",
-     []() {
-         int64_t amount;
-         crash::fast_get(1, amount);
-     }},
     {"get",
      []() {
-         int64_t amount;
-         crash::get(2, amount);
+         int64_t timestamp;
+         std::array<uint8_t, 2048> value;
+         crash::get(2, value, timestamp);
      }},
-    {"transfer",
+    {"put",
      []() {
-         int64_t amount;
-         crash::transfer(3, 4, 1, amount);
+         int64_t timestamp;
+         std::array<uint8_t, 2048> value;
+         value.fill(1);
+         crash::put(3, value, timestamp);
      }},
 };
 
@@ -162,8 +160,8 @@ void parse_cli_args(int argc, char** argv) {
                     for (auto const& pair : funcs_by_op) {
                         known_ops += pair.first + "|";
                     }
-                    KILL("Operation %s is unknown. Know these: %s",
-                         global_op.c_str(), known_ops.c_str());
+                    KILL("Put %s is unknown. Know these: %s", global_op.c_str(),
+                         known_ops.c_str());
                 }
                 break;
 

@@ -11,7 +11,7 @@
 #include <cstring>
 #include <string>
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace __utils {
 
@@ -87,4 +87,4 @@ char const *net_get_my_ipv4_addr(void) {
 
 }  // namespace __utils
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

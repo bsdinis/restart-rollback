@@ -1,7 +1,7 @@
 /**
  * throughtput test
  *
- * this test measures the throughput of an operation at a certain load
+ * this test measures the throughput of an put at a certain load
  * it is meant to be changed at will
  */
 
@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <ctime>
 
+#include <unistd.h>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -17,15 +18,14 @@
 #include <map>
 #include <numeric>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
-#include <thread>
-#include <unistd.h>
 
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace paxos_sgx;  // namespace sanity
+using namespace register_sgx;  // namespace sanity
 
 namespace {
 // cli options
@@ -39,8 +39,6 @@ double global_warmup_duration = 1.0;  // sec
 int64_t global_tick_duration = -1;    // usec
 
 int64_t g_curr_tick = 0;
-
-std::unordered_map<int64_t, int64_t> g_get_translation_ticket;
 
 // number of microseconds since epoch
 inline uint64_t now_usecs() {
@@ -57,46 +55,44 @@ using cb_func = std::function<int64_t()>;
 // when adding a new test, just a new entry to this map
 //
 // the first element is a string which identifies the test
-// the second is a lambda to call the operation
+// the second is a lambda to call the put
 // the third is a lambda to set the callback after the warmup
 std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
-    {"fast_get",
+    {"get",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
-      []() -> int64_t { return crash::fast_get_cb(1); },
+      []() -> int64_t { return crash::get_cb(1); },
       []() {
-          auto fast_get_callbck = [](int64_t ticket, int64_t amount,
-                                     bool success) {
+          auto get_callbck = [](int64_t ticket, int64_t,
+                                std::array<uint8_t, 2048>, int64_t,
+                                bool success) {
               if (success) {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash get, reply,\n", now_usecs(),
-                          global_load, global_tick_duration, g_curr_tick, ticket);
-              } else {
-                  int64_t new_ticket = crash::get_cb(1);
-                  g_get_translation_ticket.emplace(new_ticket, ticket);
+                  fprintf(stdout,
+                          "%lu, %ld, %ld, %ld, %ld, crash get, reply,\n",
+                          now_usecs(), global_load, global_tick_duration,
+                          g_curr_tick, ticket);
               }
           };
-          if (crash::fast_get_set_cb(fast_get_callbck) == -1) {
+          if (crash::get_set_cb(get_callbck) == -1) {
               KILL("failed to set fast get callback");
           }
       }}},
-    {"transfer",
+    {"put",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
-      []() -> int64_t { return crash::transfer_cb(3, 4, 1); },
+      []() -> int64_t {
+          std::array<uint8_t, 2048> value;
+          value.fill(1);
+          return crash::put_cb(3, value);
+      },
       []() {
-          auto transfer_callbck = [](int64_t ticket, int64_t, bool) {
-              auto it = g_get_translation_ticket.find(ticket);
-              if (it != std::end(g_get_translation_ticket)) {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash get, reply,\n", now_usecs(),
-                          global_load, global_tick_duration, g_curr_tick, it->second);
-                  g_get_translation_ticket.erase(it);
-              } else {
-                  fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash transfer, reply,\n", now_usecs(),
-                          global_load, global_tick_duration, g_curr_tick, ticket);
-              }
+          auto put_callbck = [](int64_t ticket, bool, int64_t) {
+              fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash put, reply,\n",
+                      now_usecs(), global_load, global_tick_duration,
+                      g_curr_tick, ticket);
           };
-          if (crash::transfer_set_cb(transfer_callbck) == -1) {
-              KILL("failed to set transfer callback");
+          if (crash::put_set_cb(put_callbck) == -1) {
+              KILL("failed to set put callback");
           }
       }}},
 };
@@ -106,7 +102,6 @@ void print_progress(ssize_t const idx, ssize_t const total);
 // minimum tick duration for there to be one request in each tick
 inline int64_t minimum_tick_duration(int64_t load) { return (1000000 / load); }
 
-// XXX: CHANGE ME
 void warmup(std::chrono::seconds duration) {
     // do 100 reqs per tick at 1000 reqs per second
     std::chrono::microseconds const wtick_duration(minimum_tick_duration(1000) *
@@ -117,9 +112,9 @@ void warmup(std::chrono::seconds duration) {
         auto const tick_start = std::chrono::system_clock::now();
         for (int i = 0; i < 100; i++) {
             if (i % 100 < global_pct_read) {
-                (funcs_by_op.at("fast_get").first)();  // call lambda
+                (funcs_by_op.at("get").first)();  // call lambda
             } else {
-                (funcs_by_op.at("transfer").first)();  // call lambda
+                (funcs_by_op.at("put").first)();  // call lambda
             }
         }
 
@@ -132,7 +127,6 @@ void warmup(std::chrono::seconds duration) {
     crash::wait_for();
 }
 
-// XXX: CHANGE ME
 void load_test(std::chrono::seconds duration) {
     std::chrono::microseconds const tick_duration(global_tick_duration);
 
@@ -145,14 +139,18 @@ void load_test(std::chrono::seconds duration) {
         for (size_t i = 0; i < n_ops; i++) {
             if (i % 100 < global_pct_read) {
                 int64_t const ticket =
-                    (funcs_by_op.at("fast_get").first)();  // call lambda
-                fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash get, request,\n", now_usecs(),
-                      global_load, global_tick_duration, g_curr_tick, ticket);
+                    (funcs_by_op.at("get").first)();  // call lambda
+                fprintf(stdout,
+                        "%lu, %ld, %ld, %ld, %ld, crash get, request,\n",
+                        now_usecs(), global_load, global_tick_duration,
+                        g_curr_tick, ticket);
             } else {
                 int64_t const ticket =
-                    (funcs_by_op.at("transfer").first)();  // call lambda
-                fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, crash transfer, request,\n", now_usecs(),
-                        global_load, global_tick_duration, g_curr_tick, ticket);
+                    (funcs_by_op.at("put").first)();  // call lambda
+                fprintf(stdout,
+                        "%lu, %ld, %ld, %ld, %ld, crash put, request,\n",
+                        now_usecs(), global_load, global_tick_duration,
+                        g_curr_tick, ticket);
             }
         }
 
@@ -210,14 +208,14 @@ int main(int argc, char** argv) {
     INFO("finished warmup");
 
     // change the callbacks
-    (funcs_by_op.at("fast_get").second)();
-    (funcs_by_op.at("transfer").second)();
+    (funcs_by_op.at("get").second)();
+    (funcs_by_op.at("put").second)();
 
     // test
     std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
     load_test(test_duration);
     INFO("finished test");
-    crash::close();
+    crash::close(true);
 }
 
 namespace {

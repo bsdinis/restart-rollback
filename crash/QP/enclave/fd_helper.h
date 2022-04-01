@@ -13,7 +13,7 @@
 #include "peer.h"
 #include "user_types.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace net {
 
@@ -24,6 +24,6 @@ int select_list(int client_listen_socket, int replica_listen_socket,
 
 }  // namespace net
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 #endif  //__FD_HELPER_HEADER__

@@ -16,7 +16,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace ssl {
 
@@ -29,7 +29,7 @@ int load_certificates(SSL_CTX *, const char *const cert, const char *const key);
 
 }  // namespace ssl
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 #if defined(__cplusplus)
 }

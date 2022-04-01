@@ -26,7 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-using namespace paxos_sgx::crash;
+using namespace register_sgx::crash;
 
 ssize_t my_idx = -1;
 constexpr size_t MAPPED_SIZE = 1 << 20;

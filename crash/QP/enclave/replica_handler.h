@@ -9,17 +9,8 @@
 #include "crash_generated.h"
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
-namespace handler {
-
-int replica_propose_handler(peer &p, int64_t ticket,
-                            ReplicaPropose const *message);
-int replica_accept_handler(peer &p, int64_t ticket,
-                           ReplicaAccept const *message);
-int replica_reject_handler(peer &p, int64_t ticket,
-                           ReplicaReject const *message);
-
-}  // namespace handler
+namespace handler {}  // namespace handler
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

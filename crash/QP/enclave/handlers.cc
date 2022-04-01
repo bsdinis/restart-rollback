@@ -27,13 +27,13 @@
 #include <algorithm>
 #include <iterator>
 
-using namespace paxos_sgx::crash;
+using namespace register_sgx::crash;
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 extern perf::perf_recorder perf_rec;
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 namespace {
 int peer_new_connection(int const listen_socket, std::vector<peer> &list,
@@ -41,7 +41,7 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
 size_t constexpr connection_limit = 1 << 13;
 }  // anonymous namespace
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace handler {
 
@@ -64,29 +64,29 @@ int handle_client_message(peer &p) {
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
         auto request =
-            paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
+            register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         auto const begin = timer::now();
         switch (request->type()) {
-            case paxos_sgx::crash::MessageType_client_fast_get_req:
-                client_fast_get_handler(p, request->ticket(),
-                                        request->message_as_FastGetArgs());
-                perf_rec.add("client_fast_get", timer::elapsed_usec(begin));
+            case register_sgx::crash::MessageType_client_get_req:
+                client_get_handler(p, request->ticket(),
+                                   request->message_as_GetArgs());
+                perf_rec.add("client_get", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::MessageType_client_operation_req:
-                client_operation_handler(p, request->ticket(),
-                                         request->message_as_OperationArgs());
-                perf_rec.add("client_operation", timer::elapsed_usec(begin));
+            case register_sgx::crash::MessageType_client_put_req:
+                client_put_handler(p, request->ticket(),
+                                   request->message_as_PutArgs());
+                perf_rec.add("client_put", timer::elapsed_usec(begin));
                 break;
-            case paxos_sgx::crash::MessageType_ping_req:
+            case register_sgx::crash::MessageType_ping_req:
                 client_ping_handler(p, request->ticket());
                 perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::MessageType_reset_req:
+            case register_sgx::crash::MessageType_reset_req:
                 reset_handler(p, request->ticket());
                 perf_rec.add("reset");
                 break;
-            case paxos_sgx::crash::MessageType_close_req:
+            case register_sgx::crash::MessageType_close_req:
                 close_handler(p, request->ticket());
                 break;
             default:
@@ -112,33 +112,18 @@ int handle_replica_message(peer &p) {
         }
 
         auto message =
-            paxos_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
+            register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
         auto const begin = timer::now();
         switch (message->type()) {
-            case paxos_sgx::crash::MessageType_replica_propose:
-                replica_propose_handler(p, message->ticket(),
-                                        message->message_as_ReplicaPropose());
-                perf_rec.add("replica_propose", timer::elapsed_usec(begin));
-                break;
-            case paxos_sgx::crash::MessageType_replica_accept:
-                replica_accept_handler(p, message->ticket(),
-                                       message->message_as_ReplicaAccept());
-                perf_rec.add("replica_accept", timer::elapsed_usec(begin));
-                break;
-            case paxos_sgx::crash::MessageType_replica_reject:
-                replica_reject_handler(p, message->ticket(),
-                                       message->message_as_ReplicaReject());
-                perf_rec.add("replica_reject", timer::elapsed_usec(begin));
-                break;
-            case paxos_sgx::crash::MessageType_ping_req:
+            case register_sgx::crash::MessageType_ping_req:
                 replica_ping_handler(p, message->ticket());
                 perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::MessageType_ping_resp:
+            case register_sgx::crash::MessageType_ping_resp:
                 INFO("ping response [%ld]", message->ticket());
                 perf_rec.add("ping");
                 break;
-            case paxos_sgx::crash::MessageType_reset_req:
+            case register_sgx::crash::MessageType_reset_req:
                 reset_handler(p, message->ticket());
                 perf_rec.add("reset");
                 break;
@@ -148,6 +133,7 @@ int handle_replica_message(peer &p) {
                 // (don't forget the intrusive perf)
                 ERROR("Unknown replica message %d [ticket %ld]",
                       message->type(), message->ticket());
+                p.skip(sizeof(size_t) + total_size);
                 return -1;
         }
 
@@ -159,7 +145,7 @@ int handle_replica_message(peer &p) {
 
 }  // namespace handler
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 namespace {
 
@@ -174,15 +160,15 @@ int peer_new_connection(int const listen_socket, std::vector<peer> &list,
 
         try {
             LOG("adding to the end");
-            list.emplace_back(paxos_sgx::crash::setup::ssl_ctx(), true);
+            list.emplace_back(register_sgx::crash::setup::ssl_ctx(), true);
         } catch (std::bad_alloc &) {
             ERROR("allocation failure: cannot add a new peer to list");
             return -1;
         }
     } else {
         LOG("adding to the %zd", idx);
-        list.emplace(std::begin(list) + idx, paxos_sgx::crash::setup::ssl_ctx(),
-                     true);
+        list.emplace(std::begin(list) + idx,
+                     register_sgx::crash::setup::ssl_ctx(), true);
     }
     peer &p = idx == -1 ? *(std::end(list) - 1) : list[idx];
 

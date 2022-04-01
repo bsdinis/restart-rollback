@@ -30,7 +30,7 @@ all: libbasicQP.a $(TESTS)
 
 -include autodep
 
-libbasicQP.a: config.o peer.o qp_clnt.o ssl_util.o log.h
+libbasicQP.a: config.o peer.o qp_clnt.o qp_helpers.o qp_network.o ssl_util.o log.h
 	ar rcs $@ $^
 
 test: libbasicQP.a $(TESTS)

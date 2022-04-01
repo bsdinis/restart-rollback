@@ -41,9 +41,7 @@ static int test_n = 1;
     }
 
 namespace {
-void test_fast_get();
-void test_get();
-void test_transfer();
+void test_get_put();
 void test_ping();
 void test_pipelining();
 void test_cb();
@@ -53,7 +51,7 @@ ssize_t global_index = 0;
 void parse_cli_args(int argc, char** argv);
 }  // anonymous namespace
 
-using namespace paxos_sgx;  // namespace sanity
+using namespace register_sgx;  // namespace sanity
 
 int main(int argc, char** argv) {
     parse_cli_args(argc, argv);
@@ -65,89 +63,113 @@ int main(int argc, char** argv) {
     crash::reset();
 
     test_ping();
-    test_fast_get();
-    test_get();
-    test_transfer();
+    test_get_put();
     test_pipelining();
     test_cb();
 
-    ASSERT_EQ(crash::close(), 0, "close");
+    ASSERT_EQ(crash::close(true), 0, "close");
     INFO("finished test");
 
     return 0;
 }
 
 namespace {
-void test_fast_get() {
+void test_get_put() {
     // sync test
     {
-        int64_t amount = 0;
-        EXPECT_EQ(crash::fast_get((int64_t)1, amount), true, "fast_get");
-        EXPECT_EQ(amount, (int64_t)1000, "fast_get");
+        // there is no value
+        int64_t get_timestamp = -1;
+        std::array<uint8_t, 2048> get_value;
+        EXPECT_EQ(crash::get((int64_t)1, get_value, get_timestamp), true,
+                  "get");
+        EXPECT_EQ(get_timestamp, -1, "get");
+
+        std::array<uint8_t, 2048> put_value;
+        put_value.fill(1);
+
+        int64_t put_timestamp = -1;
+        EXPECT_EQ(crash::put((int64_t)1, put_value, put_timestamp), true,
+                  "put");
+
+        EXPECT_EQ(crash::get((int64_t)1, get_value, get_timestamp), true,
+                  "get");
+        EXPECT_EQ(get_timestamp, put_timestamp, "get");
+        EXPECT_EQ(get_value.size(), put_value.size(), "get");
+        EXPECT_EQ(get_value, put_value, "get");
+
+        int64_t new_put_timestamp = -1;
+        put_value.fill(2);
+        EXPECT_EQ(crash::put((int64_t)1, put_value, new_put_timestamp), true,
+                  "put");
+        EXPECT_EQ(new_put_timestamp > put_timestamp, true, "put");
+
+        EXPECT_EQ(crash::get((int64_t)1, get_value, get_timestamp), true,
+                  "get");
+        EXPECT_EQ(get_timestamp, new_put_timestamp, "get");
+        EXPECT_EQ(get_value, put_value, "get");
     }
 
     // async test
     {
-        int64_t const ticket = crash::fast_get_async((int64_t)1);
-        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
-            ERROR("failed to wait for fast_get");
-            return;
-        }
-        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
-        auto expected = std::make_pair<int64_t, bool>((int64_t)1000, true);
-        EXPECT_EQ(reply, expected, "fast_get_async");
-    }
-}
-
-void test_get() {
-    // sync test
-    {
-        int64_t amount = 0;
-        EXPECT_EQ(crash::get(2, amount), true, "get");
-        EXPECT_EQ(amount, (int64_t)1000, "get");
-    }
-
-    // async test
-    {
-        int64_t const ticket = crash::get_async(2);
+        int64_t ticket = crash::get_async(2);
         if (crash::wait_for(ticket) == crash::poll_state::ERR) {
             ERROR("failed to wait for get");
             return;
         }
-        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
-        auto expected = std::make_pair<int64_t, bool>(1000, true);
-        EXPECT_EQ(reply, expected, "get_async");
-    }
-}
+        auto get_reply = crash::get_reply<
+            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
+            ticket);
 
-void test_transfer() {
-    // sync test
-    {
-        int64_t amount = 0;
-        EXPECT_EQ(crash::transfer(3, 4, 100, amount), true, "transfer");
-        EXPECT_EQ(amount, (int64_t)900, "transfer");
-        EXPECT_EQ(crash::get(3, amount), true, "transfer");
-        EXPECT_EQ(amount, (int64_t)900, "transfer");
-        EXPECT_EQ(crash::get(4, amount), true, "transfer");
-        EXPECT_EQ(amount, (int64_t)1100, "transfer");
-    }
+        EXPECT_EQ(std::get<2>(get_reply), -1, "get_async");
+        EXPECT_EQ(std::get<3>(get_reply), true, "get_async");
 
-    // async test
-    {
-        int64_t const ticket = crash::transfer_async(5, 6, 100);
+        std::array<uint8_t, 2048> put_value;
+        put_value.fill(1);
+        ticket = crash::put_async(2, put_value);
         if (crash::wait_for(ticket) == crash::poll_state::ERR) {
-            ERROR("failed to wait for transfer");
+            ERROR("failed to wait for put");
             return;
         }
-        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
-        auto expected = std::make_pair<int64_t, bool>(900, true);
-        EXPECT_EQ(reply, expected, "transfer_async");
+        auto put_reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<1>(put_reply), true, "put_async");
 
-        int64_t amount = 0;
-        EXPECT_EQ(crash::get(5, amount), true, "transfer_async");
-        EXPECT_EQ(amount, (int64_t)900, "transfer_async");
-        EXPECT_EQ(crash::get(6, amount), true, "transfer_async");
-        EXPECT_EQ(amount, (int64_t)1100, "transfer_async");
+        ticket = crash::get_async(2);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        get_reply = crash::get_reply<
+            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
+            ticket);
+
+        EXPECT_EQ(std::get<1>(get_reply), put_value, "get_async");
+        EXPECT_EQ(std::get<2>(get_reply), std::get<0>(put_reply), "get_async");
+        EXPECT_EQ(std::get<3>(get_reply), true, "get_async");
+
+        put_value.fill(2);
+        ticket = crash::put_async(2, put_value);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for put");
+            return;
+        }
+        auto new_put_reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<1>(new_put_reply), true, "put_async");
+        EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
+                  "put_async");
+
+        ticket = crash::get_async(2);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        get_reply = crash::get_reply<
+            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
+            ticket);
+
+        EXPECT_EQ(std::get<1>(get_reply), put_value, "get_async");
+        EXPECT_EQ(std::get<2>(get_reply), std::get<0>(new_put_reply),
+                  "get_async");
+        EXPECT_EQ(std::get<3>(get_reply), true, "get_async");
     }
 }
 
@@ -178,43 +200,37 @@ void test_ping() {
  * the server
  */
 void test_pipelining() {
-    // std::vector<int64_t> fast_get_tickets;
     std::vector<int64_t> get_tickets;
-    std::vector<int64_t> transfer_tickets;
+    std::vector<int64_t> put_tickets;
     std::vector<int64_t> ping_tickets;
+
+    std::array<uint8_t, 2048> value;
+    value.fill(5);
+
     for (int i = 0; i < 10; i++) {
-        switch (i % 4) {
+        switch (i % 3) {
             case 0:
-                // fast_get_tickets.emplace_back(
-                // crash::fast_get_async((int64_t)7));
-                // break;
-            case 1:
                 get_tickets.emplace_back(crash::get_async(8));
                 break;
-            case 2:
-                transfer_tickets.emplace_back(crash::transfer_async(9, 10, 1));
+            case 1:
+                put_tickets.emplace_back(crash::put_async(9, value));
                 break;
-            case 3:
+            case 2:
             default:
                 ping_tickets.emplace_back(crash::ping_async());
         }
     }
 
-    while (/*std::any_of(
-               std::cbegin(fast_get_tickets), std::cend(fast_get_tickets),
-               [](int64_t ticket) {
-                   return crash::poll(ticket) == crash::poll_state::PENDING;
-               }) || */
-           std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
+    while (std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
                            return crash::poll(ticket) ==
                                   crash::poll_state::PENDING;
                        }) ||
-           std::any_of(
-               std::cbegin(transfer_tickets), std::cend(transfer_tickets),
-               [](int64_t ticket) {
-                   return crash::poll(ticket) == crash::poll_state::PENDING;
-               }) ||
+           std::any_of(std::cbegin(put_tickets), std::cend(put_tickets),
+                       [](int64_t ticket) {
+                           return crash::poll(ticket) ==
+                                  crash::poll_state::PENDING;
+                       }) ||
            std::any_of(std::cbegin(ping_tickets), std::cend(ping_tickets),
                        [](int64_t ticket) {
                            return crash::poll(ticket) ==
@@ -222,23 +238,20 @@ void test_pipelining() {
                        }))
         ;
 
-    /*
-for (int64_t const ticket : fast_get_tickets)
-    ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
-              (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
-              */
-    for (int64_t const ticket : get_tickets)
-        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
-                  (std::make_pair<int64_t, bool>(1000, true)), "pipelining");
-
-    int64_t amount = 1000;
-    for (int64_t const ticket : transfer_tickets) {
-        amount -= 1;
-        int64_t rv_amount = amount;
-        ASSERT_EQ((crash::get_reply<std::pair<int64_t, bool>>(ticket)),
-                  (std::make_pair<int64_t, bool>(std::move(rv_amount), true)),
-                  "pipelining");
+    for (int64_t const ticket : get_tickets) {
+        auto reply = crash::get_reply<
+            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
+            ticket);
+        EXPECT_EQ(std::get<0>(reply), 8, "pipelining");
+        EXPECT_EQ(std::get<2>(reply), -1, "pipelining");
+        EXPECT_EQ(std::get<3>(reply), true, "pipelining");
     }
+
+    for (int64_t const ticket : put_tickets) {
+        auto reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+    }
+
     for (int64_t const ticket : ping_tickets) {
         crash::get_reply<void>(ticket);
         EXPECT_EQ(0, 0, "pipelining");
@@ -249,36 +262,41 @@ for (int64_t const ticket : fast_get_tickets)
  * this test tries to verify that the callbacks are being properly executed
  */
 void test_cb() {
-    int fast_get_n = 0;
-    int transfer_n = 0;
+    int get_n = 0;
+    int put_n = 0;
     int ping_n = 0;
-    ASSERT_EQ(crash::fast_get_set_cb(
-                  [&fast_get_n](int64_t, int64_t, bool) { fast_get_n++; }),
-              0, "fast_get_set_cb");
-    ASSERT_EQ(crash::transfer_set_cb(
-                  [&transfer_n](int64_t, int64_t, bool) { transfer_n++; }),
-              0, "transfer_set_cb");
+    ASSERT_EQ(
+        crash::get_set_cb([&get_n](int64_t, int64_t, std::array<uint8_t, 2048>,
+                                   int64_t, bool) { get_n++; }),
+        0, "get_set_cb");
+    ASSERT_EQ(crash::put_set_cb([&put_n](int64_t, bool, int64_t) { put_n++; }),
+              0, "put_set_cb");
     ASSERT_EQ(crash::ping_set_cb([&ping_n](int64_t) { ping_n++; }), 0,
               "ping_set_cb");
 
-    crash::fast_get_cb((int64_t)1);
+    crash::get_cb((int64_t)1);
     crash::ping_cb();
     crash::get_cb((int64_t)4);
     crash::ping_cb();
-    crash::transfer_cb((int64_t)4, (int64_t)6, (int64_t)1);
-    crash::fast_get_cb((int64_t)2);
+
+    std::array<uint8_t, 2048> value;
+    value.fill(1);
+    crash::put_cb((int64_t)4, value);
+    crash::get_cb((int64_t)2);
     crash::get_cb((int64_t)5);
     crash::ping_cb();
-    crash::transfer_cb((int64_t)6, (int64_t)4, (int64_t)1);
+    crash::put_cb((int64_t)6, value);
+
     crash::wait_for();
 
-    EXPECT_EQ(fast_get_n, 2, "callback fast get test");
-    EXPECT_EQ(transfer_n, 4, "callback transfer test");
+    EXPECT_EQ(get_n, 4, "callback get test");
+    EXPECT_EQ(put_n, 2, "callback put test");
     EXPECT_EQ(ping_n, 3, "callback ping test");
-    ASSERT_EQ(crash::fast_get_set_cb([](int64_t, int64_t, bool) {}), 0,
-              "fast_get_set_cb");
-    ASSERT_EQ(crash::transfer_set_cb([](int64_t, int64_t, bool) {}), 0,
-              "transfer_set_cb");
+    ASSERT_EQ(crash::get_set_cb([](int64_t, int64_t, std::array<uint8_t, 2048>,
+                                   int64_t, bool) {}),
+              0, "get_set_cb");
+    ASSERT_EQ(crash::put_set_cb([](int64_t, bool, int64_t) {}), 0,
+              "put_set_cb");
     ASSERT_EQ(crash::ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
 

@@ -9,7 +9,7 @@
 #include <vector>
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace handler {
 
@@ -19,4 +19,4 @@ int handle_replica_message(peer &p);
 
 }  // namespace handler
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

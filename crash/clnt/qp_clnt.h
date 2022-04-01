@@ -27,7 +27,7 @@
 #include <vector>
 #include <functional>
 
-namespace paxos_sgx{
+namespace register_sgx{
 namespace crash {
 
 // replies from the `poll` method
@@ -51,6 +51,9 @@ int init(
 // close the connection
 int close(bool close_remote = false);
 
+// number of servers we are connected to
+size_t n_servers();
+
 /**
  * information about the calls made
  */
@@ -63,9 +66,8 @@ size_t n_calls_outlasting();
  *
  * RPC-style calls
  */
-bool fast_get(int64_t account, int64_t &amount);
-bool get(int64_t account, int64_t &amount);
-bool transfer(int64_t account, int64_t to, int64_t amount, int64_t &final_amount);
+bool get(int64_t key, std::array<uint8_t, 2048> &value, int64_t &timestamp);
+bool put(int64_t key, std::array<uint8_t, 2048> const& value, int64_t &timestamp);
 void ping(void);
 void reset(void);
 
@@ -79,9 +81,8 @@ void reset(void);
  * when a reply is ready, get_reply can be called (at most once per ticket) to retrieve the result
  *
  */
-int64_t fast_get_async(int64_t account);
-int64_t get_async(int64_t account);
-int64_t transfer_async(int64_t account, int64_t to, int64_t amount);
+int64_t get_async(int64_t key);
+int64_t put_async(int64_t key, std::array<uint8_t, 2048> const &value);
 int64_t ping_async(void);
 int64_t reset_async(void);
 
@@ -105,13 +106,11 @@ T get_reply(int64_t ticket);
  */
 
 // -1 means error
-int fast_get_set_cb(std::function<void(int64_t, int64_t, bool)> cb);
-int64_t fast_get_cb(int64_t account);
+int get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, 2048>, int64_t, bool)> cb);
+int64_t get_cb(int64_t key);
 
-int64_t get_cb(int64_t account);
-
-int transfer_set_cb(std::function<void(int64_t, int64_t, bool)> cb);
-int64_t transfer_cb(int64_t account, int64_t to, int64_t amount);
+int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
+int64_t put_cb(int64_t key, std::array<uint8_t, 2048> const &value);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);
@@ -120,4 +119,4 @@ int reset_set_cb(std::function<void(int64_t)> cb);
 int64_t reset_cb(void);
 
 } // namespace crash
-} // namespace paxos_sgx
+} // namespace register_sgx

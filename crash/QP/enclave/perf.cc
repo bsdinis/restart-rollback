@@ -1,6 +1,6 @@
 #include "perf.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace perf {
 
@@ -35,4 +35,4 @@ void perf_recorder::add(std::string const& name) {
 
 }  // namespace perf
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

@@ -1,7 +1,7 @@
 #include "fd_helper.h"
 #include "log.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace net {
 
@@ -45,4 +45,4 @@ int select_list(int client_listen_socket, int replica_listen_socket,
 
 }  // namespace net
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

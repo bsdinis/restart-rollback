@@ -8,7 +8,7 @@
 
 #ifndef INTRUSIVE_PERF
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace timer {
 
@@ -19,13 +19,13 @@ double elapsed_usec(struct timeval const begin) { return 0.0; }
 double elapsed_msec(struct timeval const begin) { return 0.0; }
 }  // namespace timer
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 #else
 
 #include "enclave_t.h"
 #include "log.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace timer {
 
@@ -58,6 +58,6 @@ double elapsed_msec(struct timeval const begin) {
 
 }  // namespace timer
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 #endif

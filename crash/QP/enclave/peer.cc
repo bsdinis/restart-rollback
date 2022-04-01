@@ -161,7 +161,7 @@ int peer::handshake() {
         }
 
         // this is yet to be solved
-        // see issue #1 on https://gitlab.mpi-sws.org/sybil/paxos_sgx
+        // see issue #1 on https://gitlab.mpi-sws.org/sybil/register_sgx
         ERROR("SSL has a failure status");
     } else if (ssl_status_want_io(status)) {
         // ssl may want to read stuff

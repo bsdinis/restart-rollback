@@ -14,7 +14,7 @@ int init_ssl_ctx(SSL_CTX **, bool server);
 int dummy_verify_cb(int ok, X509_STORE_CTX *ctx);
 }  // anonymous namespace
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace ssl {
 
@@ -56,7 +56,7 @@ int load_certificates(SSL_CTX *ctx, const char *const cert,
 
 }  // namespace ssl
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 namespace {
 EVP_PKEY *generatePrivateKey() {

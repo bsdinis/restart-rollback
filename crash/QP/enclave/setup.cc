@@ -16,15 +16,13 @@
 #include "call_map.h"
 #include "error.h"
 #include "handlers.h"
+#include "kv_store.h"
 #include "log.h"
-#include "op_log.h"
 #include "peer.h"
 #include "ssl_util.h"
-#include "state_machine.h"
 
-paxos_sgx::crash::CallMap g_call_map;
-paxos_sgx::crash::StateMachine g_state_machine;
-paxos_sgx::crash::OpLog g_log;
+register_sgx::crash::CallMap g_call_map;
+register_sgx::crash::KeyValueStore g_kv_store;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
 void* g_persistent_array = NULL;
@@ -98,11 +96,11 @@ int connect_to_all_replicas(config_t const* config, ssize_t my_idx) {
 
 // ========================================
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace setup {
 
-using namespace paxos_sgx::crash;
+using namespace register_sgx::crash;
 
 void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
            size_t f) {
@@ -187,4 +185,4 @@ bool is_leader() { return g_my_idx == 0; }
 
 }  // namespace setup
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

@@ -7,7 +7,7 @@
 #include "log.h"
 #include "qp_clnt.h"
 
-using namespace paxos_sgx;  // namespace sanity
+using namespace register_sgx;  // namespace sanity
 
 namespace {
 std::string global_config_path = "../QP/default.conf";

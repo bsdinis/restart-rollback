@@ -13,7 +13,7 @@
 
 #define AES_BLOCK_SIZE (16)
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace crypto {
 
@@ -27,6 +27,6 @@ constexpr size_t padded_size(size_t size) {
 
 }  // namespace crypto
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 #endif  //__CRYPTO_HELPERS_HEADER__

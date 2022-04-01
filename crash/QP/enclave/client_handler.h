@@ -9,14 +9,13 @@
 #include "crash_generated.h"
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace handler {
 
-int client_fast_get_handler(peer &p, int64_t ticket, FastGetArgs const *args);
-int client_operation_handler(peer &p, int64_t ticket,
-                             OperationArgs const *args);
+int client_get_handler(peer &p, int64_t ticket, GetArgs const *args);
+int client_put_handler(peer &p, int64_t ticket, PutArgs const *args);
 
 }  // namespace handler
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

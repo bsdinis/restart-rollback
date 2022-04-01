@@ -8,7 +8,7 @@
 #include "log.h"
 #include "peer.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 namespace handler_helper {
 
@@ -29,4 +29,4 @@ int append_result(peer &p, flatbuffers::FlatBufferBuilder &&builder) {
 
 }  // namespace handler_helper
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx

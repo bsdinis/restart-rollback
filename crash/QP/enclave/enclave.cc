@@ -20,11 +20,11 @@
 #include "peer.h"
 #include "perf.h"
 
-namespace paxos_sgx {
+namespace register_sgx {
 namespace crash {
 perf::perf_recorder perf_rec;
 }  // namespace crash
-}  // namespace paxos_sgx
+}  // namespace register_sgx
 
 extern std::vector<peer> g_client_list;
 extern std::vector<peer> g_replica_list;
@@ -33,7 +33,7 @@ namespace {
 int process_peer(peer &p);
 }  // anonymous namespace
 
-using namespace paxos_sgx::crash;
+using namespace register_sgx::crash;
 
 void crash_enclave_start(config_t conf, ssize_t my_idx, void *file_mapping,
                          size_t mapping_size, void *measure_buffer,
