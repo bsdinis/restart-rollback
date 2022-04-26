@@ -25,8 +25,6 @@ register_sgx::crash::CallMap g_call_map;
 register_sgx::crash::KeyValueStore g_kv_store;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
-void* g_persistent_array = NULL;
-size_t g_persistent_array_size = 0;
 
 namespace {
 
@@ -105,8 +103,7 @@ using namespace register_sgx::crash;
 void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
            size_t f) {
     g_my_idx = idx;
-    g_persistent_array = file_mapping;
-    g_persistent_array_size = mapping_size;
+    g_kv_store.add_backing_store(file_mapping, mapping_size);
     g_fault_tolerance = f;
     config_node_t& node = conf->nodes[idx];
     char addr[50];
