@@ -6,6 +6,7 @@
 #include "log.h"
 #include "replicas.h"
 #include "setup.h"
+#include "user_types.h"
 
 extern register_sgx::crash::CallMap g_call_map;
 extern register_sgx::crash::KeyValueStore g_kv_store;
@@ -24,7 +25,8 @@ int client_get_handler(peer &p, int64_t ticket,
     auto const timestamp = g_kv_store.get(args->key(), &value);
 
     auto fb_value = register_sgx::crash::Value();
-    flatbuffers::Array<uint8_t, 2048> *fb_arr = fb_value.mutable_data();
+    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+        fb_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);

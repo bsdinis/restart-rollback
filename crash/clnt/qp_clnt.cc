@@ -22,15 +22,15 @@
 #include <numeric>
 #include <unordered_map>
 
-using FBValue = flatbuffers::Array<uint8_t, 2048>;
-
 namespace register_sgx {
 namespace crash {
+
+using FBValue = flatbuffers::Array<uint8_t, REGISTER_SIZE>;
 
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 extern int64_t g_get_sync_ticket;
 extern int64_t g_get_timestamp_result;
-extern ::std::array<uint8_t, 2048> g_get_value_result;
+extern ::std::array<uint8_t, REGISTER_SIZE> g_get_value_result;
 extern bool g_get_success_result;
 
 extern int64_t g_put_sync_ticket;
@@ -44,9 +44,10 @@ size_t g_calls_issued = 0;
 size_t g_calls_concluded = 0;
 
 // callbacks
-std::function<void(int64_t, int64_t, std::array<uint8_t, 2048>, int64_t, bool)>
-    g_get_callback =
-        [](int64_t, int64_t, std::array<uint8_t, 2048>, int64_t, bool) {};
+std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                   int64_t, bool)>
+    g_get_callback = [](int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                        int64_t, bool) {};
 std::function<void(int64_t, bool, int64_t)> g_put_callback = [](int64_t, bool,
                                                                 int64_t) {};
 std::function<void(int64_t)> g_ping_callback = [](int64_t) {};
@@ -57,7 +58,8 @@ std::function<void(int64_t)> g_reset_callback = [](int64_t) {};
 ::std::unordered_map<int64_t, PutContext> g_put_ctx_map;
 
 GetContext g_get_sync_ctx = GetContext(-1, 0);  // invalid context
-PutContext g_put_sync_ctx = PutContext(-1, ::std::array<uint8_t, 2048>());
+PutContext g_put_sync_ctx =
+    PutContext(-1, ::std::array<uint8_t, REGISTER_SIZE>());
 
 // connection globals
 SSL_CTX *g_client_ctx = nullptr;
@@ -157,7 +159,8 @@ size_t n_calls_concluded() { return g_calls_concluded; }
 size_t n_calls_outlasting() { return n_calls_issued() - n_calls_concluded(); }
 
 // sync api
-bool get(int64_t key, std::array<uint8_t, 2048> &value, int64_t &timestamp) {
+bool get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
+         int64_t &timestamp) {
     g_get_sync_ctx = GetContext(key, g_servers.size());
     int64_t ticket = send_get_request(key, call_type::SYNC);
     g_get_sync_ticket = ticket;
@@ -181,7 +184,7 @@ bool get(int64_t key, std::array<uint8_t, 2048> &value, int64_t &timestamp) {
     return g_get_success_result;
 }
 
-bool put(int64_t key, std::array<uint8_t, 2048> const &value,
+bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
          int64_t &timestamp) {
     g_put_sync_ctx = PutContext(key, value);
     int64_t ticket = send_get_request(key, call_type::SYNC);
@@ -233,7 +236,8 @@ int64_t get_async(int64_t key) {
     g_get_ctx_map.emplace(ticket, GetContext(key, g_servers.size()));
     return ticket;
 }
-int64_t put_async(int64_t key, std::array<uint8_t, 2048> const &value) {
+int64_t put_async(int64_t key,
+                  std::array<uint8_t, REGISTER_SIZE> const &value) {
     int64_t const ticket = send_get_request(key, call_type::ASYNC);
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
@@ -246,9 +250,10 @@ int64_t reset_async() {
 }
 
 // callback api
-int get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, 2048>,
-                                  int64_t, bool)>
-                   cb) {
+int get_set_cb(
+    std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                       int64_t, bool)>
+        cb) {
     g_get_callback = cb;
     return 0;
 }
@@ -262,7 +267,7 @@ int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
     g_put_callback = cb;
     return 0;
 }
-int64_t put_cb(int64_t key, std::array<uint8_t, 2048> const &value) {
+int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value) {
     int64_t const ticket = send_get_request(key, call_type::CALLBACK);
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
@@ -365,7 +370,7 @@ T get_reply(int64_t ticket) {
 }
 
 // for get
-template std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>
+template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool>
 get_reply(int64_t ticket);
 
 // for put

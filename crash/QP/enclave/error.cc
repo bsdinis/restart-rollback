@@ -84,9 +84,6 @@ void __sgx_perror(const char *func_name, sgx_status_t error) {
         case SGX_ERROR_NO_DEVICE:
             error_msg = "Can't open SGX device ";
             break;
-        case SGX_ERROR_MEMORY_MAP_FAILURE:
-            error_msg = "Page mapping failed in driver ";
-            break;
         case SGX_ERROR_MEMORY_MAP_CONFLICT:
             error_msg = "Page mapping failed in driver ";
             break;
@@ -291,8 +288,10 @@ void __sgx_perror(const char *func_name, sgx_status_t error) {
             error_msg =
                 "The ioctl for enclave_create unexpectedly failed with EINTR. ";
             break;
-        case SGX_PTHREAD_EXIT:
-            error_msg = "The sgx pthread exited";
+        default:
+            error_msg =
+                "Unknwon error: possibly a page mapping failure in driver or "
+                "an sgx pthread exit";
             break;
     }
 

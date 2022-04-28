@@ -22,8 +22,8 @@ extern PutContext g_put_sync_ctx;
 extern ::std::unordered_map<int64_t, GetContext> g_get_ctx_map;
 extern ::std::unordered_map<int64_t, PutContext> g_put_ctx_map;
 
-extern std::function<void(int64_t, int64_t, std::array<uint8_t, 2048>, int64_t,
-                          bool)>
+extern std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                          int64_t, bool)>
     g_get_callback;
 extern std::function<void(int64_t, bool, int64_t)> g_put_callback;
 extern std::function<void(int64_t)> g_ping_callback;
@@ -34,7 +34,7 @@ extern std::function<void(int64_t)> g_reset_callback;
 // get
 int64_t g_get_key_result = -1;
 int64_t g_get_timestamp_result = -1;
-::std::array<uint8_t, 2048> g_get_value_result;
+::std::array<uint8_t, REGISTER_SIZE> g_get_value_result;
 bool g_get_success_result = false;
 int64_t g_get_sync_ticket = -1;
 
@@ -121,23 +121,26 @@ inline bool operation_finished(int64_t ticket, call_type type) {
 call_type get_call_type(int64_t ticket);
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                std::array<uint8_t, 2048> const &value, int64_t timestamp);
+                std::array<uint8_t, REGISTER_SIZE> const &value,
+                int64_t timestamp);
 GetContext *get_get_ctx(int64_t ticket, call_type type);
 int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
-                           int64_t key, std::array<uint8_t, 2048> const &value,
+                           int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> const &value,
                            int64_t timestamp, call_type type);
 int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
                                  int64_t timestamp, bool success,
                                  call_type type);
 
 int get_finish(int64_t ticket, int64_t key, int64_t timestamp,
-               ::std::array<uint8_t, 2048> value, bool success, call_type type);
+               ::std::array<uint8_t, REGISTER_SIZE> value, bool success,
+               call_type type);
 int get_finish_sync(int64_t ticket, int64_t key, int64_t timestamp,
-                    ::std::array<uint8_t, 2048> value, bool success);
+                    ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
 int get_finish_async(int64_t ticket, int64_t key, int64_t timestamp,
-                     ::std::array<uint8_t, 2048> value, bool success);
+                     ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
 int get_finish_cb(int64_t ticket, int64_t key, int64_t timestamp,
-                  ::std::array<uint8_t, 2048> value, bool success);
+                  ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
 
 int put_handler(size_t peer_idx, int64_t ticket, bool success,
                 int64_t timestamp);
@@ -188,12 +191,13 @@ int64_t send_get_request(int64_t key, call_type type) {
 }
 
 int send_put_request(int64_t ticket, int64_t key,
-                     std::array<uint8_t, 2048> const &value, int64_t timestamp,
-                     call_type type) {
+                     std::array<uint8_t, REGISTER_SIZE> const &value,
+                     int64_t timestamp, call_type type) {
     flatbuffers::FlatBufferBuilder builder;
 
     auto fb_value = register_sgx::crash::Value();
-    flatbuffers::Array<uint8_t, 2048> *fb_arr = fb_value.mutable_data();
+    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+        fb_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
@@ -220,13 +224,14 @@ int send_put_request(int64_t ticket, int64_t key,
 }
 
 int send_writeback_request_to(int64_t ticket, int64_t key,
-                              std::array<uint8_t, 2048> const &value,
+                              std::array<uint8_t, REGISTER_SIZE> const &value,
                               int64_t timestamp, call_type type,
                               std::vector<size_t> send_list) {
     flatbuffers::FlatBufferBuilder builder;
 
     auto fb_value = register_sgx::crash::Value();
-    flatbuffers::Array<uint8_t, 2048> *fb_arr = fb_value.mutable_data();
+    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+        fb_value.mutable_data();
     {
         ssize_t idx = 0;
         for (auto x : value) {
@@ -325,8 +330,8 @@ int handle_received_message(size_t idx, peer &p) {
         switch (response->type()) {
             case register_sgx::crash::MessageType_client_get_resp:
                 FINE("fast response [ticket %ld]", response->ticket());
-                std::array<uint8_t, 2048> value;
-                for (ssize_t idx = 0; idx < 2048; ++idx) {
+                std::array<uint8_t, REGISTER_SIZE> value;
+                for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
                     value[idx] =
                         response->message_as_GetResult()->value()->data()->Get(
                             idx);
@@ -379,7 +384,8 @@ call_type get_call_type(int64_t ticket) {
 }
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                std::array<uint8_t, 2048> const &value, int64_t timestamp) {
+                std::array<uint8_t, REGISTER_SIZE> const &value,
+                int64_t timestamp) {
     call_type const type = get_call_type(ticket);
 
     if (operation_finished(ticket, type)) {
@@ -427,11 +433,12 @@ GetContext *get_get_ctx(int64_t ticket, call_type type) {
 }
 
 int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
-                           int64_t key, std::array<uint8_t, 2048> const &value,
+                           int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> const &value,
                            int64_t timestamp, call_type type) {
     if (!ctx.add_get_resp(peer_idx, value, timestamp)) {
-        return get_finish(ticket, -1, -1, std::array<uint8_t, 2048>(), false,
-                          type);
+        return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
+                          false, type);
     } else if (ctx.finished_get_phase(quorum_size())) {
         ctx.finish_get_phase();
         if (ctx.is_unanimous()) {
@@ -453,8 +460,8 @@ int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
                                  int64_t timestamp, bool success,
                                  call_type type) {
     if (!ctx.add_put_resp()) {
-        return get_finish(ticket, -1, -1, std::array<uint8_t, 2048>(), false,
-                          type);
+        return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
+                          false, type);
     } else if (ctx.finished_writeback(quorum_size())) {
         return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
                           ctx.success(), type);
@@ -464,7 +471,7 @@ int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
 }
 
 int get_finish(int64_t ticket, int64_t key, int64_t timestamp,
-               ::std::array<uint8_t, 2048> value, bool success,
+               ::std::array<uint8_t, REGISTER_SIZE> value, bool success,
                call_type type) {
     g_calls_concluded++;
     switch (type) {
@@ -478,7 +485,7 @@ int get_finish(int64_t ticket, int64_t key, int64_t timestamp,
 }
 
 int get_finish_sync(int64_t, int64_t key, int64_t timestamp,
-                    ::std::array<uint8_t, 2048> value, bool success) {
+                    ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
     g_get_key_result = key;
     g_get_timestamp_result = timestamp;
     std::copy(std::cbegin(value), std::cend(value),
@@ -488,7 +495,7 @@ int get_finish_sync(int64_t, int64_t key, int64_t timestamp,
     return 0;
 }
 int get_finish_async(int64_t ticket, int64_t key, int64_t timestamp,
-                     ::std::array<uint8_t, 2048> value, bool success) {
+                     ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
     auto it = g_get_ctx_map.find(ticket);
     if (it == g_get_ctx_map.end()) {
         return 0;
@@ -497,16 +504,17 @@ int get_finish_async(int64_t ticket, int64_t key, int64_t timestamp,
     g_results_map.emplace(
         ticket,
         std::unique_ptr<result>(
-            std::make_unique<one_val_result<
-                std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>>(
-                one_val_result<std::tuple<int64_t, std::array<uint8_t, 2048>,
-                                          int64_t, bool>>(
+            std::make_unique<one_val_result<std::tuple<
+                int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool>>>(
+                one_val_result<
+                    std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                               int64_t, bool>>(
                     std::make_tuple(key, value, timestamp, success)))));
     return 0;
 }
 
 int get_finish_cb(int64_t ticket, int64_t key, int64_t timestamp,
-                  ::std::array<uint8_t, 2048> value, bool success) {
+                  ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
     auto it = g_get_ctx_map.find(ticket);
     if (it == g_get_ctx_map.end()) {
         return 0;

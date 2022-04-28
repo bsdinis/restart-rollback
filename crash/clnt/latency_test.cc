@@ -50,13 +50,13 @@ std::map<std::string, do_func> funcs_by_op = {
     {"get",
      []() {
          int64_t timestamp;
-         std::array<uint8_t, 2048> value;
+         std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> value;
          crash::get(2, value, timestamp);
      }},
     {"put",
      []() {
          int64_t timestamp;
-         std::array<uint8_t, 2048> value;
+         std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> value;
          value.fill(1);
          crash::put(3, value, timestamp);
      }},

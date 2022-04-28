@@ -63,16 +63,17 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
       // global variables
       []() -> int64_t { return crash::get_cb(1); },
       []() {
-          auto get_callbck = [](int64_t ticket, int64_t,
-                                std::array<uint8_t, 2048>, int64_t,
-                                bool success) {
-              if (success) {
-                  fprintf(stdout,
-                          "%lu, %ld, %ld, %ld, %ld, crash get, reply,\n",
-                          now_usecs(), global_load, global_tick_duration,
-                          g_curr_tick, ticket);
-              }
-          };
+          auto get_callbck =
+              [](int64_t ticket, int64_t,
+                 std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+                 int64_t, bool success) {
+                  if (success) {
+                      fprintf(stdout,
+                              "%lu, %ld, %ld, %ld, %ld, crash get, reply,\n",
+                              now_usecs(), global_load, global_tick_duration,
+                              g_curr_tick, ticket);
+                  }
+              };
           if (crash::get_set_cb(get_callbck) == -1) {
               KILL("failed to set fast get callback");
           }
@@ -81,7 +82,7 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
       []() -> int64_t {
-          std::array<uint8_t, 2048> value;
+          std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> value;
           value.fill(1);
           return crash::put_cb(3, value);
       },

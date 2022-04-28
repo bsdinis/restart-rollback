@@ -79,12 +79,12 @@ void test_get_put() {
     {
         // there is no value
         int64_t get_timestamp = -1;
-        std::array<uint8_t, 2048> get_value;
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> get_value;
         EXPECT_EQ(crash::get((int64_t)1, get_value, get_timestamp), true,
                   "get");
         EXPECT_EQ(get_timestamp, -1, "get");
 
-        std::array<uint8_t, 2048> put_value;
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> put_value;
         put_value.fill(1);
 
         int64_t put_timestamp = -1;
@@ -116,14 +116,14 @@ void test_get_put() {
             ERROR("failed to wait for get");
             return;
         }
-        auto get_reply = crash::get_reply<
-            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
-            ticket);
+        auto get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t, bool>>(ticket);
 
         EXPECT_EQ(std::get<2>(get_reply), -1, "get_async");
         EXPECT_EQ(std::get<3>(get_reply), true, "get_async");
 
-        std::array<uint8_t, 2048> put_value;
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> put_value;
         put_value.fill(1);
         ticket = crash::put_async(2, put_value);
         if (crash::wait_for(ticket) == crash::poll_state::ERR) {
@@ -138,9 +138,9 @@ void test_get_put() {
             ERROR("failed to wait for get");
             return;
         }
-        get_reply = crash::get_reply<
-            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
-            ticket);
+        get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t, bool>>(ticket);
 
         EXPECT_EQ(std::get<1>(get_reply), put_value, "get_async");
         EXPECT_EQ(std::get<2>(get_reply), std::get<0>(put_reply), "get_async");
@@ -162,9 +162,9 @@ void test_get_put() {
             ERROR("failed to wait for get");
             return;
         }
-        get_reply = crash::get_reply<
-            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
-            ticket);
+        get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t, bool>>(ticket);
 
         EXPECT_EQ(std::get<1>(get_reply), put_value, "get_async");
         EXPECT_EQ(std::get<2>(get_reply), std::get<0>(new_put_reply),
@@ -204,7 +204,7 @@ void test_pipelining() {
     std::vector<int64_t> put_tickets;
     std::vector<int64_t> ping_tickets;
 
-    std::array<uint8_t, 2048> value;
+    std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> value;
     value.fill(5);
 
     for (int i = 0; i < 10; i++) {
@@ -239,9 +239,9 @@ void test_pipelining() {
         ;
 
     for (int64_t const ticket : get_tickets) {
-        auto reply = crash::get_reply<
-            std::tuple<int64_t, std::array<uint8_t, 2048>, int64_t, bool>>(
-            ticket);
+        auto reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t, bool>>(ticket);
         EXPECT_EQ(std::get<0>(reply), 8, "pipelining");
         EXPECT_EQ(std::get<2>(reply), -1, "pipelining");
         EXPECT_EQ(std::get<3>(reply), true, "pipelining");
@@ -266,8 +266,10 @@ void test_cb() {
     int put_n = 0;
     int ping_n = 0;
     ASSERT_EQ(
-        crash::get_set_cb([&get_n](int64_t, int64_t, std::array<uint8_t, 2048>,
-                                   int64_t, bool) { get_n++; }),
+        crash::get_set_cb(
+            [&get_n](int64_t, int64_t,
+                     std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+                     int64_t, bool) { get_n++; }),
         0, "get_set_cb");
     ASSERT_EQ(crash::put_set_cb([&put_n](int64_t, bool, int64_t) { put_n++; }),
               0, "put_set_cb");
@@ -279,7 +281,7 @@ void test_cb() {
     crash::get_cb((int64_t)4);
     crash::ping_cb();
 
-    std::array<uint8_t, 2048> value;
+    std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> value;
     value.fill(1);
     crash::put_cb((int64_t)4, value);
     crash::get_cb((int64_t)2);
@@ -292,8 +294,10 @@ void test_cb() {
     EXPECT_EQ(get_n, 4, "callback get test");
     EXPECT_EQ(put_n, 2, "callback put test");
     EXPECT_EQ(ping_n, 3, "callback ping test");
-    ASSERT_EQ(crash::get_set_cb([](int64_t, int64_t, std::array<uint8_t, 2048>,
-                                   int64_t, bool) {}),
+    ASSERT_EQ(crash::get_set_cb(
+                  [](int64_t, int64_t,
+                     std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+                     int64_t, bool) {}),
               0, "get_set_cb");
     ASSERT_EQ(crash::put_set_cb([](int64_t, bool, int64_t) {}), 0,
               "put_set_cb");

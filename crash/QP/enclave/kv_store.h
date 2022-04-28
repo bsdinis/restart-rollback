@@ -16,8 +16,7 @@
 namespace register_sgx {
 namespace crash {
 
-constexpr int64_t VALUE_SIZE_B = 2048;
-using StoredValue = std::array<uint8_t, VALUE_SIZE_B>;
+using StoredValue = std::array<uint8_t, REGISTER_SIZE>;
 
 struct TimestampedValue {
     StoredValue m_val;
@@ -25,7 +24,7 @@ struct TimestampedValue {
 
     TimestampedValue(Value const *val, int64_t timestamp)
         : m_timestamp(timestamp) {
-        for (size_t idx = 0; idx < VALUE_SIZE_B; ++idx) {
+        for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
             m_val[idx] = val->data()->Get(idx);
         }
     }

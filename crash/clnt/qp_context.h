@@ -6,6 +6,10 @@
 #include <vector>
 
 #include "log.h"
+#include "qp_config.h"
+
+namespace register_sgx{
+namespace crash {
 
 class GetContext {
     private:
@@ -17,7 +21,7 @@ class GetContext {
     size_t m_n_get_replies = 0;
     size_t m_n_up_to_date = 0;
 
-    std::array<uint8_t, 2048> m_value;
+    std::array<uint8_t, REGISTER_SIZE> m_value;
     bool m_success = true;
 
     public:
@@ -25,7 +29,7 @@ class GetContext {
         m_outdated_idx.reserve(n_servers);
     }
 
-    bool add_get_resp(size_t peer_idx, std::array<uint8_t, 2048> const& value, int64_t timestamp) {
+    bool add_get_resp(size_t peer_idx, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t timestamp) {
         m_timestamps[peer_idx] = timestamp;
         m_n_get_replies += 1;
 
@@ -68,7 +72,7 @@ class GetContext {
     inline int64_t key() const { return m_key; }
     inline int64_t timestamp() const { return m_max_timestamp; }
     inline bool success() const { return m_success; }
-    inline std::array<uint8_t, 2048> const& value() const { return m_value; }
+    inline std::array<uint8_t, REGISTER_SIZE> const& value() const { return m_value; }
     inline std::vector<size_t> const& out_of_date_server_idx() const { return m_outdated_idx; }
 };
 
@@ -81,11 +85,11 @@ class PutContext {
     size_t m_n_put_replies = 0;
     bool m_finished_get_phase = false;
 
-    std::array<uint8_t, 2048> m_value;
+    std::array<uint8_t, REGISTER_SIZE> m_value;
     bool m_success = true;
 
     public:
-    PutContext(int64_t key, std::array<uint8_t, 2048> value) : m_key(key), m_value(value) { }
+    PutContext(int64_t key, std::array<uint8_t, REGISTER_SIZE> value) : m_key(key), m_value(value) { }
 
     bool add_get_resp(int64_t timestamp) {
         if (timestamp > m_max_timestamp) {
@@ -120,5 +124,8 @@ class PutContext {
     inline int64_t key() const { return m_key; }
     inline int64_t timestamp() const { return m_max_timestamp < 0 ? 0 : m_max_timestamp + 1; }
     inline bool success() const { return m_success; }
-    inline std::array<uint8_t, 2048> const& value() const { return m_value; }
+    inline std::array<uint8_t, REGISTER_SIZE> const& value() const { return m_value; }
 };
+
+} // namespace crash
+} // namespace register_sgx

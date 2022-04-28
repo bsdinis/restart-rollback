@@ -1,4 +1,5 @@
 *.prof
+topology
 result
 bench
 experimental
