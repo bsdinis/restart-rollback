@@ -17,6 +17,7 @@ main() {
   defineReflectiveSuite(() {
     defineReflectiveTests(BuilderTest);
     defineReflectiveTests(CheckOtherLangaugesData);
+    defineReflectiveTests(GeneratorTest);
   });
 }
 
@@ -80,7 +81,8 @@ class CheckOtherLangaugesData {
       'nonOwningReference: 0, vectorOfNonOwningReferences: null, '
       'anyUniqueType: AnyUniqueAliasesTypeId{value: 0}, anyUnique: null, '
       'anyAmbiguousType: AnyAmbiguousAliasesTypeId{value: 0}, '
-      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}}, '
+      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}, '
+      'testrequirednestedflatbuffer: null}, '
       'test4: [Test{a: 10, b: 20}, Test{a: 30, b: 40}], '
       'testarrayofstring: [test1, test2], testarrayoftables: null, '
       'enemy: Monster{pos: null, mana: 150, hp: 100, name: Fred, '
@@ -100,7 +102,8 @@ class CheckOtherLangaugesData {
       'nonOwningReference: 0, vectorOfNonOwningReferences: null, '
       'anyUniqueType: AnyUniqueAliasesTypeId{value: 0}, anyUnique: null, '
       'anyAmbiguousType: AnyAmbiguousAliasesTypeId{value: 0}, '
-      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}}, '
+      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}, '
+      'testrequirednestedflatbuffer: null}, '
       'testnestedflatbuffer: null, testempty: null, testbool: true, '
       'testhashs32Fnv1: -579221183, testhashu32Fnv1: 3715746113, '
       'testhashs64Fnv1: 7930699090847568257, '
@@ -120,7 +123,8 @@ class CheckOtherLangaugesData {
       'vectorOfNonOwningReferences: null, '
       'anyUniqueType: AnyUniqueAliasesTypeId{value: 0}, anyUnique: null, '
       'anyAmbiguousType: AnyAmbiguousAliasesTypeId{value: 0}, '
-      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}}',
+      'anyAmbiguous: null, vectorOfEnums: null, signedEnum: Race{value: -1}, '
+      'testrequirednestedflatbuffer: null}',
     );
   }
 }
@@ -261,6 +265,7 @@ class BuilderTest {
       builder.addInt32(1, 20, 10);
       int offset = builder.endTable();
       byteList = builder.finish(offset);
+      expect(builder.size(), byteList.length);
     }
     // read and verify
     BufferContext buffer = new BufferContext.fromBytes(byteList);
@@ -629,5 +634,16 @@ class TestPointReader extends TableReader<TestPointImpl> {
   @override
   TestPointImpl createObject(BufferContext object, int offset) {
     return new TestPointImpl(object, offset);
+  }
+}
+
+@reflectiveTest
+class GeneratorTest {
+  void test_constantEnumValues() async {
+    expect(example.Color.values, same(example.Color.values));
+    expect(example.Race.values, same(example.Race.values));
+    expect(example.AnyTypeId.values, same(example.AnyTypeId.values));
+    expect(example.AnyUniqueAliasesTypeId.values, same(example.AnyUniqueAliasesTypeId.values));
+    expect(example.AnyAmbiguousAliasesTypeId.values, same(example.AnyAmbiguousAliasesTypeId.values));
   }
 }
