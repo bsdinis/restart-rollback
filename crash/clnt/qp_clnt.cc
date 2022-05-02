@@ -187,7 +187,7 @@ bool get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
 bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
          int64_t &timestamp) {
     g_put_sync_ctx = PutContext(key, value);
-    int64_t ticket = send_get_request(key, call_type::SYNC);
+    int64_t ticket = send_get_timestamp_request(key, call_type::SYNC);
     g_put_sync_ticket = ticket;
 
     if (ticket == -1) {
@@ -238,7 +238,7 @@ int64_t get_async(int64_t key) {
 }
 int64_t put_async(int64_t key,
                   std::array<uint8_t, REGISTER_SIZE> const &value) {
-    int64_t const ticket = send_get_request(key, call_type::ASYNC);
+    int64_t const ticket = send_get_timestamp_request(key, call_type::ASYNC);
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
 }
@@ -268,7 +268,7 @@ int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
     return 0;
 }
 int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value) {
-    int64_t const ticket = send_get_request(key, call_type::CALLBACK);
+    int64_t const ticket = send_get_timestamp_request(key, call_type::CALLBACK);
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
 }

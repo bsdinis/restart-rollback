@@ -16,6 +16,12 @@ struct GetArgsBuilder;
 struct GetResult;
 struct GetResultBuilder;
 
+struct GetTimestampArgs;
+struct GetTimestampArgsBuilder;
+
+struct GetTimestampResult;
+struct GetTimestampResultBuilder;
+
 struct PutArgs;
 struct PutArgsBuilder;
 
@@ -28,68 +34,82 @@ struct EmptyBuilder;
 struct Message;
 struct MessageBuilder;
 
-enum MessageType {
-    MessageType_client_get_req = 0,
-    MessageType_client_get_resp = 1,
-    MessageType_client_put_req = 2,
-    MessageType_client_put_resp = 3,
-    MessageType_ping_req = 4,
-    MessageType_ping_resp = 5,
-    MessageType_reset_req = 6,
-    MessageType_reset_resp = 7,
-    MessageType_close_req = 8,
-    MessageType_MIN = MessageType_client_get_req,
+enum MessageType : int8_t {
+    MessageType_get_req = 0,
+    MessageType_get_resp = 1,
+    MessageType_get_timestamp_req = 2,
+    MessageType_get_timestamp_resp = 3,
+    MessageType_put_req = 4,
+    MessageType_put_resp = 5,
+    MessageType_ping_req = 6,
+    MessageType_ping_resp = 7,
+    MessageType_reset_req = 8,
+    MessageType_reset_resp = 9,
+    MessageType_close_req = 10,
+    MessageType_MIN = MessageType_get_req,
     MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[9] {
+inline const MessageType (&EnumValuesMessageType())[11] {
     static const MessageType values[] = {
-        MessageType_client_get_req, MessageType_client_get_resp,
-        MessageType_client_put_req, MessageType_client_put_resp,
-        MessageType_ping_req,       MessageType_ping_resp,
-        MessageType_reset_req,      MessageType_reset_resp,
+        MessageType_get_req,           MessageType_get_resp,
+        MessageType_get_timestamp_req, MessageType_get_timestamp_resp,
+        MessageType_put_req,           MessageType_put_resp,
+        MessageType_ping_req,          MessageType_ping_resp,
+        MessageType_reset_req,         MessageType_reset_resp,
         MessageType_close_req};
     return values;
 }
 
 inline const char *const *EnumNamesMessageType() {
-    static const char *const names[10] = {"client_get_req", "client_get_resp",
-                                          "client_put_req", "client_put_resp",
-                                          "ping_req",       "ping_resp",
-                                          "reset_req",      "reset_resp",
-                                          "close_req",      nullptr};
+    static const char *const names[12] = {
+        "get_req",   "get_resp",   "get_timestamp_req", "get_timestamp_resp",
+        "put_req",   "put_resp",   "ping_req",          "ping_resp",
+        "reset_req", "reset_resp", "close_req",         nullptr};
     return names;
 }
 
 inline const char *EnumNameMessageType(MessageType e) {
-    if (flatbuffers::IsOutRange(e, MessageType_client_get_req,
-                                MessageType_close_req))
+    if (flatbuffers::IsOutRange(e, MessageType_get_req, MessageType_close_req))
         return "";
     const size_t index = static_cast<size_t>(e);
     return EnumNamesMessageType()[index];
 }
 
-enum BasicMessage {
+enum BasicMessage : uint8_t {
     BasicMessage_NONE = 0,
     BasicMessage_GetArgs = 1,
     BasicMessage_GetResult = 2,
-    BasicMessage_PutArgs = 3,
-    BasicMessage_PutResult = 4,
-    BasicMessage_Empty = 5,
+    BasicMessage_GetTimestampArgs = 3,
+    BasicMessage_GetTimestampResult = 4,
+    BasicMessage_PutArgs = 5,
+    BasicMessage_PutResult = 6,
+    BasicMessage_Empty = 7,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[6] {
-    static const BasicMessage values[] = {
-        BasicMessage_NONE,    BasicMessage_GetArgs,   BasicMessage_GetResult,
-        BasicMessage_PutArgs, BasicMessage_PutResult, BasicMessage_Empty};
+inline const BasicMessage (&EnumValuesBasicMessage())[8] {
+    static const BasicMessage values[] = {BasicMessage_NONE,
+                                          BasicMessage_GetArgs,
+                                          BasicMessage_GetResult,
+                                          BasicMessage_GetTimestampArgs,
+                                          BasicMessage_GetTimestampResult,
+                                          BasicMessage_PutArgs,
+                                          BasicMessage_PutResult,
+                                          BasicMessage_Empty};
     return values;
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[7] = {"NONE",    "GetArgs",   "GetResult",
-                                         "PutArgs", "PutResult", "Empty",
+    static const char *const names[9] = {"NONE",
+                                         "GetArgs",
+                                         "GetResult",
+                                         "GetTimestampArgs",
+                                         "GetTimestampResult",
+                                         "PutArgs",
+                                         "PutResult",
+                                         "Empty",
                                          nullptr};
     return names;
 }
@@ -114,6 +134,16 @@ struct BasicMessageTraits<register_sgx::crash::GetArgs> {
 template <>
 struct BasicMessageTraits<register_sgx::crash::GetResult> {
     static const BasicMessage enum_value = BasicMessage_GetResult;
+};
+
+template <>
+struct BasicMessageTraits<register_sgx::crash::GetTimestampArgs> {
+    static const BasicMessage enum_value = BasicMessage_GetTimestampArgs;
+};
+
+template <>
+struct BasicMessageTraits<register_sgx::crash::GetTimestampResult> {
+    static const BasicMessage enum_value = BasicMessage_GetTimestampResult;
 };
 
 template <>
@@ -143,13 +173,15 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) Value FLATBUFFERS_FINAL_CLASS {
     uint8_t data_[2048];
 
    public:
-    Value() { memset(static_cast<void *>(this), 0, sizeof(Value)); }
+    Value() : data_() {}
+    Value(flatbuffers::span<const uint8_t, 2048> _data) {
+        flatbuffers::CastToArray(data_).CopyFromSpan(_data);
+    }
     const flatbuffers::Array<uint8_t, 2048> *data() const {
-        return reinterpret_cast<const flatbuffers::Array<uint8_t, 2048> *>(
-            data_);
+        return &flatbuffers::CastToArray(data_);
     }
     flatbuffers::Array<uint8_t, 2048> *mutable_data() {
-        return reinterpret_cast<flatbuffers::Array<uint8_t, 2048> *>(data_);
+        return &flatbuffers::CastToArray(data_);
     }
 };
 FLATBUFFERS_STRUCT_END(Value, 2048);
@@ -177,7 +209,6 @@ struct GetArgsBuilder {
     explicit GetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    GetArgsBuilder &operator=(const GetArgsBuilder &);
     flatbuffers::Offset<GetArgs> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<GetArgs>(end);
@@ -237,7 +268,6 @@ struct GetResultBuilder {
         : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    GetResultBuilder &operator=(const GetResultBuilder &);
     flatbuffers::Offset<GetResult> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<GetResult>(end);
@@ -252,6 +282,95 @@ inline flatbuffers::Offset<GetResult> CreateGetResult(
     builder_.add_timestamp(timestamp);
     builder_.add_key(key);
     builder_.add_value(value);
+    return builder_.Finish();
+}
+
+struct GetTimestampArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef GetTimestampArgsBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) && verifier.EndTable();
+    }
+};
+
+struct GetTimestampArgsBuilder {
+    typedef GetTimestampArgs Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(GetTimestampArgs::VT_KEY, key, 0);
+    }
+    explicit GetTimestampArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<GetTimestampArgs> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<GetTimestampArgs>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<GetTimestampArgs> CreateGetTimestampArgs(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0) {
+    GetTimestampArgsBuilder builder_(_fbb);
+    builder_.add_key(key);
+    return builder_.Finish();
+}
+
+struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef GetTimestampResultBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_TIMESTAMP = 6
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
+    bool mutate_timestamp(int64_t _timestamp) {
+        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
+               verifier.EndTable();
+    }
+};
+
+struct GetTimestampResultBuilder {
+    typedef GetTimestampResult Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(GetTimestampResult::VT_KEY, key, 0);
+    }
+    void add_timestamp(int64_t timestamp) {
+        fbb_.AddElement<int64_t>(GetTimestampResult::VT_TIMESTAMP, timestamp,
+                                 0);
+    }
+    explicit GetTimestampResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<GetTimestampResult> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<GetTimestampResult>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    int64_t timestamp = 0) {
+    GetTimestampResultBuilder builder_(_fbb);
+    builder_.add_timestamp(timestamp);
+    builder_.add_key(key);
     return builder_.Finish();
 }
 
@@ -299,7 +418,6 @@ struct PutArgsBuilder {
     explicit PutArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    PutArgsBuilder &operator=(const PutArgsBuilder &);
     flatbuffers::Offset<PutArgs> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<PutArgs>(end);
@@ -354,7 +472,6 @@ struct PutResultBuilder {
         : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    PutResultBuilder &operator=(const PutResultBuilder &);
     flatbuffers::Offset<PutResult> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<PutResult>(end);
@@ -385,7 +502,6 @@ struct EmptyBuilder {
     explicit EmptyBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    EmptyBuilder &operator=(const EmptyBuilder &);
     flatbuffers::Offset<Empty> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<Empty>(end);
@@ -437,6 +553,23 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                          message())
                    : nullptr;
     }
+    const register_sgx::crash::GetTimestampArgs *message_as_GetTimestampArgs()
+        const {
+        return message_type() ==
+                       register_sgx::crash::BasicMessage_GetTimestampArgs
+                   ? static_cast<const register_sgx::crash::GetTimestampArgs *>(
+                         message())
+                   : nullptr;
+    }
+    const register_sgx::crash::GetTimestampResult *
+    message_as_GetTimestampResult() const {
+        return message_type() ==
+                       register_sgx::crash::BasicMessage_GetTimestampResult
+                   ? static_cast<
+                         const register_sgx::crash::GetTimestampResult *>(
+                         message())
+                   : nullptr;
+    }
     const register_sgx::crash::PutArgs *message_as_PutArgs() const {
         return message_type() == register_sgx::crash::BasicMessage_PutArgs
                    ? static_cast<const register_sgx::crash::PutArgs *>(
@@ -479,6 +612,18 @@ Message::message_as<register_sgx::crash::GetResult>() const {
 }
 
 template <>
+inline const register_sgx::crash::GetTimestampArgs *
+Message::message_as<register_sgx::crash::GetTimestampArgs>() const {
+    return message_as_GetTimestampArgs();
+}
+
+template <>
+inline const register_sgx::crash::GetTimestampResult *
+Message::message_as<register_sgx::crash::GetTimestampResult>() const {
+    return message_as_GetTimestampResult();
+}
+
+template <>
 inline const register_sgx::crash::PutArgs *
 Message::message_as<register_sgx::crash::PutArgs>() const {
     return message_as_PutArgs();
@@ -516,7 +661,6 @@ struct MessageBuilder {
     explicit MessageBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
     }
-    MessageBuilder &operator=(const MessageBuilder &);
     flatbuffers::Offset<Message> Finish() {
         const auto end = fbb_.EndTable(start_);
         auto o = flatbuffers::Offset<Message>(end);
@@ -527,7 +671,7 @@ struct MessageBuilder {
 inline flatbuffers::Offset<Message> CreateMessage(
     flatbuffers::FlatBufferBuilder &_fbb,
     register_sgx::crash::MessageType type =
-        register_sgx::crash::MessageType_client_get_req,
+        register_sgx::crash::MessageType_get_req,
     int64_t ticket = 0,
     register_sgx::crash::BasicMessage message_type =
         register_sgx::crash::BasicMessage_NONE,
@@ -554,6 +698,17 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         case BasicMessage_GetResult: {
             auto ptr =
                 reinterpret_cast<const register_sgx::crash::GetResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_GetTimestampArgs: {
+            auto ptr =
+                reinterpret_cast<const register_sgx::crash::GetTimestampArgs *>(
+                    obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_GetTimestampResult: {
+            auto ptr = reinterpret_cast<
+                const register_sgx::crash::GetTimestampResult *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_PutArgs: {

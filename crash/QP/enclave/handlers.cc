@@ -68,15 +68,21 @@ int handle_client_message(peer &p) {
 
         auto const begin = timer::now();
         switch (request->type()) {
-            case register_sgx::crash::MessageType_client_get_req:
+            case register_sgx::crash::MessageType_get_req:
                 client_get_handler(p, request->ticket(),
                                    request->message_as_GetArgs());
-                perf_rec.add("client_get", timer::elapsed_usec(begin));
+                perf_rec.add("get", timer::elapsed_usec(begin));
                 break;
-            case register_sgx::crash::MessageType_client_put_req:
+            case register_sgx::crash::MessageType_get_timestamp_req:
+                client_get_timestamp_handler(
+                    p, request->ticket(),
+                    request->message_as_GetTimestampArgs());
+                perf_rec.add("get_timestamp", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_put_req:
                 client_put_handler(p, request->ticket(),
                                    request->message_as_PutArgs());
-                perf_rec.add("client_put", timer::elapsed_usec(begin));
+                perf_rec.add("put", timer::elapsed_usec(begin));
                 break;
             case register_sgx::crash::MessageType_ping_req:
                 client_ping_handler(p, request->ticket());

@@ -37,8 +37,32 @@ int client_get_handler(peer &p, int64_t ticket,
         builder, args->key(), &fb_value, timestamp);
 
     auto result = register_sgx::crash::CreateMessage(
-        builder, register_sgx::crash::MessageType_client_get_resp, ticket,
+        builder, register_sgx::crash::MessageType_get_resp, ticket,
         register_sgx::crash::BasicMessage_GetResult, client_get_res.Union());
+
+    builder.Finish(result);
+
+    return register_sgx::crash::handler_helper::append_result(
+        p, std::move(builder));
+}
+
+int client_get_timestamp_handler(
+    peer &p, int64_t ticket,
+    register_sgx::crash::GetTimestampArgs const *args) {
+    LOG("client get request [%ld]: key %ld", ticket, args->key());
+
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto const timestamp = g_kv_store.get_timestamp(args->key());
+
+    auto client_get_timestamp_res =
+        register_sgx::crash::CreateGetTimestampResult(builder, args->key(),
+                                                      timestamp);
+
+    auto result = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_get_timestamp_resp, ticket,
+        register_sgx::crash::BasicMessage_GetTimestampResult,
+        client_get_timestamp_res.Union());
 
     builder.Finish(result);
 
@@ -60,7 +84,7 @@ int client_put_handler(peer &p, int64_t ticket,
         builder, success, current_timestamp);
 
     auto message = register_sgx::crash::CreateMessage(
-        builder, register_sgx::crash::MessageType_client_put_resp, ticket,
+        builder, register_sgx::crash::MessageType_put_resp, ticket,
         register_sgx::crash::BasicMessage_PutResult, client_put_res.Union());
     builder.Finish(message);
 

@@ -59,6 +59,7 @@ class KeyValueStore {
                            size_t persistent_backed_store_size);
 
     int64_t get(int64_t key, StoredValue *val);
+    int64_t get_timestamp(int64_t key);
     bool put(int64_t key, Value const *val, int64_t timestamp,
              int64_t *current_timestamp);
     void reset();

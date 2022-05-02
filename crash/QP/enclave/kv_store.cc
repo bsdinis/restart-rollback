@@ -45,6 +45,15 @@ int64_t KeyValueStore::get(int64_t key, StoredValue *val) {
     return timestamp;
 }
 
+int64_t KeyValueStore::get_timestamp(int64_t key) {
+    auto key_it = m_store.find(key);
+    if (key_it == m_store.end()) {
+        return -1;
+    }
+
+    return key_it->second.m_ts_val.m_timestamp;
+}
+
 bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
                         int64_t *current_timestamp) {
     auto key_it = m_store.find(key);

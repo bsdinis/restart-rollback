@@ -1,11 +1,14 @@
 namespace register_sgx.crash;
 
 enum MessageType:byte {
-    client_get_req,
-    client_get_resp,
+    get_req,
+    get_resp,
 
-    client_put_req,
-    client_put_resp,
+    get_timestamp_req,
+    get_timestamp_resp,
+
+    put_req,
+    put_resp,
 
     ping_req,
     ping_resp,
@@ -30,6 +33,15 @@ table GetResult {
     timestamp: int64;
 }
 
+table GetTimestampArgs {
+    key : int64;
+}
+
+table GetTimestampResult {
+    key : int64;
+    timestamp: int64;
+}
+
 table PutArgs {
     key : int64;
     value : Value;
@@ -46,6 +58,8 @@ table Empty { }
 union BasicMessage {
     GetArgs,
     GetResult,
+    GetTimestampArgs,
+    GetTimestampResult,
     PutArgs,
     PutResult,
     Empty,

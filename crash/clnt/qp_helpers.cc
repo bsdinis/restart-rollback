@@ -123,6 +123,8 @@ call_type get_call_type(int64_t ticket);
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                 std::array<uint8_t, REGISTER_SIZE> const &value,
                 int64_t timestamp);
+int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                          int64_t timestamp);
 GetContext *get_get_ctx(int64_t ticket, call_type type);
 int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
                            int64_t key,
@@ -175,8 +177,30 @@ int64_t send_get_request(int64_t key, call_type type) {
     auto get_args = register_sgx::crash::CreateGetArgs(builder, key);
 
     auto request = register_sgx::crash::CreateMessage(
-        builder, register_sgx::crash::MessageType_client_get_req, ticket,
+        builder, register_sgx::crash::MessageType_get_req, ticket,
         register_sgx::crash::BasicMessage_GetArgs, get_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (send_payload_to_all(payload, size) != 0) {
+        return -1;
+    }
+
+    g_calls_issued++;
+    return ticket;
+}
+
+int64_t send_get_timestamp_request(int64_t key, call_type type) {
+    int64_t const ticket = gen_ticket(type);
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto get_args = register_sgx::crash::CreateGetTimestampArgs(builder, key);
+
+    auto request = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_get_timestamp_req, ticket,
+        register_sgx::crash::BasicMessage_GetTimestampArgs, get_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -208,7 +232,7 @@ int send_put_request(int64_t ticket, int64_t key,
         register_sgx::crash::CreatePutArgs(builder, key, &fb_value, timestamp);
 
     auto request = register_sgx::crash::CreateMessage(
-        builder, register_sgx::crash::MessageType_client_put_req, ticket,
+        builder, register_sgx::crash::MessageType_put_req, ticket,
         register_sgx::crash::BasicMessage_PutArgs, put_args.Union());
     builder.Finish(request);
 
@@ -243,7 +267,7 @@ int send_writeback_request_to(int64_t ticket, int64_t key,
         register_sgx::crash::CreatePutArgs(builder, key, &fb_value, timestamp);
 
     auto request = register_sgx::crash::CreateMessage(
-        builder, register_sgx::crash::MessageType_client_put_req, ticket,
+        builder, register_sgx::crash::MessageType_put_req, ticket,
         register_sgx::crash::BasicMessage_PutArgs, put_args.Union());
     builder.Finish(request);
 
@@ -328,8 +352,8 @@ int handle_received_message(size_t idx, peer &p) {
             register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         switch (response->type()) {
-            case register_sgx::crash::MessageType_client_get_resp:
-                FINE("fast response [ticket %ld]", response->ticket());
+            case register_sgx::crash::MessageType_get_resp:
+                FINE("get response [ticket %ld]", response->ticket());
                 std::array<uint8_t, REGISTER_SIZE> value;
                 for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
                     value[idx] =
@@ -340,7 +364,14 @@ int handle_received_message(size_t idx, peer &p) {
                             response->message_as_GetResult()->key(), value,
                             response->message_as_GetResult()->timestamp());
                 break;
-            case register_sgx::crash::MessageType_client_put_resp:
+            case register_sgx::crash::MessageType_get_timestamp_resp:
+                FINE("get timestamp response [ticket %ld]", response->ticket());
+                get_timestamp_handler(
+                    idx, response->ticket(),
+                    response->message_as_GetTimestampResult()->key(),
+                    response->message_as_GetTimestampResult()->timestamp());
+                break;
+            case register_sgx::crash::MessageType_put_resp:
                 FINE("put response [ticket %ld]", response->ticket());
                 put_handler(idx, response->ticket(),
                             response->message_as_PutResult()->success(),
@@ -402,7 +433,25 @@ int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
 
         return get_protocol_get_round(*ctx, peer_idx, ticket, key, value,
                                       timestamp, type);
-    } else if (is_put(ticket, type)) {
+    }
+
+    ERROR(
+        "received a get response to an operation which 1: has not finished; 2: "
+        "is not a get. [ticket %ld]",
+        ticket);
+    return -1;
+}
+
+int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                          int64_t timestamp) {
+    call_type const type = get_call_type(ticket);
+
+    if (operation_finished(ticket, type)) {
+        FINE("already finished operation with ticket %ld", ticket);
+        return 0;
+    }
+
+    if (is_put(ticket, type)) {
         PutContext *ctx = get_put_ctx(ticket, type);
         if (ctx == nullptr) {
             ERROR("Failed to retrieve context for ticket %ld", ticket);
@@ -413,8 +462,8 @@ int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
     }
 
     ERROR(
-        "received a get response to an operation which 1: has not finished; 2: "
-        "is not a get; 3: is not a put. [ticket %ld]",
+        "received a get timestamp response to an operation which 1: has not "
+        "finished; 2: is not a put. [ticket %ld]",
         ticket);
     return -1;
 }
