@@ -70,6 +70,8 @@ size_t n_calls_outlasting();
  */
 bool get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value, int64_t &timestamp);
 bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t &timestamp);
+bool proxy_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value, int64_t &timestamp);
+bool proxy_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t &timestamp);
 void ping(void);
 void reset(void);
 
@@ -85,6 +87,8 @@ void reset(void);
  */
 int64_t get_async(int64_t key);
 int64_t put_async(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
+int64_t proxy_get_async(int64_t key);
+int64_t proxy_put_async(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
 int64_t ping_async(void);
 int64_t reset_async(void);
 
@@ -113,6 +117,12 @@ int64_t get_cb(int64_t key);
 
 int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
 int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
+
+int proxy_get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t)> cb);
+int64_t proxy_get_cb(int64_t key);
+
+int proxy_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
+int64_t proxy_put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);

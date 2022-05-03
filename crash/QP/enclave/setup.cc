@@ -178,7 +178,8 @@ int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
 
 size_t quorum_size() { return g_fault_tolerance + 1; }
-bool is_leader() { return g_my_idx == 0; }
+size_t n_replicas() { return 2 * g_fault_tolerance + 1; }
+ssize_t my_idx() { return g_my_idx; }
 
 }  // namespace setup
 }  // namespace crash

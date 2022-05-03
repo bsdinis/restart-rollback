@@ -9,7 +9,7 @@ namespace crash {
 namespace handler {
 
 int client_ping_handler(peer &p, int64_t ticket) {
-    INFO("ping request [%ld]", ticket);
+    LOG("ping request [%ld]", ticket);
 
     flatbuffers::FlatBufferBuilder ping_builder;
     auto ping_args = register_sgx::crash::CreateEmpty(ping_builder);
@@ -31,12 +31,12 @@ int client_ping_handler(peer &p, int64_t ticket) {
         register_sgx::crash::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return register_sgx::crash::handler_helper::append_result(
+    return register_sgx::crash::handler_helper::append_message(
         p, std::move(builder));
 }
 
 int replica_ping_handler(peer &p, int64_t ticket) {
-    INFO("ping request [%ld]", ticket);
+    LOG("ping request [%ld]", ticket);
 
     flatbuffers::FlatBufferBuilder builder;
     auto ping_res = register_sgx::crash::CreateEmpty(builder);
@@ -45,7 +45,7 @@ int replica_ping_handler(peer &p, int64_t ticket) {
         register_sgx::crash::BasicMessage_Empty, ping_res.Union());
     builder.Finish(result);
 
-    return register_sgx::crash::handler_helper::append_result(
+    return register_sgx::crash::handler_helper::append_message(
         p, std::move(builder));
 }
 

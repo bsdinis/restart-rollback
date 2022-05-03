@@ -24,7 +24,7 @@ int reset_handler(peer &p, int64_t ticket) {
     size_t const size = builder.GetSize();
     uint8_t const *payload = builder.GetBufferPointer();
 
-    return register_sgx::crash::handler_helper::append_result(
+    return register_sgx::crash::handler_helper::append_message(
         p, std::move(builder));
 }
 

@@ -17,10 +17,10 @@
 
 // XXX: CHANGE ME
 // add other operation handlers
-#include "client_handler.h"
 #include "close_handler.h"
 #include "ping_handler.h"
-#include "replica_handler.h"
+#include "protocol_handler.h"
+#include "proxy_handler.h"
 #include "reset_handler.h"
 
 #include <string.h>
@@ -69,19 +69,28 @@ int handle_client_message(peer &p) {
         auto const begin = timer::now();
         switch (request->type()) {
             case register_sgx::crash::MessageType_get_req:
-                client_get_handler(p, request->ticket(),
-                                   request->message_as_GetArgs());
+                get_handler(p, request->ticket(),
+                            request->message_as_GetArgs());
                 perf_rec.add("get", timer::elapsed_usec(begin));
                 break;
             case register_sgx::crash::MessageType_get_timestamp_req:
-                client_get_timestamp_handler(
-                    p, request->ticket(),
-                    request->message_as_GetTimestampArgs());
+                get_timestamp_handler(p, request->ticket(),
+                                      request->message_as_GetTimestampArgs());
                 perf_rec.add("get_timestamp", timer::elapsed_usec(begin));
                 break;
             case register_sgx::crash::MessageType_put_req:
-                client_put_handler(p, request->ticket(),
-                                   request->message_as_PutArgs());
+                put_handler(p, request->ticket(),
+                            request->message_as_PutArgs());
+                perf_rec.add("put", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_proxy_get_req:
+                proxy_get_handler(p, request->ticket(),
+                                  request->message_as_GetArgs());
+                perf_rec.add("get", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_proxy_put_req:
+                proxy_put_handler(p, request->ticket(),
+                                  request->message_as_ProxyPutArgs());
                 perf_rec.add("put", timer::elapsed_usec(begin));
                 break;
             case register_sgx::crash::MessageType_ping_req:
@@ -108,7 +117,7 @@ int handle_client_message(peer &p) {
     return 0;
 }
 
-int handle_replica_message(peer &p) {
+int handle_replica_message(peer &p, size_t idx) {
     FINE("recvd a replica message: %zu B", p.buffer().size());
     while (p.buffer().size() > 0) {
         size_t const total_size = *(size_t *)(p.buffer().data());
@@ -121,6 +130,37 @@ int handle_replica_message(peer &p) {
             register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
         auto const begin = timer::now();
         switch (message->type()) {
+            case register_sgx::crash::MessageType_get_req:
+                get_handler(p, message->ticket(),
+                            message->message_as_GetArgs());
+                perf_rec.add("get", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_get_resp:
+                get_resp_handler(p, idx, message->ticket(),
+                                 message->message_as_GetResult());
+                perf_rec.add("get", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_get_timestamp_req:
+                get_timestamp_handler(p, message->ticket(),
+                                      message->message_as_GetTimestampArgs());
+                perf_rec.add("get_timestamp", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_get_timestamp_resp:
+                get_timestamp_resp_handler(
+                    p, message->ticket(),
+                    message->message_as_GetTimestampResult());
+                perf_rec.add("get timestamp", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_put_req:
+                put_handler(p, message->ticket(),
+                            message->message_as_PutArgs());
+                perf_rec.add("put", timer::elapsed_usec(begin));
+                break;
+            case register_sgx::crash::MessageType_put_resp:
+                put_resp_handler(p, message->ticket(),
+                                 message->message_as_PutResult());
+                perf_rec.add("put", timer::elapsed_usec(begin));
+                break;
             case register_sgx::crash::MessageType_ping_req:
                 replica_ping_handler(p, message->ticket());
                 perf_rec.add("ping");

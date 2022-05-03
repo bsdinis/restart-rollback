@@ -32,7 +32,8 @@ int replica_listen_sock();
 bool closed();
 
 size_t quorum_size();
-bool is_leader();
+size_t n_replicas();
+ssize_t my_idx();
 
 }  // namespace setup
 }  // namespace crash

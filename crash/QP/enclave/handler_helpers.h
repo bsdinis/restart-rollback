@@ -13,7 +13,10 @@ namespace register_sgx {
 namespace crash {
 namespace handler_helper {
 
-int append_result(peer &p, flatbuffers::FlatBufferBuilder &&response);
+int append_message(peer &p, flatbuffers::FlatBufferBuilder &&message);
+int broadcast(flatbuffers::FlatBufferBuilder &&message);
+int broadcast_to(std::vector<size_t> const &indices,
+                 flatbuffers::FlatBufferBuilder &&message);
 
 }  // namespace handler_helper
 }  // namespace crash

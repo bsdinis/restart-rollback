@@ -15,7 +15,7 @@ namespace handler {
 
 int handle_new_connection(int const listen_socket, std::vector<peer> &list);
 int handle_client_message(peer &p);
-int handle_replica_message(peer &p);
+int handle_replica_message(peer &p, size_t idx);
 
 }  // namespace handler
 }  // namespace crash

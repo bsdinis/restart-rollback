@@ -34,7 +34,8 @@ void KeyValueStore::add_backing_store(void *persistent_backed_store,
                      sizeof(sgx_aes_gcm_128bit_tag_t)));
 }
 
-int64_t KeyValueStore::get(int64_t key, StoredValue *val) {
+int64_t KeyValueStore::get(int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> *val) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
         return -1;

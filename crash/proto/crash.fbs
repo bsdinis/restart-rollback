@@ -1,6 +1,12 @@
 namespace register_sgx.crash;
 
 enum MessageType:byte {
+    proxy_get_req,
+    proxy_get_resp,
+
+    proxy_put_req,
+    proxy_put_resp,
+
     get_req,
     get_resp,
 
@@ -42,6 +48,11 @@ table GetTimestampResult {
     timestamp: int64;
 }
 
+table ProxyPutArgs {
+    key : int64;
+    value : Value;
+}
+
 table PutArgs {
     key : int64;
     value : Value;
@@ -60,6 +71,7 @@ union BasicMessage {
     GetResult,
     GetTimestampArgs,
     GetTimestampResult,
+    ProxyPutArgs,
     PutArgs,
     PutResult,
     Empty,

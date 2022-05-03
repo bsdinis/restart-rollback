@@ -37,6 +37,10 @@ extern int64_t g_put_sync_ticket;
 extern int64_t g_put_timestamp_result;
 extern bool g_put_success_result;
 
+extern std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
+    g_proxy_get_result;
+extern std::pair<int64_t, bool> g_proxy_put_result;
+
 // protocol globals
 // ticket of the last call to be made
 int64_t g_call_ticket = 0;
@@ -50,6 +54,12 @@ std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                         int64_t, bool) {};
 std::function<void(int64_t, bool, int64_t)> g_put_callback = [](int64_t, bool,
                                                                 int64_t) {};
+std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                   int64_t)>
+    g_proxy_get_callback =
+        [](int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t) {};
+std::function<void(int64_t, bool, int64_t)> g_proxy_put_callback =
+    [](int64_t, bool, int64_t) {};
 std::function<void(int64_t)> g_ping_callback = [](int64_t) {};
 std::function<void(int64_t)> g_reset_callback = [](int64_t) {};
 
@@ -206,6 +216,42 @@ bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
     return g_put_success_result;
 }
 
+bool proxy_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
+               int64_t &timestamp) {
+    if (send_proxy_get_request(g_servers[0], key, call_type::SYNC) == -1) {
+        ERROR("Failed to ping");
+        return false;
+    }
+
+    if (block_until_return(0, g_servers[0]) == -1) {
+        ERROR("failed to get a return from the basicQP");
+        return false;
+    }
+
+    timestamp = std::get<2>(g_proxy_get_result);
+    std::copy(std::cbegin(std::get<1>(g_proxy_get_result)),
+              std::cend(std::get<1>(g_proxy_get_result)), std::begin(value));
+
+    return true;
+}
+
+bool proxy_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
+               int64_t &timestamp) {
+    if (send_proxy_put_request(g_servers[0], key, value, call_type::SYNC) ==
+        -1) {
+        ERROR("Failed to ping");
+        return false;
+    }
+
+    if (block_until_return(0, g_servers[0]) == -1) {
+        ERROR("failed to get a return from the basicQP");
+        return false;
+    }
+
+    timestamp = std::get<0>(g_proxy_put_result);
+    return std::get<1>(g_proxy_put_result);
+}
+
 void ping() {
     if (send_ping_request(g_servers[0], call_type::SYNC) == -1) {
         ERROR("Failed to ping");
@@ -242,6 +288,13 @@ int64_t put_async(int64_t key,
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
 }
+int64_t proxy_get_async(int64_t key) {
+    return send_proxy_get_request(g_servers[0], key, call_type::ASYNC);
+}
+int64_t proxy_put_async(int64_t key,
+                        std::array<uint8_t, REGISTER_SIZE> const &value) {
+    return send_proxy_put_request(g_servers[0], key, value, call_type::ASYNC);
+}
 int64_t ping_async() {
     return send_ping_request(g_servers[0], call_type::ASYNC);
 }
@@ -271,6 +324,27 @@ int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value) {
     int64_t const ticket = send_get_timestamp_request(key, call_type::CALLBACK);
     g_put_ctx_map.emplace(ticket, PutContext(key, value));
     return ticket;
+}
+
+int proxy_get_set_cb(
+    std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                       int64_t)>
+        cb) {
+    g_proxy_get_callback = cb;
+    return 0;
+}
+int64_t proxy_get_cb(int64_t key) {
+    return send_proxy_get_request(g_servers[0], key, call_type::CALLBACK);
+}
+
+int proxy_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
+    g_proxy_put_callback = cb;
+    return 0;
+}
+int64_t proxy_put_cb(int64_t key,
+                     std::array<uint8_t, REGISTER_SIZE> const &value) {
+    return send_proxy_put_request(g_servers[0], key, value,
+                                  call_type::CALLBACK);
 }
 
 int ping_set_cb(std::function<void(int64_t)> cb) {
@@ -373,8 +447,12 @@ T get_reply(int64_t ticket) {
 template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool>
 get_reply(int64_t ticket);
 
-// for put
+// for put and proxy_put
 template std::pair<int64_t, bool> get_reply(int64_t ticket);
+
+// for proxy get
+template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
+get_reply(int64_t ticket);
 
 // for ping reset
 template <>

@@ -42,6 +42,7 @@ static int test_n = 1;
 
 namespace {
 void test_get_put();
+void test_proxy_get_put();
 void test_ping();
 void test_pipelining();
 void test_cb();
@@ -64,6 +65,7 @@ int main(int argc, char** argv) {
 
     test_ping();
     test_get_put();
+    test_proxy_get_put();
     test_pipelining();
     test_cb();
 
@@ -170,6 +172,103 @@ void test_get_put() {
         EXPECT_EQ(std::get<2>(get_reply), std::get<0>(new_put_reply),
                   "get_async");
         EXPECT_EQ(std::get<3>(get_reply), true, "get_async");
+    }
+}
+
+void test_proxy_get_put() {
+    // sync test
+    {
+        // there is no value
+        int64_t get_timestamp = -1;
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> get_value;
+        EXPECT_EQ(crash::proxy_get((int64_t)3, get_value, get_timestamp), true,
+                  "proxy get");
+        EXPECT_EQ(get_timestamp, -1, "proxy get");
+
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> put_value;
+        put_value.fill(1);
+
+        int64_t put_timestamp = -1;
+        EXPECT_EQ(crash::proxy_put((int64_t)3, put_value, put_timestamp), true,
+                  "proxy put");
+
+        EXPECT_EQ(crash::proxy_get((int64_t)3, get_value, get_timestamp), true,
+                  "proxy get");
+        EXPECT_EQ(get_timestamp, put_timestamp, "proxy get");
+        EXPECT_EQ(get_value.size(), put_value.size(), "proxy get");
+        EXPECT_EQ(get_value, put_value, "proxy get");
+
+        int64_t new_put_timestamp = -1;
+        put_value.fill(2);
+        EXPECT_EQ(crash::proxy_put((int64_t)3, put_value, new_put_timestamp),
+                  true, "proxy put");
+        EXPECT_EQ(new_put_timestamp > put_timestamp, true, "proxy put");
+
+        EXPECT_EQ(crash::proxy_get((int64_t)3, get_value, get_timestamp), true,
+                  "proxy get");
+        EXPECT_EQ(get_timestamp, new_put_timestamp, "proxy get");
+        EXPECT_EQ(get_value, put_value, "proxy get");
+    }
+
+    // async test
+    {
+        int64_t ticket = crash::proxy_get_async(4);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        auto get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t>>(ticket);
+
+        EXPECT_EQ(std::get<2>(get_reply), -1, "proxy get_async");
+
+        std::array<uint8_t, register_sgx::crash::REGISTER_SIZE> put_value;
+        put_value.fill(1);
+        ticket = crash::proxy_put_async(4, put_value);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for put");
+            return;
+        }
+        auto put_reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<1>(put_reply), true, "proxy put_async");
+
+        ticket = crash::proxy_get_async(4);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t>>(ticket);
+
+        EXPECT_EQ(std::get<1>(get_reply), put_value, "proxy get_async");
+        EXPECT_EQ(std::get<2>(get_reply), std::get<0>(put_reply),
+                  "proxy get_async");
+
+        put_value.fill(2);
+        ticket = crash::proxy_put_async(4, put_value);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for put");
+            return;
+        }
+        auto new_put_reply = crash::get_reply<std::pair<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<1>(new_put_reply), true, "proxy put_async");
+        EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
+                  "proxy put_async");
+
+        ticket = crash::proxy_get_async(4);
+        if (crash::wait_for(ticket) == crash::poll_state::ERR) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        get_reply = crash::get_reply<std::tuple<
+            int64_t, std::array<uint8_t, register_sgx::crash::REGISTER_SIZE>,
+            int64_t>>(ticket);
+
+        EXPECT_EQ(std::get<1>(get_reply), put_value, "proxy get_async");
+        EXPECT_EQ(std::get<2>(get_reply), std::get<0>(new_put_reply),
+                  "proxy get_async");
     }
 }
 

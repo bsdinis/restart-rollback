@@ -26,6 +26,10 @@ extern std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                           int64_t, bool)>
     g_get_callback;
 extern std::function<void(int64_t, bool, int64_t)> g_put_callback;
+extern std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
+                          int64_t)>
+    g_proxy_get_callback;
+extern std::function<void(int64_t, bool, int64_t)> g_proxy_put_callback;
 extern std::function<void(int64_t)> g_ping_callback;
 extern std::function<void(int64_t)> g_reset_callback;
 
@@ -42,6 +46,13 @@ int64_t g_get_sync_ticket = -1;
 int64_t g_put_timestamp_result;
 bool g_put_success_result = false;
 int64_t g_put_sync_ticket = -1;
+
+// proxy get
+std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
+    g_proxy_get_result;
+
+// proxy put
+std::pair<int64_t, bool> g_proxy_put_result;
 
 // async results
 ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
@@ -156,6 +167,21 @@ int put_finish(int64_t ticket, int64_t timestamp, bool success, call_type type);
 int put_finish_sync(int64_t ticket, int64_t timestamp, bool success);
 int put_finish_async(int64_t ticket, int64_t timestamp, bool success);
 int put_finish_cb(int64_t ticket, int64_t timestamp, bool success);
+
+int proxy_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                      std::array<uint8_t, REGISTER_SIZE> const &value,
+                      int64_t timestamp);
+int proxy_get_handler_sync(int64_t ticket, int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> const &value,
+                           int64_t timestamp);
+int proxy_get_handler_async(int64_t ticket, int64_t key,
+                            std::array<uint8_t, REGISTER_SIZE> const &value,
+                            int64_t timestamp);
+
+int proxy_put_handler(size_t peer_idx, int64_t ticket, bool success,
+                      int64_t timestamp);
+int proxy_put_handler_sync(int64_t ticket, bool success, int64_t timestamp);
+int proxy_put_handler_async(int64_t ticket, bool success, int64_t timestamp);
 
 int ping_handler(size_t peer_idx, int64_t ticket);
 int ping_handler_sync();
@@ -281,6 +307,75 @@ int send_writeback_request_to(int64_t ticket, int64_t key,
     return 0;
 }
 
+int64_t send_proxy_get_request(peer &server, int64_t key, call_type type) {
+    int64_t const ticket = gen_ticket(type);
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto get_args = register_sgx::crash::CreateGetArgs(builder, key);
+
+    auto request = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_proxy_get_req, ticket,
+        register_sgx::crash::BasicMessage_GetArgs, get_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (server.append(&size, 1) == -1) {
+        // encode message header
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+    if (server.append(payload, size) == -1) {  // then the segment itself
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+
+    g_calls_issued++;
+    return ticket;
+}
+
+int64_t send_proxy_put_request(peer &server, int64_t key,
+                               std::array<uint8_t, REGISTER_SIZE> const &value,
+                               call_type type) {
+    int64_t const ticket = gen_ticket(type);
+
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto fb_value = register_sgx::crash::Value();
+    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+        fb_value.mutable_data();
+    {
+        for (size_t idx = 0; idx < value.size(); ++idx) {
+            fb_arr->Mutate(idx, value[idx]);
+        }
+    }
+
+    auto put_args =
+        register_sgx::crash::CreateProxyPutArgs(builder, key, &fb_value);
+
+    auto request = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_proxy_put_req, ticket,
+        register_sgx::crash::BasicMessage_ProxyPutArgs, put_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (server.append(&size, 1) == -1) {
+        // encode message header
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+    if (server.append(payload, size) == -1) {  // then the segment itself
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+
+    g_calls_issued++;
+    return ticket;
+}
+
 int64_t send_ping_request(peer &server, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
@@ -348,13 +443,13 @@ int handle_received_message(size_t idx, peer &p) {
         FINE("resp size: %zu B (according to header)", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
+        std::array<uint8_t, REGISTER_SIZE> value;
         auto response =
             register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         switch (response->type()) {
             case register_sgx::crash::MessageType_get_resp:
                 FINE("get response [ticket %ld]", response->ticket());
-                std::array<uint8_t, REGISTER_SIZE> value;
                 for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
                     value[idx] =
                         response->message_as_GetResult()->value()->data()->Get(
@@ -376,6 +471,25 @@ int handle_received_message(size_t idx, peer &p) {
                 put_handler(idx, response->ticket(),
                             response->message_as_PutResult()->success(),
                             response->message_as_PutResult()->timestamp());
+                break;
+            case register_sgx::crash::MessageType_proxy_get_resp:
+                FINE("proxy get response [ticket %ld]", response->ticket());
+                for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
+                    value[idx] =
+                        response->message_as_GetResult()->value()->data()->Get(
+                            idx);
+                }
+                proxy_get_handler(
+                    idx, response->ticket(),
+                    response->message_as_GetResult()->key(), value,
+                    response->message_as_GetResult()->timestamp());
+                break;
+            case register_sgx::crash::MessageType_proxy_put_resp:
+                FINE("proxy put response [ticket %ld]", response->ticket());
+                proxy_put_handler(
+                    idx, response->ticket(),
+                    response->message_as_PutResult()->success(),
+                    response->message_as_PutResult()->timestamp());
                 break;
             case register_sgx::crash::MessageType_ping_resp:
                 FINE("ping response [ticket %ld]", response->ticket());
@@ -690,6 +804,72 @@ int put_finish_cb(int64_t ticket, int64_t timestamp, bool success) {
     g_put_ctx_map.erase(it);
     g_put_callback(ticket, success, timestamp);
     return 0;
+}
+
+// proxy get
+int proxy_get_handler_sync(int64_t ticket, int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> const &value,
+                           int64_t timestamp) {
+    g_proxy_get_result = std::make_tuple(key, value, timestamp);
+    return 0;
+}
+int proxy_get_handler_async(int64_t ticket, int64_t key,
+                            std::array<uint8_t, REGISTER_SIZE> const &value,
+                            int64_t timestamp) {
+    g_results_map.emplace(
+        ticket,
+        std::unique_ptr<result>(
+            std::make_unique<one_val_result<std::tuple<
+                int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>>>(
+                one_val_result<std::tuple<
+                    int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>>(
+                    std::make_tuple(key, value, timestamp)))));
+    return 0;
+}
+int proxy_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                      std::array<uint8_t, REGISTER_SIZE> const &value,
+                      int64_t timestamp) {
+    g_calls_concluded++;
+    switch (ticket % 3) {
+        case 0:  // SYNC
+            return proxy_get_handler_sync(ticket, key, value, timestamp);
+        case 1:  // ASYNC
+            return proxy_get_handler_async(ticket, key, value, timestamp);
+        case 2:  // CALLBACK
+            g_proxy_get_callback(ticket, key, value, timestamp);
+            return 0;
+    }
+    // unreachable (could use __builtin_unreachable)
+    return -1;
+}
+
+// proxy put
+int proxy_put_handler_sync(int64_t ticket, bool success, int64_t timestamp) {
+    g_proxy_put_result = std::make_pair(timestamp, success);
+    return 0;
+}
+int proxy_put_handler_async(int64_t ticket, bool success, int64_t timestamp) {
+    g_results_map.emplace(
+        ticket, std::unique_ptr<result>(
+                    std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
+                        one_val_result<std::pair<int64_t, bool>>(
+                            std::make_pair(timestamp, success)))));
+    return 0;
+}
+int proxy_put_handler(size_t peer_idx, int64_t ticket, bool success,
+                      int64_t timestamp) {
+    g_calls_concluded++;
+    switch (ticket % 3) {
+        case 0:  // SYNC
+            return proxy_put_handler_sync(ticket, success, timestamp);
+        case 1:  // ASYNC
+            return proxy_put_handler_async(ticket, success, timestamp);
+        case 2:  // CALLBACK
+            g_proxy_put_callback(ticket, success, timestamp);
+            return 0;
+    }
+    // unreachable (could use __builtin_unreachable)
+    return -1;
 }
 
 // ping

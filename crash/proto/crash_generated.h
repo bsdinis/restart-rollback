@@ -23,6 +23,9 @@ struct GetTimestampArgsBuilder;
 struct GetTimestampResult;
 struct GetTimestampResultBuilder;
 
+struct ProxyPutArgs;
+struct ProxyPutArgsBuilder;
+
 struct PutArgs;
 struct PutArgsBuilder;
 
@@ -36,23 +39,31 @@ struct Message;
 struct MessageBuilder;
 
 enum MessageType : int8_t {
-  MessageType_get_req = 0,
-  MessageType_get_resp = 1,
-  MessageType_get_timestamp_req = 2,
-  MessageType_get_timestamp_resp = 3,
-  MessageType_put_req = 4,
-  MessageType_put_resp = 5,
-  MessageType_ping_req = 6,
-  MessageType_ping_resp = 7,
-  MessageType_reset_req = 8,
-  MessageType_reset_resp = 9,
-  MessageType_close_req = 10,
-  MessageType_MIN = MessageType_get_req,
+  MessageType_proxy_get_req = 0,
+  MessageType_proxy_get_resp = 1,
+  MessageType_proxy_put_req = 2,
+  MessageType_proxy_put_resp = 3,
+  MessageType_get_req = 4,
+  MessageType_get_resp = 5,
+  MessageType_get_timestamp_req = 6,
+  MessageType_get_timestamp_resp = 7,
+  MessageType_put_req = 8,
+  MessageType_put_resp = 9,
+  MessageType_ping_req = 10,
+  MessageType_ping_resp = 11,
+  MessageType_reset_req = 12,
+  MessageType_reset_resp = 13,
+  MessageType_close_req = 14,
+  MessageType_MIN = MessageType_proxy_get_req,
   MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[11] {
+inline const MessageType (&EnumValuesMessageType())[15] {
   static const MessageType values[] = {
+    MessageType_proxy_get_req,
+    MessageType_proxy_get_resp,
+    MessageType_proxy_put_req,
+    MessageType_proxy_put_resp,
     MessageType_get_req,
     MessageType_get_resp,
     MessageType_get_timestamp_req,
@@ -69,7 +80,11 @@ inline const MessageType (&EnumValuesMessageType())[11] {
 }
 
 inline const char * const *EnumNamesMessageType() {
-  static const char * const names[12] = {
+  static const char * const names[16] = {
+    "proxy_get_req",
+    "proxy_get_resp",
+    "proxy_put_req",
+    "proxy_put_resp",
     "get_req",
     "get_resp",
     "get_timestamp_req",
@@ -87,7 +102,7 @@ inline const char * const *EnumNamesMessageType() {
 }
 
 inline const char *EnumNameMessageType(MessageType e) {
-  if (flatbuffers::IsOutRange(e, MessageType_get_req, MessageType_close_req)) return "";
+  if (flatbuffers::IsOutRange(e, MessageType_proxy_get_req, MessageType_close_req)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesMessageType()[index];
 }
@@ -98,20 +113,22 @@ enum BasicMessage : uint8_t {
   BasicMessage_GetResult = 2,
   BasicMessage_GetTimestampArgs = 3,
   BasicMessage_GetTimestampResult = 4,
-  BasicMessage_PutArgs = 5,
-  BasicMessage_PutResult = 6,
-  BasicMessage_Empty = 7,
+  BasicMessage_ProxyPutArgs = 5,
+  BasicMessage_PutArgs = 6,
+  BasicMessage_PutResult = 7,
+  BasicMessage_Empty = 8,
   BasicMessage_MIN = BasicMessage_NONE,
   BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[8] {
+inline const BasicMessage (&EnumValuesBasicMessage())[9] {
   static const BasicMessage values[] = {
     BasicMessage_NONE,
     BasicMessage_GetArgs,
     BasicMessage_GetResult,
     BasicMessage_GetTimestampArgs,
     BasicMessage_GetTimestampResult,
+    BasicMessage_ProxyPutArgs,
     BasicMessage_PutArgs,
     BasicMessage_PutResult,
     BasicMessage_Empty
@@ -120,12 +137,13 @@ inline const BasicMessage (&EnumValuesBasicMessage())[8] {
 }
 
 inline const char * const *EnumNamesBasicMessage() {
-  static const char * const names[9] = {
+  static const char * const names[10] = {
     "NONE",
     "GetArgs",
     "GetResult",
     "GetTimestampArgs",
     "GetTimestampResult",
+    "ProxyPutArgs",
     "PutArgs",
     "PutResult",
     "Empty",
@@ -158,6 +176,10 @@ template<> struct BasicMessageTraits<register_sgx::crash::GetTimestampArgs> {
 
 template<> struct BasicMessageTraits<register_sgx::crash::GetTimestampResult> {
   static const BasicMessage enum_value = BasicMessage_GetTimestampResult;
+};
+
+template<> struct BasicMessageTraits<register_sgx::crash::ProxyPutArgs> {
+  static const BasicMessage enum_value = BasicMessage_ProxyPutArgs;
 };
 
 template<> struct BasicMessageTraits<register_sgx::crash::PutArgs> {
@@ -410,6 +432,63 @@ inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
   return builder_.Finish();
 }
 
+struct ProxyPutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef ProxyPutArgsBuilder Builder;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KEY = 4,
+    VT_VALUE = 6
+  };
+  int64_t key() const {
+    return GetField<int64_t>(VT_KEY, 0);
+  }
+  bool mutate_key(int64_t _key) {
+    return SetField<int64_t>(VT_KEY, _key, 0);
+  }
+  const register_sgx::crash::Value *value() const {
+    return GetStruct<const register_sgx::crash::Value *>(VT_VALUE);
+  }
+  register_sgx::crash::Value *mutable_value() {
+    return GetStruct<register_sgx::crash::Value *>(VT_VALUE);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int64_t>(verifier, VT_KEY) &&
+           VerifyField<register_sgx::crash::Value>(verifier, VT_VALUE) &&
+           verifier.EndTable();
+  }
+};
+
+struct ProxyPutArgsBuilder {
+  typedef ProxyPutArgs Table;
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_key(int64_t key) {
+    fbb_.AddElement<int64_t>(ProxyPutArgs::VT_KEY, key, 0);
+  }
+  void add_value(const register_sgx::crash::Value *value) {
+    fbb_.AddStruct(ProxyPutArgs::VT_VALUE, value);
+  }
+  explicit ProxyPutArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  flatbuffers::Offset<ProxyPutArgs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<ProxyPutArgs>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<ProxyPutArgs> CreateProxyPutArgs(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    int64_t key = 0,
+    const register_sgx::crash::Value *value = 0) {
+  ProxyPutArgsBuilder builder_(_fbb);
+  builder_.add_key(key);
+  builder_.add_value(value);
+  return builder_.Finish();
+}
+
 struct PutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef PutArgsBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -605,6 +684,9 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   const register_sgx::crash::GetTimestampResult *message_as_GetTimestampResult() const {
     return message_type() == register_sgx::crash::BasicMessage_GetTimestampResult ? static_cast<const register_sgx::crash::GetTimestampResult *>(message()) : nullptr;
   }
+  const register_sgx::crash::ProxyPutArgs *message_as_ProxyPutArgs() const {
+    return message_type() == register_sgx::crash::BasicMessage_ProxyPutArgs ? static_cast<const register_sgx::crash::ProxyPutArgs *>(message()) : nullptr;
+  }
   const register_sgx::crash::PutArgs *message_as_PutArgs() const {
     return message_type() == register_sgx::crash::BasicMessage_PutArgs ? static_cast<const register_sgx::crash::PutArgs *>(message()) : nullptr;
   }
@@ -642,6 +724,10 @@ template<> inline const register_sgx::crash::GetTimestampArgs *Message::message_
 
 template<> inline const register_sgx::crash::GetTimestampResult *Message::message_as<register_sgx::crash::GetTimestampResult>() const {
   return message_as_GetTimestampResult();
+}
+
+template<> inline const register_sgx::crash::ProxyPutArgs *Message::message_as<register_sgx::crash::ProxyPutArgs>() const {
+  return message_as_ProxyPutArgs();
 }
 
 template<> inline const register_sgx::crash::PutArgs *Message::message_as<register_sgx::crash::PutArgs>() const {
@@ -685,7 +771,7 @@ struct MessageBuilder {
 
 inline flatbuffers::Offset<Message> CreateMessage(
     flatbuffers::FlatBufferBuilder &_fbb,
-    register_sgx::crash::MessageType type = register_sgx::crash::MessageType_get_req,
+    register_sgx::crash::MessageType type = register_sgx::crash::MessageType_proxy_get_req,
     int64_t ticket = 0,
     register_sgx::crash::BasicMessage message_type = register_sgx::crash::BasicMessage_NONE,
     flatbuffers::Offset<void> message = 0) {
@@ -716,6 +802,10 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
     }
     case BasicMessage_GetTimestampResult: {
       auto ptr = reinterpret_cast<const register_sgx::crash::GetTimestampResult *>(obj);
+      return verifier.VerifyTable(ptr);
+    }
+    case BasicMessage_ProxyPutArgs: {
+      auto ptr = reinterpret_cast<const register_sgx::crash::ProxyPutArgs *>(obj);
       return verifier.VerifyTable(ptr);
     }
     case BasicMessage_PutArgs: {

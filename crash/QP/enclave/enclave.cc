@@ -55,9 +55,10 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *file_mapping,
             }
         }
 
-        for (auto &peer : g_replica_list) {
+        for (size_t idx = 0; idx < g_replica_list.size(); ++idx) {
+            auto &peer = g_replica_list[idx];
             if (peer.connected() && peer.want_read()) {
-                handler::handle_replica_message(peer);
+                handler::handle_replica_message(peer, idx);
                 if (setup::closed()) return;
             }
 

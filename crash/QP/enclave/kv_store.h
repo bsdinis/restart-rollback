@@ -16,10 +16,8 @@
 namespace register_sgx {
 namespace crash {
 
-using StoredValue = std::array<uint8_t, REGISTER_SIZE>;
-
 struct TimestampedValue {
-    StoredValue m_val;
+    std::array<uint8_t, REGISTER_SIZE> m_val;
     int64_t m_timestamp;
 
     TimestampedValue(Value const *val, int64_t timestamp)
@@ -58,7 +56,7 @@ class KeyValueStore {
     void add_backing_store(void *persistent_backed_store,
                            size_t persistent_backed_store_size);
 
-    int64_t get(int64_t key, StoredValue *val);
+    int64_t get(int64_t key, std::array<uint8_t, REGISTER_SIZE> *val);
     int64_t get_timestamp(int64_t key);
     bool put(int64_t key, Value const *val, int64_t timestamp,
              int64_t *current_timestamp);
