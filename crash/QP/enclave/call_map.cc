@@ -57,9 +57,10 @@ GetCallContext* CallMap::add_get_call(peer* client, int64_t ticket,
                 .first->second;
 }
 PutCallContext* CallMap::add_put_call(peer* client, int64_t ticket, int64_t key,
-                                      Value const* value) {
+                                      int32_t client_id, Value const* value) {
     return &m_put_map
-                .emplace(ticket, PutCallContext(client, ticket, key, value))
+                .emplace(ticket,
+                         PutCallContext(client, ticket, key, client_id, value))
                 .first->second;
 }
 

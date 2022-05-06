@@ -18,6 +18,7 @@
 // XXX: CHANGE ME
 // add other operation handlers
 #include "close_handler.h"
+#include "handler_helpers.h"
 #include "ping_handler.h"
 #include "protocol_handler.h"
 #include "proxy_handler.h"
@@ -39,21 +40,29 @@ namespace {
 int peer_new_connection(int const listen_socket, std::vector<peer> &list,
                         ssize_t idx = -1);
 size_t constexpr connection_limit = 1 << 13;
+int32_t g_current_id = 0;
 }  // anonymous namespace
 
 namespace register_sgx {
 namespace crash {
 namespace handler {
 
-int handle_new_connection(int const listen_socket, std::vector<peer> &list) {
+ssize_t handle_new_connection(int const listen_socket,
+                              std::vector<peer> &list) {
     LOG("accepting new connection on socket %d", listen_socket);
     auto it = std::find_if_not(std::begin(list), std::end(list),
                                [](peer &p) -> bool { return p.connected(); });
-    LOG("index %zu", std::distance(std::begin(list), it));
-    return it == std::end(list)
-               ? peer_new_connection(listen_socket, list)
-               : peer_new_connection(listen_socket, list,
-                                     std::distance(std::begin(list), it));
+    ssize_t idx = std::distance(std::begin(list), it);
+    LOG("index %zd", idx);
+    if (it == std::end(list)) {
+        if (peer_new_connection(listen_socket, list) != 0) {
+            return -1;
+        }
+    } else if (peer_new_connection(listen_socket, list, idx) != 0) {
+        return -1;
+    }
+
+    return idx;
 }
 
 int handle_client_message(peer &p) {
@@ -166,7 +175,6 @@ int handle_replica_message(peer &p, size_t idx) {
                 perf_rec.add("ping");
                 break;
             case register_sgx::crash::MessageType_ping_resp:
-                INFO("ping response [%ld]", message->ticket());
                 perf_rec.add("ping");
                 break;
             case register_sgx::crash::MessageType_reset_req:
@@ -187,6 +195,22 @@ int handle_replica_message(peer &p, size_t idx) {
     }
 
     return 0;
+}
+
+int send_greeting(peer &p) {
+    LOG("sending greeting to client %d", g_current_id);
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto greeting = register_sgx::crash::CreateGreeting(builder, g_current_id);
+    g_current_id += 1;
+
+    auto message = register_sgx::crash::CreateMessage(
+        builder, register_sgx::crash::MessageType_client_greeting, -1,
+        register_sgx::crash::BasicMessage_Greeting, greeting.Union());
+    builder.Finish(message);
+
+    return register_sgx::crash::handler_helper::append_message(
+        p, std::move(builder));
 }
 
 }  // namespace handler

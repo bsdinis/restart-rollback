@@ -42,6 +42,9 @@ extern std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
 extern std::pair<int64_t, bool> g_proxy_put_result;
 
 // protocol globals
+
+int32_t g_client_id = -1;
+
 // ticket of the last call to be made
 int64_t g_call_ticket = 0;
 size_t g_calls_issued = 0;
@@ -120,6 +123,14 @@ int init(
 
     config_free(&conf);
     g_results_map.reserve(concurrent_hint);
+
+    while (g_client_id == -1) {
+        struct timeval timeout = g_timeout;
+        auto res = process_peers(&timeout);
+        if (res == process_res::ERR) {
+            return false;
+        }
+    }
     return 0;
 }
 

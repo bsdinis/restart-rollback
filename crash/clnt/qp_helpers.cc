@@ -12,6 +12,8 @@
 namespace register_sgx {
 namespace crash {
 
+extern int32_t g_client_id;
+
 extern ::std::vector<peer> g_servers;
 extern size_t g_calls_issued;
 extern size_t g_calls_concluded;
@@ -130,6 +132,8 @@ inline bool operation_finished(int64_t ticket, call_type type) {
 }
 
 call_type get_call_type(int64_t ticket);
+
+int greeting_handler(size_t peer_idx, int32_t id);
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                 std::array<uint8_t, REGISTER_SIZE> const &value,
@@ -351,8 +355,8 @@ int64_t send_proxy_put_request(peer &server, int64_t key,
         }
     }
 
-    auto put_args =
-        register_sgx::crash::CreateProxyPutArgs(builder, key, &fb_value);
+    auto put_args = register_sgx::crash::CreateProxyPutArgs(
+        builder, key, &fb_value, g_client_id);
 
     auto request = register_sgx::crash::CreateMessage(
         builder, register_sgx::crash::MessageType_proxy_put_req, ticket,
@@ -448,6 +452,10 @@ int handle_received_message(size_t idx, peer &p) {
             register_sgx::crash::GetMessage(p.buffer().data() + sizeof(size_t));
 
         switch (response->type()) {
+            case register_sgx::crash::MessageType_client_greeting:
+                FINE("greeting: %d", response->message_as_Greeting()->id());
+                greeting_handler(idx, response->message_as_Greeting()->id());
+                break;
             case register_sgx::crash::MessageType_get_resp:
                 FINE("get response [ticket %ld]", response->ticket());
                 for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
@@ -526,6 +534,14 @@ call_type get_call_type(int64_t ticket) {
     }
     __builtin_unreachable();
     return call_type::SYNC;
+}
+
+int greeting_handler(size_t peer_idx, int32_t id) {
+    if (id >= 0) {
+        g_client_id = id;
+    }
+
+    return 0;
 }
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
@@ -743,8 +759,8 @@ int put_protocol_get_round(PutContext &ctx, int64_t ticket, int64_t key,
     } else if (ctx.finished_get_phase(quorum_size()) &&
                !ctx.started_put_phase()) {
         ctx.finish_get_phase();
-        if (send_put_request(ticket, key, ctx.value(), ctx.timestamp(), type) !=
-            0) {
+        if (send_put_request(ticket, key, ctx.value(), ctx.next_timestamp(),
+                             type) != 0) {
             ERROR("failed to issue write request for %ld", ticket);
         }
     }
@@ -757,7 +773,7 @@ int put_protocol_put_round(PutContext &ctx, int64_t ticket, int64_t timestamp,
     if (!ctx.add_put_resp()) {
         return put_finish(ticket, -1, false, type);
     } else if (ctx.finished_put_phase(quorum_size())) {
-        return put_finish(ticket, ctx.timestamp(), ctx.success(), type);
+        return put_finish(ticket, ctx.next_timestamp(), ctx.success(), type);
     }
 
     return 0;

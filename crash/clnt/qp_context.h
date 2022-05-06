@@ -11,6 +11,8 @@
 namespace register_sgx{
 namespace crash {
 
+extern int32_t g_client_id;
+
 class GetContext {
     private:
     int64_t m_key;
@@ -122,7 +124,10 @@ class PutContext {
     }
 
     inline int64_t key() const { return m_key; }
-    inline int64_t timestamp() const { return m_max_timestamp < 0 ? 0 : m_max_timestamp + 1; }
+    inline int64_t next_timestamp() const {
+        uint64_t seqno = (m_max_timestamp < 0) ? 1 : (static_cast<uint64_t>(m_max_timestamp) >> 32) + 1;
+        return static_cast<int64_t> ( (seqno << 32) | static_cast<uint64_t> (g_client_id));
+    }
     inline bool success() const { return m_success; }
     inline std::array<uint8_t, REGISTER_SIZE> const& value() const { return m_value; }
 };

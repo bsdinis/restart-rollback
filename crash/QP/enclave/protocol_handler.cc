@@ -258,7 +258,7 @@ int put_return_to_client(PutCallContext const &context) {
     flatbuffers::FlatBufferBuilder builder;
 
     auto put_res = register_sgx::crash::CreatePutResult(
-        builder, true, context.timestamp() < 0 ? 0 : context.timestamp() + 1);
+        builder, true, context.next_timestamp());
 
     auto message = register_sgx::crash::CreateMessage(
         builder, register_sgx::crash::MessageType_proxy_put_resp,
@@ -284,8 +284,7 @@ int put_do_write(PutCallContext &context) {
     }
 
     auto put_args = register_sgx::crash::CreatePutArgs(
-        builder, context.key(), &fb_value,
-        (context.timestamp() < 0) ? 0 : context.timestamp() + 1);
+        builder, context.key(), &fb_value, context.next_timestamp());
 
     auto put_request = register_sgx::crash::CreateMessage(
         builder, register_sgx::crash::MessageType_put_req, context.ticket(),
@@ -294,9 +293,8 @@ int put_do_write(PutCallContext &context) {
     builder.Finish(put_request);
 
     int64_t current_timestamp = 0;
-    bool const success =
-        g_kv_store.put(context.key(), &fb_value,
-                       (context.timestamp() < 0) ? 0 : 1, &current_timestamp);
+    bool const success = g_kv_store.put(
+        context.key(), &fb_value, context.next_timestamp(), &current_timestamp);
     if (put_resp_handler_put_action(context, success, current_timestamp) != 0) {
         ERROR("failed to register own action");
     }

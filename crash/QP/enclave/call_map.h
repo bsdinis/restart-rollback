@@ -73,9 +73,12 @@ class GetCallContext {
 
 class PutCallContext {
    public:
-    PutCallContext(peer* client, int64_t ticket, int64_t key,
+    PutCallContext(peer* client, int64_t ticket, int64_t key, int32_t client_id,
                    Value const* value)
-        : m_client(client), m_ticket(ticket), m_key(key) {
+        : m_client(client),
+          m_ticket(ticket),
+          m_key(key),
+          m_client_id(client_id) {
         for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
             m_value[idx] = value->data()->Get(idx);
         }
@@ -97,6 +100,13 @@ class PutCallContext {
     inline int64_t ticket() const { return m_ticket; }
     inline int64_t key() const { return m_key; }
     inline int64_t timestamp() const { return m_timestamp; }
+    inline int64_t next_timestamp() const {
+        uint64_t seqno = (m_timestamp < 0)
+                             ? 1
+                             : (static_cast<uint64_t>(m_timestamp) >> 32) + 1;
+        return static_cast<int64_t>((seqno << 32) |
+                                    static_cast<uint64_t>(m_client_id));
+    }
     inline peer* client() const { return m_client; }
     inline std::array<uint8_t, REGISTER_SIZE> const& value() const& {
         return m_value;
@@ -104,12 +114,14 @@ class PutCallContext {
 
    private:
     peer* m_client = nullptr;
+    int64_t m_ticket = -1;
+    int64_t m_key = -1;
+    int32_t m_client_id = -1;
+
     size_t m_n_get_replies = 0;
     size_t m_n_put_replies = 0;
-
-    int64_t m_key = -1;
-    int64_t m_ticket = -1;
     int64_t m_timestamp = -1;
+
     std::array<uint8_t, REGISTER_SIZE> m_value;
 };
 
@@ -117,7 +129,7 @@ class CallMap {
    public:
     GetCallContext* add_get_call(peer* client, int64_t ticket, int64_t key);
     PutCallContext* add_put_call(peer* client, int64_t ticket, int64_t key,
-                                 Value const* value);
+                                 int32_t client_id, Value const* value);
 
     GetCallContext* get_get_ctx(int64_t ticket);
     PutCallContext* get_put_ctx(int64_t ticket);

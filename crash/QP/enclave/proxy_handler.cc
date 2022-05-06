@@ -43,7 +43,8 @@ int proxy_get_handler(peer &p, int64_t ticket, GetArgs const *args) {
 int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
     LOG("proxy put request [%ld]: key %ld", ticket, args->key());
 
-    auto ctx = g_call_map.add_put_call(&p, ticket, args->key(), args->value());
+    auto ctx = g_call_map.add_put_call(&p, ticket, args->key(),
+                                       args->client_id(), args->value());
 
     flatbuffers::FlatBufferBuilder builder;
     auto get_timestamp_args =

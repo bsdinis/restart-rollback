@@ -90,9 +90,13 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *file_mapping,
                 ocall_needs_read(&rd, client_listen_sock);
                 ocall_needs_except(&err, client_listen_sock);
                 if (rd) {
-                    if (handler::handle_new_connection(client_listen_sock,
-                                                       g_client_list) != 0) {
+                    ssize_t idx = handler::handle_new_connection(
+                        client_listen_sock, g_client_list);
+                    if (idx == -1) {
                         ERROR("Failed to handle new client connection");
+                    } else if (setup::my_idx() == 0) {
+                        register_sgx::crash::handler::send_greeting(
+                            g_client_list[idx]);
                     }
                 }
                 if (err) {
@@ -107,8 +111,8 @@ void crash_enclave_start(config_t conf, ssize_t my_idx, void *file_mapping,
                 ocall_needs_except(&err, replica_listen_sock);
                 if (rd) {
                     if (handler::handle_new_connection(replica_listen_sock,
-                                                       g_replica_list) != 0) {
-                        ERROR("Failed to handle new replia connection");
+                                                       g_replica_list) == -1) {
+                        ERROR("Failed to handle new replica connection");
                     }
                 }
                 if (err) {
