@@ -1,0 +1,96 @@
+namespace register_sgx.restart_rollback;
+
+enum MessageType:byte {
+    client_greeting,
+
+    proxy_get_req,
+    proxy_get_resp,
+
+    proxy_put_req,
+    proxy_put_resp,
+
+    get_req,
+    get_resp,
+
+    get_timestamp_req,
+    get_timestamp_resp,
+
+    put_req,
+    put_resp,
+
+    ping_req,
+    ping_resp,
+
+    reset_req,
+    reset_resp,
+
+    close_req,
+}
+
+struct Value {
+    data: [ubyte:2048];
+}
+
+table GetArgs {
+    key : int64;
+}
+
+table GetResult {
+    key : int64;
+    value : Value;
+    timestamp: int64;
+    suspicious: bool;
+}
+
+table GetTimestampArgs {
+    key : int64;
+}
+
+table GetTimestampResult {
+    key : int64;
+    timestamp: int64;
+    suspicious: bool;
+}
+
+table ProxyPutArgs {
+    key : int64;
+    value : Value;
+    client_id: int32;
+}
+
+table PutArgs {
+    key : int64;
+    value : Value;
+    timestamp: int64;
+}
+
+table PutResult {
+    success : bool;
+    timestamp: int64;
+}
+
+table Greeting {
+    id: int32;
+}
+
+table Empty { }
+
+union BasicMessage {
+    Greeting,
+    GetArgs,
+    GetResult,
+    GetTimestampArgs,
+    GetTimestampResult,
+    ProxyPutArgs,
+    PutArgs,
+    PutResult,
+    Empty,
+}
+
+table Message {
+    type    : MessageType;
+    ticket  : int64;
+    message : BasicMessage;
+}
+
+root_type Message;
