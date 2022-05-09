@@ -44,6 +44,8 @@ extern std::pair<int64_t, bool> g_proxy_put_result;
 // protocol globals
 
 int32_t g_client_id = -1;
+size_t g_rollback_tolerance = 0;
+size_t g_crash_tolerance = 0;
 
 // ticket of the last call to be made
 int64_t g_call_ticket = 0;
@@ -121,6 +123,8 @@ int init(
         INFO("connected to QP on %s:%d", peer_node.addr, peer_node.port);
     }
 
+    g_rollback_tolerance = conf.r;
+    g_crash_tolerance = conf.f;
     config_free(&conf);
     g_results_map.reserve(concurrent_hint);
 

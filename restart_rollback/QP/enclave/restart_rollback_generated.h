@@ -31,6 +31,9 @@ struct PutArgsBuilder;
 struct PutResult;
 struct PutResultBuilder;
 
+struct StabilizeArgs;
+struct StabilizeArgsBuilder;
+
 struct Greeting;
 struct GreetingBuilder;
 
@@ -56,12 +59,13 @@ enum MessageType : int8_t {
     MessageType_ping_resp = 12,
     MessageType_reset_req = 13,
     MessageType_reset_resp = 14,
-    MessageType_close_req = 15,
+    MessageType_stabilize_req = 15,
+    MessageType_close_req = 16,
     MessageType_MIN = MessageType_client_greeting,
     MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[16] {
+inline const MessageType (&EnumValuesMessageType())[17] {
     static const MessageType values[] = {
         MessageType_client_greeting,    MessageType_proxy_get_req,
         MessageType_proxy_get_resp,     MessageType_proxy_put_req,
@@ -70,28 +74,19 @@ inline const MessageType (&EnumValuesMessageType())[16] {
         MessageType_get_timestamp_resp, MessageType_put_req,
         MessageType_put_resp,           MessageType_ping_req,
         MessageType_ping_resp,          MessageType_reset_req,
-        MessageType_reset_resp,         MessageType_close_req};
+        MessageType_reset_resp,         MessageType_stabilize_req,
+        MessageType_close_req};
     return values;
 }
 
 inline const char *const *EnumNamesMessageType() {
-    static const char *const names[17] = {"client_greeting",
-                                          "proxy_get_req",
-                                          "proxy_get_resp",
-                                          "proxy_put_req",
-                                          "proxy_put_resp",
-                                          "get_req",
-                                          "get_resp",
-                                          "get_timestamp_req",
-                                          "get_timestamp_resp",
-                                          "put_req",
-                                          "put_resp",
-                                          "ping_req",
-                                          "ping_resp",
-                                          "reset_req",
-                                          "reset_resp",
-                                          "close_req",
-                                          nullptr};
+    static const char *const names[18] = {
+        "client_greeting", "proxy_get_req",     "proxy_get_resp",
+        "proxy_put_req",   "proxy_put_resp",    "get_req",
+        "get_resp",        "get_timestamp_req", "get_timestamp_resp",
+        "put_req",         "put_resp",          "ping_req",
+        "ping_resp",       "reset_req",         "reset_resp",
+        "stabilize_req",   "close_req",         nullptr};
     return names;
 }
 
@@ -113,12 +108,13 @@ enum BasicMessage : uint8_t {
     BasicMessage_ProxyPutArgs = 6,
     BasicMessage_PutArgs = 7,
     BasicMessage_PutResult = 8,
-    BasicMessage_Empty = 9,
+    BasicMessage_StabilizeArgs = 9,
+    BasicMessage_Empty = 10,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[10] {
+inline const BasicMessage (&EnumValuesBasicMessage())[11] {
     static const BasicMessage values[] = {BasicMessage_NONE,
                                           BasicMessage_Greeting,
                                           BasicMessage_GetArgs,
@@ -128,12 +124,13 @@ inline const BasicMessage (&EnumValuesBasicMessage())[10] {
                                           BasicMessage_ProxyPutArgs,
                                           BasicMessage_PutArgs,
                                           BasicMessage_PutResult,
+                                          BasicMessage_StabilizeArgs,
                                           BasicMessage_Empty};
     return values;
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[11] = {"NONE",
+    static const char *const names[12] = {"NONE",
                                           "Greeting",
                                           "GetArgs",
                                           "GetResult",
@@ -142,6 +139,7 @@ inline const char *const *EnumNamesBasicMessage() {
                                           "ProxyPutArgs",
                                           "PutArgs",
                                           "PutResult",
+                                          "StabilizeArgs",
                                           "Empty",
                                           nullptr};
     return names;
@@ -197,6 +195,11 @@ struct BasicMessageTraits<register_sgx::restart_rollback::PutArgs> {
 template <>
 struct BasicMessageTraits<register_sgx::restart_rollback::PutResult> {
     static const BasicMessage enum_value = BasicMessage_PutResult;
+};
+
+template <>
+struct BasicMessageTraits<register_sgx::restart_rollback::StabilizeArgs> {
+    static const BasicMessage enum_value = BasicMessage_StabilizeArgs;
 };
 
 template <>
@@ -272,7 +275,8 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
         VT_KEY = 4,
         VT_VALUE = 6,
         VT_TIMESTAMP = 8,
-        VT_SUSPICIOUS = 10
+        VT_STABLE = 10,
+        VT_SUSPICIOUS = 12
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
@@ -287,6 +291,10 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool mutate_timestamp(int64_t _timestamp) {
         return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
     }
+    bool stable() const { return GetField<uint8_t>(VT_STABLE, 0) != 0; }
+    bool mutate_stable(bool _stable) {
+        return SetField<uint8_t>(VT_STABLE, static_cast<uint8_t>(_stable), 0);
+    }
     bool suspicious() const { return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0; }
     bool mutate_suspicious(bool _suspicious) {
         return SetField<uint8_t>(VT_SUSPICIOUS,
@@ -298,6 +306,7 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                VerifyField<register_sgx::restart_rollback::Value>(verifier,
                                                                   VT_VALUE) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
+               VerifyField<uint8_t>(verifier, VT_STABLE) &&
                VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
                verifier.EndTable();
     }
@@ -315,6 +324,10 @@ struct GetResultBuilder {
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(GetResult::VT_TIMESTAMP, timestamp, 0);
+    }
+    void add_stable(bool stable) {
+        fbb_.AddElement<uint8_t>(GetResult::VT_STABLE,
+                                 static_cast<uint8_t>(stable), 0);
     }
     void add_suspicious(bool suspicious) {
         fbb_.AddElement<uint8_t>(GetResult::VT_SUSPICIOUS,
@@ -334,12 +347,13 @@ struct GetResultBuilder {
 inline flatbuffers::Offset<GetResult> CreateGetResult(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
     const register_sgx::restart_rollback::Value *value = 0,
-    int64_t timestamp = 0, bool suspicious = false) {
+    int64_t timestamp = 0, bool stable = false, bool suspicious = false) {
     GetResultBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
     builder_.add_key(key);
     builder_.add_value(value);
     builder_.add_suspicious(suspicious);
+    builder_.add_stable(stable);
     return builder_.Finish();
 }
 
@@ -626,6 +640,56 @@ inline flatbuffers::Offset<PutResult> CreatePutResult(
     return builder_.Finish();
 }
 
+struct StabilizeArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef StabilizeArgsBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_TIMESTAMP = 6
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
+    bool mutate_timestamp(int64_t _timestamp) {
+        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
+               verifier.EndTable();
+    }
+};
+
+struct StabilizeArgsBuilder {
+    typedef StabilizeArgs Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(StabilizeArgs::VT_KEY, key, 0);
+    }
+    void add_timestamp(int64_t timestamp) {
+        fbb_.AddElement<int64_t>(StabilizeArgs::VT_TIMESTAMP, timestamp, 0);
+    }
+    explicit StabilizeArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<StabilizeArgs> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<StabilizeArgs>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<StabilizeArgs> CreateStabilizeArgs(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    int64_t timestamp = 0) {
+    StabilizeArgsBuilder builder_(_fbb);
+    builder_.add_timestamp(timestamp);
+    builder_.add_key(key);
+    return builder_.Finish();
+}
+
 struct Greeting FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GreetingBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -785,6 +849,15 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                          message())
                    : nullptr;
     }
+    const register_sgx::restart_rollback::StabilizeArgs *
+    message_as_StabilizeArgs() const {
+        return message_type() == register_sgx::restart_rollback::
+                                     BasicMessage_StabilizeArgs
+                   ? static_cast<
+                         const register_sgx::restart_rollback::StabilizeArgs *>(
+                         message())
+                   : nullptr;
+    }
     const register_sgx::restart_rollback::Empty *message_as_Empty() const {
         return message_type() ==
                        register_sgx::restart_rollback::BasicMessage_Empty
@@ -851,6 +924,12 @@ template <>
 inline const register_sgx::restart_rollback::PutResult *
 Message::message_as<register_sgx::restart_rollback::PutResult>() const {
     return message_as_PutResult();
+}
+
+template <>
+inline const register_sgx::restart_rollback::StabilizeArgs *
+Message::message_as<register_sgx::restart_rollback::StabilizeArgs>() const {
+    return message_as_StabilizeArgs();
 }
 
 template <>
@@ -948,6 +1027,11 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         case BasicMessage_PutResult: {
             auto ptr = reinterpret_cast<
                 const register_sgx::restart_rollback::PutResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_StabilizeArgs: {
+            auto ptr = reinterpret_cast<
+                const register_sgx::restart_rollback::StabilizeArgs *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_Empty: {

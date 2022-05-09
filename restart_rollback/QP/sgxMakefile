@@ -2,7 +2,7 @@ App_Dir := app
 Enclave_Dir := enclave
 Include_Dir := include
 
-App_Name := crashs
+App_Name := restart_rollbacks
 App_C_Files := $(wildcard $(App_Dir)/*.c)
 App_Cpp_Files := $(wildcard $(App_Dir)/*.cc)
 App_Link_Locations := # -L. -L/opt/intel/sgxsdk/lib64

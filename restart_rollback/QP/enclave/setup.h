@@ -31,7 +31,9 @@ int client_listen_sock();
 int replica_listen_sock();
 bool closed();
 
-size_t quorum_size();
+size_t write_quorum_size();
+size_t read_quorum_size(size_t s);
+bool is_suspicious();
 size_t n_replicas();
 ssize_t my_idx();
 

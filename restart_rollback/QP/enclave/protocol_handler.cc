@@ -25,6 +25,7 @@ int put_resp_handler_get_action(GetCallContext &context, bool success,
                                 int64_t timestamp);
 int put_resp_handler_put_action(PutCallContext &context, bool success,
                                 int64_t timestamp);
+int do_stabilize(GetCallContext const &context, bool to_outdated);
 }  // anonymous namespace
 
 int get_handler(peer &p, int64_t ticket,
@@ -34,7 +35,10 @@ int get_handler(peer &p, int64_t ticket,
     flatbuffers::FlatBufferBuilder builder;
 
     std::array<uint8_t, REGISTER_SIZE> value;
-    auto const timestamp = g_kv_store.get(args->key(), &value);
+    bool stable;
+    bool suspicious;
+    auto const timestamp =
+        g_kv_store.get(args->key(), &stable, &suspicious, &value);
 
     auto fb_value = register_sgx::restart_rollback::Value();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
@@ -46,7 +50,7 @@ int get_handler(peer &p, int64_t ticket,
     }
 
     auto get_res = register_sgx::restart_rollback::CreateGetResult(
-        builder, args->key(), &fb_value, timestamp);
+        builder, args->key(), &fb_value, timestamp, stable, suspicious);
 
     auto result = register_sgx::restart_rollback::CreateMessage(
         builder, register_sgx::restart_rollback::MessageType_get_resp, ticket,
@@ -66,11 +70,12 @@ int get_timestamp_handler(
 
     flatbuffers::FlatBufferBuilder builder;
 
-    auto const timestamp = g_kv_store.get_timestamp(args->key());
+    bool suspicious = false;
+    auto const timestamp = g_kv_store.get_timestamp(args->key(), &suspicious);
 
     auto get_timestamp_res =
         register_sgx::restart_rollback::CreateGetTimestampResult(
-            builder, args->key(), timestamp);
+            builder, args->key(), timestamp, suspicious);
 
     auto result = register_sgx::restart_rollback::CreateMessage(
         builder, register_sgx::restart_rollback::MessageType_get_timestamp_resp,
@@ -106,9 +111,17 @@ int put_handler(peer &p, int64_t ticket,
         p, std::move(builder));
 }
 
+int stabilize_handler(
+    peer &p, int64_t ticket,
+    register_sgx::restart_rollback::StabilizeArgs const *args) {
+    LOG("stabilize request [%ld]: key %ld", ticket, args->key());
+    g_kv_store.stabilize(args->key(), args->timestamp());
+    return 0;
+}
+
 // resp handlers
 
-int get_resp_handler(peer &p, size_t peer_idx, int64_t ticket,
+int get_resp_handler(peer &p, ssize_t peer_idx, int64_t ticket,
                      GetResult const *args) {
     LOG("get response [%ld]: key %ld", ticket, args->key());
 
@@ -123,20 +136,29 @@ int get_resp_handler(peer &p, size_t peer_idx, int64_t ticket,
         value[idx] = fb_value->Get(idx);
     }
 
-    return get_resp_handler_action(*ctx, peer_idx, value, args->timestamp());
+    return get_resp_handler_action(*ctx, peer_idx, value, args->timestamp(),
+                                   args->stable(), args->suspicious());
 }
-int get_resp_handler_action(GetCallContext &context, size_t peer_idx,
+int get_resp_handler_action(GetCallContext &context, ssize_t peer_idx,
                             std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp) {
+                            int64_t timestamp, bool stable, bool suspicious) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
-    context.add_get_reply(peer_idx, timestamp, value);
+    context.add_get_reply(peer_idx, timestamp, stable, suspicious, value);
 
-    if (context.get_done()) {
+    if (context.early_get_done()) {
+        context.finish_get_phase();
+        return get_return_to_client(context);
+    }
+
+    if (context.full_get_done()) {
         context.finish_get_phase();
         if (context.call_done()) {
+            if (do_stabilize(context, false /* to_outdated */) != 0) {
+                ERROR("failed to broadcast stabilize");
+            }
             return get_return_to_client(context);
         } else {
             return get_writeback(context);
@@ -154,16 +176,17 @@ int get_timestamp_resp_handler(peer &p, int64_t ticket,
         return 0;
     }
 
-    return get_timestamp_resp_handler_action(*ctx, args->timestamp());
+    return get_timestamp_resp_handler_action(*ctx, args->timestamp(),
+                                             args->suspicious());
 }
 int get_timestamp_resp_handler_action(PutCallContext &context,
-                                      int64_t timestamp) {
+                                      int64_t timestamp, bool suspicious) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
 
-    context.add_get_reply(timestamp);
+    context.add_get_reply(timestamp, suspicious);
 
     if (context.get_done()) {
         return put_do_write(context);
@@ -208,7 +231,8 @@ int get_return_to_client(GetCallContext const &context) {
     }
 
     auto get_res = register_sgx::restart_rollback::CreateGetResult(
-        builder, context.key(), &fb_value, context.timestamp());
+        builder, context.key(), &fb_value, context.timestamp(),
+        true /* stable */, false /* suspicious */);
 
     auto result = register_sgx::restart_rollback::CreateMessage(
         builder, register_sgx::restart_rollback::MessageType_proxy_get_resp,
@@ -318,6 +342,9 @@ int put_resp_handler_get_action(GetCallContext &context, bool success,
 
     context.add_writeback_reply();
     if (context.call_done()) {
+        if (do_stabilize(context, true /* to_outdated */) != 0) {
+            ERROR("failed to broadcast stabilize");
+        }
         return get_return_to_client(context);
     }
     return 0;
@@ -333,6 +360,27 @@ int put_resp_handler_put_action(PutCallContext &context, bool success,
         return put_return_to_client(context);
     }
     return 0;
+}
+
+int do_stabilize(GetCallContext const &context, bool to_outdated) {
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto stabilize_args = register_sgx::restart_rollback::CreateStabilizeArgs(
+        builder, context.key(), context.timestamp());
+
+    auto stabilize_request = register_sgx::restart_rollback::CreateMessage(
+        builder, register_sgx::restart_rollback::MessageType_stabilize_req,
+        context.ticket(),
+        register_sgx::restart_rollback::BasicMessage_StabilizeArgs,
+        stabilize_args.Union());
+
+    builder.Finish(stabilize_request);
+
+    g_kv_store.stabilize(context.key(), context.timestamp());
+    return register_sgx::restart_rollback::handler_helper::broadcast_to(
+        to_outdated ? context.all_stabilize_indices()
+                    : context.unstable_indices(),
+        std::move(builder));
 }
 
 }  // anonymous namespace

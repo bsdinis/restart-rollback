@@ -12,6 +12,8 @@
 namespace register_sgx {
 namespace restart_rollback {
 
+extern size_t g_crash_tolerance;
+extern size_t g_rollback_tolerance;
 extern int32_t g_client_id;
 
 extern ::std::vector<peer> g_servers;
@@ -60,7 +62,12 @@ std::pair<int64_t, bool> g_proxy_put_result;
 ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 
 namespace {
-inline size_t quorum_size() { return ((g_servers.size() - 1) / 2) + 1; }
+inline size_t write_quorum_size() {
+    return std::max<size_t>(g_crash_tolerance, g_rollback_tolerance) + 1;
+}
+inline size_t read_quorum_size(size_t s) {
+    return std::min<size_t>(g_rollback_tolerance, s) + g_crash_tolerance + 1;
+}
 
 int send_payload_to(peer &server, uint8_t const *payload, size_t size) {
     if (server.append(&size, 1) == -1) {
@@ -137,14 +144,15 @@ int greeting_handler(size_t peer_idx, int32_t id);
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                 std::array<uint8_t, REGISTER_SIZE> const &value,
-                int64_t timestamp);
+                int64_t timestamp, bool stable, bool suspicious);
 int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                          int64_t timestamp);
+                          int64_t timestamp, bool suspicious);
 GetContext *get_get_ctx(int64_t ticket, call_type type);
 int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
                            int64_t key,
                            std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp, call_type type);
+                           int64_t timestamp, bool stable, bool suspicious,
+                           call_type type);
 int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
                                  int64_t timestamp, bool success,
                                  call_type type);
@@ -163,7 +171,7 @@ int put_handler(size_t peer_idx, int64_t ticket, bool success,
                 int64_t timestamp);
 PutContext *get_put_ctx(int64_t ticket, call_type type);
 int put_protocol_get_round(PutContext &ctx, int64_t ticket, int64_t key,
-                           int64_t timestamp, call_type type);
+                           int64_t timestamp, bool suspicious, call_type type);
 int put_protocol_put_round(PutContext &ctx, int64_t ticket, int64_t timestamp,
                            bool success, call_type type);
 
@@ -301,6 +309,29 @@ int send_writeback_request_to(int64_t ticket, int64_t key,
     auto request = register_sgx::restart_rollback::CreateMessage(
         builder, register_sgx::restart_rollback::MessageType_put_req, ticket,
         register_sgx::restart_rollback::BasicMessage_PutArgs, put_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (send_payload_to_list(send_list, payload, size) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int send_stabilize_request_to(int64_t ticket, int64_t key, int64_t timestamp,
+                              std::vector<size_t> send_list) {
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto stabilize_args = register_sgx::restart_rollback::CreateStabilizeArgs(
+        builder, key, timestamp);
+
+    auto request = register_sgx::restart_rollback::CreateMessage(
+        builder, register_sgx::restart_rollback::MessageType_stabilize_req,
+        ticket, register_sgx::restart_rollback::BasicMessage_StabilizeArgs,
+        stabilize_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();
@@ -469,14 +500,17 @@ int handle_received_message(size_t idx, peer &p) {
                 }
                 get_handler(idx, response->ticket(),
                             response->message_as_GetResult()->key(), value,
-                            response->message_as_GetResult()->timestamp());
+                            response->message_as_GetResult()->timestamp(),
+                            response->message_as_GetResult()->stable(),
+                            response->message_as_GetResult()->suspicious());
                 break;
             case register_sgx::restart_rollback::MessageType_get_timestamp_resp:
                 FINE("get timestamp response [ticket %ld]", response->ticket());
                 get_timestamp_handler(
                     idx, response->ticket(),
                     response->message_as_GetTimestampResult()->key(),
-                    response->message_as_GetTimestampResult()->timestamp());
+                    response->message_as_GetTimestampResult()->timestamp(),
+                    response->message_as_GetTimestampResult()->suspicious());
                 break;
             case register_sgx::restart_rollback::MessageType_put_resp:
                 FINE("put response [ticket %ld]", response->ticket());
@@ -550,7 +584,7 @@ int greeting_handler(size_t peer_idx, int32_t id) {
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                 std::array<uint8_t, REGISTER_SIZE> const &value,
-                int64_t timestamp) {
+                int64_t timestamp, bool stable, bool suspicious) {
     call_type const type = get_call_type(ticket);
 
     if (operation_finished(ticket, type)) {
@@ -566,7 +600,7 @@ int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
         }
 
         return get_protocol_get_round(*ctx, peer_idx, ticket, key, value,
-                                      timestamp, type);
+                                      timestamp, stable, suspicious, type);
     }
 
     ERROR(
@@ -577,7 +611,7 @@ int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
 }
 
 int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                          int64_t timestamp) {
+                          int64_t timestamp, bool suspicious) {
     call_type const type = get_call_type(ticket);
 
     if (operation_finished(ticket, type)) {
@@ -592,7 +626,8 @@ int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
             return -1;
         }
 
-        return put_protocol_get_round(*ctx, ticket, key, timestamp, type);
+        return put_protocol_get_round(*ctx, ticket, key, timestamp, suspicious,
+                                      type);
     }
 
     ERROR(
@@ -618,13 +653,31 @@ GetContext *get_get_ctx(int64_t ticket, call_type type) {
 int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
                            int64_t key,
                            std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp, call_type type) {
-    if (!ctx.add_get_resp(peer_idx, value, timestamp)) {
+                           int64_t timestamp, bool stable, bool suspicious,
+                           call_type type) {
+    if (!ctx.in_read_phase()) {
+        return 0;
+    }
+    if (!ctx.add_get_resp(peer_idx, value, timestamp, stable, suspicious)) {
         return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
                           false, type);
-    } else if (ctx.finished_get_phase(quorum_size())) {
+    }
+
+    if (ctx.finished_early_get_phase(read_quorum_size(ctx.n_suspicions()))) {
+        if (ctx.is_stable()) {
+            ctx.finish_get_phase();
+            return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
+                              ctx.success(), type);
+        }
+    }
+
+    if (ctx.finished_get_phase(write_quorum_size())) {
         ctx.finish_get_phase();
         if (ctx.is_unanimous()) {
+            if (send_stabilize_request_to(ticket, ctx.key(), ctx.timestamp(),
+                                          ctx.unstable_server_idx()) != 0) {
+                ERROR("failed to issue stabilize request for %ld", ticket);
+            }
             return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
                               ctx.success(), type);
         }
@@ -645,7 +698,12 @@ int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
     if (!ctx.add_put_resp()) {
         return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
                           false, type);
-    } else if (ctx.finished_writeback(quorum_size())) {
+    } else if (ctx.finished_writeback(write_quorum_size())) {
+        if (send_stabilize_request_to(ticket, ctx.key(), ctx.timestamp(),
+                                      ctx.unstable_or_outdated_server_idx()) !=
+            0) {
+            ERROR("failed to issue stabilize request for %ld", ticket);
+        }
         return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
                           ctx.success(), type);
     }
@@ -757,10 +815,10 @@ PutContext *get_put_ctx(int64_t ticket, call_type type) {
 }
 
 int put_protocol_get_round(PutContext &ctx, int64_t ticket, int64_t key,
-                           int64_t timestamp, call_type type) {
-    if (!ctx.add_get_resp(timestamp)) {
+                           int64_t timestamp, bool suspicious, call_type type) {
+    if (!ctx.add_get_resp(timestamp, suspicious)) {
         return put_finish(ticket, -1, false, type);
-    } else if (ctx.finished_get_phase(quorum_size()) &&
+    } else if (ctx.finished_get_phase(read_quorum_size(ctx.n_suspicions())) &&
                !ctx.started_put_phase()) {
         ctx.finish_get_phase();
         if (send_put_request(ticket, key, ctx.value(), ctx.next_timestamp(),
@@ -776,7 +834,7 @@ int put_protocol_put_round(PutContext &ctx, int64_t ticket, int64_t timestamp,
                            bool success, call_type type) {
     if (!ctx.add_put_resp()) {
         return put_finish(ticket, -1, false, type);
-    } else if (ctx.finished_put_phase(quorum_size())) {
+    } else if (ctx.finished_put_phase(write_quorum_size())) {
         return put_finish(ticket, ctx.next_timestamp(), ctx.success(), type);
     }
 

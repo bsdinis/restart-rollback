@@ -9,18 +9,28 @@ namespace restart_rollback {
 // get context
 
 void GetCallContext::add_get_reply(
-    int64_t peer_idx, int64_t timestamp,
+    ssize_t peer_idx, int64_t timestamp, bool stable, bool suspicious,
     std::array<uint8_t, REGISTER_SIZE> const& value) {
     m_n_get_replies += 1;
+
+    if (suspicious) {
+        m_n_suspicions += 1;
+    }
+
     if (timestamp > m_timestamp) {
         m_timestamp = timestamp;
+        m_stable = stable;
         std::copy(std::begin(value), std::end(value), std::begin(m_value));
+    } else if (timestamp == m_timestamp) {
+        m_stable = m_stable || stable;
     }
 
     if (peer_idx >= 0) {
         m_peer_timestamps[peer_idx] = timestamp;
+        m_peer_stable[peer_idx] = stable;
     } else {
         m_self_timestamp = timestamp;
+        m_self_stable = stable;
     }
 }
 void GetCallContext::add_writeback_reply() { m_n_up_to_date += 1; }
@@ -32,6 +42,9 @@ void GetCallContext::finish_get_phase() {
             m_outdated_idx.emplace_back(idx);
         } else if (timestamp == m_timestamp) {
             m_n_up_to_date += 1;
+            if (!m_peer_stable[idx]) {
+                m_unstable_idx.emplace_back(idx);
+            }
         }
     }
 
@@ -41,9 +54,13 @@ void GetCallContext::finish_get_phase() {
 }
 
 // put context
-void PutCallContext::add_get_reply(int64_t timestamp) {
+void PutCallContext::add_get_reply(int64_t timestamp, bool suspicious) {
     if (timestamp > m_timestamp) {
         m_timestamp = timestamp;
+    }
+
+    if (suspicious) {
+        m_n_suspicions += 1;
     }
     m_n_get_replies += 1;
 }

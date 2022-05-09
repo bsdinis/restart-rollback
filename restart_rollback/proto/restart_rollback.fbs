@@ -24,6 +24,8 @@ enum MessageType:byte {
     reset_req,
     reset_resp,
 
+    stabilize_req,
+
     close_req,
 }
 
@@ -39,6 +41,7 @@ table GetResult {
     key : int64;
     value : Value;
     timestamp: int64;
+    stable: bool;
     suspicious: bool;
 }
 
@@ -69,6 +72,11 @@ table PutResult {
     timestamp: int64;
 }
 
+table StabilizeArgs {
+    key : int64;
+    timestamp: int64;
+}
+
 table Greeting {
     id: int32;
 }
@@ -84,6 +92,7 @@ union BasicMessage {
     ProxyPutArgs,
     PutArgs,
     PutResult,
+    StabilizeArgs,
     Empty,
 }
 

@@ -19,8 +19,9 @@ namespace restart_rollback {
 struct TimestampedValue {
     std::array<uint8_t, REGISTER_SIZE> m_val;
     int64_t m_timestamp;
+    bool m_stable;
 
-    TimestampedValue(Value const *val, int64_t timestamp)
+    TimestampedValue(Value const *val, int64_t timestamp, bool stable)
         : m_timestamp(timestamp) {
         for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
             m_val[idx] = val->data()->Get(idx);
@@ -56,10 +57,12 @@ class KeyValueStore {
     void add_backing_store(void *persistent_backed_store,
                            size_t persistent_backed_store_size);
 
-    int64_t get(int64_t key, std::array<uint8_t, REGISTER_SIZE> *val);
-    int64_t get_timestamp(int64_t key);
+    int64_t get(int64_t key, bool *stable, bool *suspicious,
+                std::array<uint8_t, REGISTER_SIZE> *val);
+    int64_t get_timestamp(int64_t key, bool *suspicious);
     bool put(int64_t key, Value const *val, int64_t timestamp,
              int64_t *current_timestamp);
+    void stabilize(int64_t key, int64_t timestamp);
     void reset();
 };
 

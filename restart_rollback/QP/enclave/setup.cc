@@ -35,7 +35,9 @@ SSL_CTX* ssl_server_ctx;
 SSL_CTX* ssl_client_ctx;
 bool closed_ = false;
 
-size_t g_fault_tolerance = 0;
+size_t g_crash_faults = 0;
+size_t g_rollback_faults = 0;
+bool g_is_fresh = false;
 
 char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
@@ -104,8 +106,10 @@ void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
            size_t f) {
     g_my_idx = idx;
     g_kv_store.add_backing_store(file_mapping, mapping_size);
-    g_fault_tolerance = f;
+    g_rollback_faults = conf->r;
+    g_crash_faults = conf->f;
     config_node_t& node = conf->nodes[idx];
+    g_is_fresh = node.fresh;
     char addr[50];
     ocall_net_get_my_ipv4_addr(addr, 50);
 
@@ -177,8 +181,18 @@ int client_listen_sock() { return client_listen_sock_; }
 int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
 
-size_t quorum_size() { return g_fault_tolerance + 1; }
-size_t n_replicas() { return 2 * g_fault_tolerance + 1; }
+size_t write_quorum_size() {
+    return std::max<size_t>(g_rollback_faults, g_crash_faults) + 1;
+}
+size_t read_quorum_size(size_t suspicions) {
+    return std::min<size_t>(g_rollback_faults, suspicions) + g_crash_faults + 1;
+}
+bool is_suspicious() { return !g_is_fresh; }
+
+size_t n_replicas() {
+    return std::max<size_t>(g_rollback_faults, g_crash_faults) +
+           g_crash_faults + 1;
+}
 ssize_t my_idx() { return g_my_idx; }
 
 }  // namespace setup

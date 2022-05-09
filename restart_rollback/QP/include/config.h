@@ -19,14 +19,18 @@ extern "C" {
 #endif
 
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef struct config_node_t {
     char *	addr; // ipv4
     int		port; // positive
+    bool    fresh;
 } config_node_t;
 
 typedef struct config_t {
     size_t size;
+    size_t r;
+    size_t f;
     config_node_t * nodes;
 } config_t;
 
