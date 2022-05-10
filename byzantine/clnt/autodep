@@ -1,0 +1,14 @@
+close_remote.o: close_remote.cc log.h qp_clnt.h qp_config.h
+config.o: config.cc config.h log.h
+latency_test.o: latency_test.cc log.h qp_clnt.h qp_config.h
+peer.o: peer.cc log.h peer.h ssl_util.h
+qp_clnt.o: qp_clnt.cc qp_clnt.h qp_config.h qp_context.h log.h \
+  qp_helpers.h peer.h qp_network.h config.h qp_result.h ssl_util.h \
+  byzantine_generated.h
+qp_helpers.o: qp_helpers.cc qp_helpers.h peer.h qp_context.h log.h \
+  qp_config.h qp_network.h config.h qp_result.h byzantine_generated.h
+qp_network.o: qp_network.cc qp_network.h config.h peer.h qp_helpers.h \
+  log.h ssl_util.h
+qp_test.o: qp_test.cc log.h qp_clnt.h qp_config.h
+ssl_util.o: ssl_util.cc ssl_util.h log.h
+throughput_test.o: throughput_test.cc log.h qp_clnt.h qp_config.h
