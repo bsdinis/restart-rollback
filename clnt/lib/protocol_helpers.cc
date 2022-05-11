@@ -1,9 +1,9 @@
 #include "protocol_helpers.h"
 
-#include "context.h"
 #include "log.h"
 #include "network.h"
 #include "result.h"
+#include "teems_config.h"
 #include "teems_generated.h"
 
 #include <algorithm>
@@ -19,180 +19,46 @@ extern ::std::vector<peer> g_servers;
 extern size_t g_calls_issued;
 extern size_t g_calls_concluded;
 
-extern GetContext g_get_sync_ctx;
-extern PutContext g_put_sync_ctx;
-
-extern ::std::unordered_map<int64_t, GetContext> g_get_ctx_map;
-extern ::std::unordered_map<int64_t, PutContext> g_put_ctx_map;
-
 extern std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                           int64_t, bool)>
     g_get_callback;
 extern std::function<void(int64_t, bool, int64_t)> g_put_callback;
 extern std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                           int64_t)>
-    g_proxy_get_callback;
-extern std::function<void(int64_t, bool, int64_t)> g_proxy_put_callback;
+    g_metadata_get_callback;
+extern std::function<void(int64_t, bool, int64_t)> g_metadata_put_callback;
 extern std::function<void(int64_t)> g_ping_callback;
 extern std::function<void(int64_t)> g_reset_callback;
 
 // global variables to channel the results of synchronous calls to
 
-// get
-int64_t g_get_key_result = -1;
-int64_t g_get_timestamp_result = -1;
-::std::array<uint8_t, REGISTER_SIZE> g_get_value_result;
-bool g_get_success_result = false;
-int64_t g_get_sync_ticket = -1;
-
-// put
-int64_t g_put_timestamp_result;
-bool g_put_success_result = false;
-int64_t g_put_sync_ticket = -1;
-
-// proxy get
+// metadata get
 std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
-    g_proxy_get_result;
+    g_metadata_get_result;
 
-// proxy put
-std::pair<int64_t, bool> g_proxy_put_result;
+// metadata put
+std::pair<int64_t, bool> g_metadata_put_result;
 
 // async results
 ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 
 namespace {
-inline size_t write_quorum_size() {
-    return std::max<size_t>(g_crash_tolerance, g_rollback_tolerance) + 1;
-}
-inline size_t read_quorum_size(size_t s) {
-    return std::min<size_t>(g_rollback_tolerance, s) + g_crash_tolerance + 1;
-}
-
-int send_payload_to(peer &server, uint8_t const *payload, size_t size) {
-    if (server.append(&size, 1) == -1) {
-        // encode message header
-        ERROR("failed to prepare message to send");
-        return -1;
-    }
-    if (server.append(payload, size) == -1) {  // then the segment itself
-        ERROR("failed to prepare message to send");
-        return -1;
-    }
-
-    return 0;
-}
-
-int send_payload_to_all(uint8_t const *payload, size_t size) {
-    for (ssize_t idx = 0; idx < g_servers.size(); ++idx) {
-        auto &server = g_servers[idx];
-        if (send_payload_to(server, payload, size) != 0) {
-            ERROR("failed to send message to server %ld", idx);
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-int send_payload_to_list(std::vector<size_t> send_list, uint8_t const *payload,
-                         size_t size) {
-    std::sort(std::begin(send_list), std::end(send_list));
-    auto it = std::unique(std::begin(send_list), std::end(send_list));
-    send_list.resize(std::distance(std::begin(send_list), it));
-    for (size_t idx : send_list) {
-        if (idx >= g_servers.size()) {
-            break;
-        }
-
-        if (send_payload_to(g_servers[idx], payload, size) != 0) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-inline bool is_get(int64_t ticket, call_type type) {
-    if (type == call_type::SYNC) {
-        return g_get_sync_ticket == ticket;
-    }
-
-    return g_get_ctx_map.find(ticket) != g_get_ctx_map.end();
-}
-
-inline bool is_put(int64_t ticket, call_type type) {
-    if (type == call_type::SYNC) {
-        return g_put_sync_ticket == ticket;
-    }
-
-    return g_put_ctx_map.find(ticket) != g_put_ctx_map.end();
-}
-
-inline bool operation_finished(int64_t ticket, call_type type) {
-    if (type == call_type::SYNC) {
-        return g_get_sync_ticket != ticket && g_put_sync_ticket != ticket;
-    }
-
-    return g_get_ctx_map.find(ticket) == g_get_ctx_map.end() &&
-           g_put_ctx_map.find(ticket) == g_put_ctx_map.end();
-}
-
-call_type get_call_type(int64_t ticket);
-
 int greeting_handler(size_t peer_idx, int32_t id);
 
-int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                std::array<uint8_t, REGISTER_SIZE> const &value,
-                int64_t timestamp, bool stable, bool suspicious);
-int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                          int64_t timestamp, bool suspicious);
-GetContext *get_get_ctx(int64_t ticket, call_type type);
-int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
-                           int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp, bool stable, bool suspicious,
-                           call_type type);
-int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
-                                 int64_t timestamp, bool success,
-                                 call_type type);
+int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                         std::array<uint8_t, REGISTER_SIZE> const &value,
+                         int64_t timestamp);
+int metadata_get_handler_sync(int64_t ticket, int64_t key,
+                              std::array<uint8_t, REGISTER_SIZE> const &value,
+                              int64_t timestamp);
+int metadata_get_handler_async(int64_t ticket, int64_t key,
+                               std::array<uint8_t, REGISTER_SIZE> const &value,
+                               int64_t timestamp);
 
-int get_finish(int64_t ticket, int64_t key, int64_t timestamp,
-               ::std::array<uint8_t, REGISTER_SIZE> value, bool success,
-               call_type type);
-int get_finish_sync(int64_t ticket, int64_t key, int64_t timestamp,
-                    ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
-int get_finish_async(int64_t ticket, int64_t key, int64_t timestamp,
-                     ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
-int get_finish_cb(int64_t ticket, int64_t key, int64_t timestamp,
-                  ::std::array<uint8_t, REGISTER_SIZE> value, bool success);
-
-int put_handler(size_t peer_idx, int64_t ticket, bool success,
-                int64_t timestamp);
-PutContext *get_put_ctx(int64_t ticket, call_type type);
-int put_protocol_get_round(PutContext &ctx, int64_t ticket, int64_t key,
-                           int64_t timestamp, bool suspicious, call_type type);
-int put_protocol_put_round(PutContext &ctx, int64_t ticket, int64_t timestamp,
-                           bool success, call_type type);
-
-int put_finish(int64_t ticket, int64_t timestamp, bool success, call_type type);
-int put_finish_sync(int64_t ticket, int64_t timestamp, bool success);
-int put_finish_async(int64_t ticket, int64_t timestamp, bool success);
-int put_finish_cb(int64_t ticket, int64_t timestamp, bool success);
-
-int proxy_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                      std::array<uint8_t, REGISTER_SIZE> const &value,
-                      int64_t timestamp);
-int proxy_get_handler_sync(int64_t ticket, int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp);
-int proxy_get_handler_async(int64_t ticket, int64_t key,
-                            std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp);
-
-int proxy_put_handler(size_t peer_idx, int64_t ticket, bool success,
-                      int64_t timestamp);
-int proxy_put_handler_sync(int64_t ticket, bool success, int64_t timestamp);
-int proxy_put_handler_async(int64_t ticket, bool success, int64_t timestamp);
+int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
+                         int64_t timestamp);
+int metadata_put_handler_sync(int64_t ticket, bool success, int64_t timestamp);
+int metadata_put_handler_async(int64_t ticket, bool success, int64_t timestamp);
 
 int ping_handler(size_t peer_idx, int64_t ticket);
 int ping_handler_sync();
@@ -207,137 +73,7 @@ int reset_handler_async(int64_t ticket);
 // =================================
 // send request
 // =================================
-int64_t send_get_request(int64_t key, call_type type) {
-    int64_t const ticket = gen_ticket(type);
-
-    flatbuffers::FlatBufferBuilder builder;
-    auto get_args = teems::CreateGetArgs(builder, key);
-
-    auto request =
-        teems::CreateMessage(builder, teems::MessageType_get_req, ticket,
-                             teems::BasicMessage_GetArgs, get_args.Union());
-    builder.Finish(request);
-
-    size_t const size = builder.GetSize();
-    uint8_t const *payload = builder.GetBufferPointer();
-
-    if (send_payload_to_all(payload, size) != 0) {
-        return -1;
-    }
-
-    g_calls_issued++;
-    return ticket;
-}
-
-int64_t send_get_timestamp_request(int64_t key, call_type type) {
-    int64_t const ticket = gen_ticket(type);
-
-    flatbuffers::FlatBufferBuilder builder;
-    auto get_args = teems::CreateGetTimestampArgs(builder, key);
-
-    auto request = teems::CreateMessage(
-        builder, teems::MessageType_get_timestamp_req, ticket,
-        teems::BasicMessage_GetTimestampArgs, get_args.Union());
-    builder.Finish(request);
-
-    size_t const size = builder.GetSize();
-    uint8_t const *payload = builder.GetBufferPointer();
-
-    if (send_payload_to_all(payload, size) != 0) {
-        return -1;
-    }
-
-    g_calls_issued++;
-    return ticket;
-}
-
-int send_put_request(int64_t ticket, int64_t key,
-                     std::array<uint8_t, REGISTER_SIZE> const &value,
-                     int64_t timestamp, call_type type) {
-    flatbuffers::FlatBufferBuilder builder;
-
-    auto fb_value = teems::Value();
-    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
-    {
-        for (size_t idx = 0; idx < value.size(); ++idx) {
-            fb_arr->Mutate(idx, value[idx]);
-        }
-    }
-
-    auto put_args = teems::CreatePutArgs(builder, key, &fb_value, timestamp);
-
-    auto request =
-        teems::CreateMessage(builder, teems::MessageType_put_req, ticket,
-                             teems::BasicMessage_PutArgs, put_args.Union());
-    builder.Finish(request);
-
-    size_t const size = builder.GetSize();
-    uint8_t const *payload = builder.GetBufferPointer();
-
-    if (send_payload_to_all(payload, size) != 0) {
-        ERROR("failed to send put request to replicas [ticket %ld]", ticket);
-        return -1;
-    }
-
-    return 0;
-}
-
-int send_writeback_request_to(int64_t ticket, int64_t key,
-                              std::array<uint8_t, REGISTER_SIZE> const &value,
-                              int64_t timestamp, call_type type,
-                              std::vector<size_t> send_list) {
-    flatbuffers::FlatBufferBuilder builder;
-
-    auto fb_value = teems::Value();
-    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
-    {
-        ssize_t idx = 0;
-        for (auto x : value) {
-            fb_arr->Mutate(idx, x);
-        }
-    }
-
-    auto put_args = teems::CreatePutArgs(builder, key, &fb_value, timestamp);
-
-    auto request =
-        teems::CreateMessage(builder, teems::MessageType_put_req, ticket,
-                             teems::BasicMessage_PutArgs, put_args.Union());
-    builder.Finish(request);
-
-    size_t const size = builder.GetSize();
-    uint8_t const *payload = builder.GetBufferPointer();
-
-    if (send_payload_to_list(send_list, payload, size) != 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-int send_stabilize_request_to(int64_t ticket, int64_t key, int64_t timestamp,
-                              std::vector<size_t> send_list) {
-    flatbuffers::FlatBufferBuilder builder;
-
-    auto stabilize_args = teems::CreateStabilizeArgs(builder, key, timestamp);
-
-    auto request = teems::CreateMessage(
-        builder, teems::MessageType_stabilize_req, ticket,
-        teems::BasicMessage_StabilizeArgs, stabilize_args.Union());
-    builder.Finish(request);
-
-    size_t const size = builder.GetSize();
-    uint8_t const *payload = builder.GetBufferPointer();
-
-    if (send_payload_to_list(send_list, payload, size) != 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-int64_t send_proxy_get_request(peer &server, int64_t key, call_type type) {
+int64_t send_metadata_get_request(peer &server, int64_t key, call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
@@ -365,9 +101,9 @@ int64_t send_proxy_get_request(peer &server, int64_t key, call_type type) {
     return ticket;
 }
 
-int64_t send_proxy_put_request(peer &server, int64_t key,
-                               std::array<uint8_t, REGISTER_SIZE> const &value,
-                               call_type type) {
+int64_t send_metadata_put_request(
+    peer &server, int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
+    call_type type) {
     int64_t const ticket = gen_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
@@ -481,33 +217,6 @@ int handle_received_message(size_t idx, peer &p) {
                 FINE("greeting: %d", response->message_as_Greeting()->id());
                 greeting_handler(idx, response->message_as_Greeting()->id());
                 break;
-            case teems::MessageType_get_resp:
-                FINE("get response [ticket %ld]", response->ticket());
-                for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
-                    value[idx] =
-                        response->message_as_GetResult()->value()->data()->Get(
-                            idx);
-                }
-                get_handler(idx, response->ticket(),
-                            response->message_as_GetResult()->key(), value,
-                            response->message_as_GetResult()->timestamp(),
-                            response->message_as_GetResult()->stable(),
-                            response->message_as_GetResult()->suspicious());
-                break;
-            case teems::MessageType_get_timestamp_resp:
-                FINE("get timestamp response [ticket %ld]", response->ticket());
-                get_timestamp_handler(
-                    idx, response->ticket(),
-                    response->message_as_GetTimestampResult()->key(),
-                    response->message_as_GetTimestampResult()->timestamp(),
-                    response->message_as_GetTimestampResult()->suspicious());
-                break;
-            case teems::MessageType_put_resp:
-                FINE("put response [ticket %ld]", response->ticket());
-                put_handler(idx, response->ticket(),
-                            response->message_as_PutResult()->success(),
-                            response->message_as_PutResult()->timestamp());
-                break;
             case teems::MessageType_proxy_get_resp:
                 FINE("proxy get response [ticket %ld]", response->ticket());
                 for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
@@ -515,14 +224,14 @@ int handle_received_message(size_t idx, peer &p) {
                         response->message_as_GetResult()->value()->data()->Get(
                             idx);
                 }
-                proxy_get_handler(
+                metadata_get_handler(
                     idx, response->ticket(),
                     response->message_as_GetResult()->key(), value,
                     response->message_as_GetResult()->timestamp());
                 break;
             case teems::MessageType_proxy_put_resp:
                 FINE("proxy put response [ticket %ld]", response->ticket());
-                proxy_put_handler(
+                metadata_put_handler(
                     idx, response->ticket(),
                     response->message_as_PutResult()->success(),
                     response->message_as_PutResult()->timestamp());
@@ -551,19 +260,6 @@ bool has_result(int64_t ticket) {
 
 namespace {
 
-call_type get_call_type(int64_t ticket) {
-    switch (ticket % 3) {
-        case 0:
-            return call_type::SYNC;
-        case 1:  // ASYNC
-            return call_type::ASYNC;
-        case 2:  // CALLBACK
-            return call_type::CALLBACK;
-    }
-    __builtin_unreachable();
-    return call_type::SYNC;
-}
-
 int greeting_handler(size_t peer_idx, int32_t id) {
     if (id >= 0) {
         g_client_id = id;
@@ -572,318 +268,16 @@ int greeting_handler(size_t peer_idx, int32_t id) {
     return 0;
 }
 
-int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                std::array<uint8_t, REGISTER_SIZE> const &value,
-                int64_t timestamp, bool stable, bool suspicious) {
-    call_type const type = get_call_type(ticket);
-
-    if (operation_finished(ticket, type)) {
-        FINE("already finished operation with ticket %ld", ticket);
-        return 0;
-    }
-
-    if (is_get(ticket, type)) {
-        GetContext *ctx = get_get_ctx(ticket, type);
-        if (ctx == nullptr) {
-            ERROR("Failed to retrieve context for ticket %ld", ticket);
-            return -1;
-        }
-
-        return get_protocol_get_round(*ctx, peer_idx, ticket, key, value,
-                                      timestamp, stable, suspicious, type);
-    }
-
-    ERROR(
-        "received a get response to an operation which 1: has not finished; 2: "
-        "is not a get. [ticket %ld]",
-        ticket);
-    return -1;
-}
-
-int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                          int64_t timestamp, bool suspicious) {
-    call_type const type = get_call_type(ticket);
-
-    if (operation_finished(ticket, type)) {
-        FINE("already finished operation with ticket %ld", ticket);
-        return 0;
-    }
-
-    if (is_put(ticket, type)) {
-        PutContext *ctx = get_put_ctx(ticket, type);
-        if (ctx == nullptr) {
-            ERROR("Failed to retrieve context for ticket %ld", ticket);
-            return -1;
-        }
-
-        return put_protocol_get_round(*ctx, ticket, key, timestamp, suspicious,
-                                      type);
-    }
-
-    ERROR(
-        "received a get timestamp response to an operation which 1: has not "
-        "finished; 2: is not a put. [ticket %ld]",
-        ticket);
-    return -1;
-}
-
-GetContext *get_get_ctx(int64_t ticket, call_type type) {
-    if (type == call_type::SYNC) {
-        return (g_get_sync_ticket == ticket) ? &g_get_sync_ctx : nullptr;
-    }
-
-    auto it = g_get_ctx_map.find(ticket);
-    if (it == g_get_ctx_map.end()) {
-        return nullptr;
-    }
-
-    return &it->second;
-}
-
-int get_protocol_get_round(GetContext &ctx, size_t peer_idx, int64_t ticket,
-                           int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp, bool stable, bool suspicious,
-                           call_type type) {
-    if (!ctx.in_read_phase()) {
-        return 0;
-    }
-    if (!ctx.add_get_resp(peer_idx, value, timestamp, stable, suspicious)) {
-        return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
-                          false, type);
-    }
-
-    if (ctx.finished_early_get_phase(read_quorum_size(ctx.n_suspicions()))) {
-        if (ctx.is_stable()) {
-            ctx.finish_get_phase();
-            return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
-                              ctx.success(), type);
-        }
-    }
-
-    if (ctx.finished_get_phase(write_quorum_size())) {
-        ctx.finish_get_phase();
-        if (ctx.is_unanimous()) {
-            if (send_stabilize_request_to(ticket, ctx.key(), ctx.timestamp(),
-                                          ctx.unstable_server_idx()) != 0) {
-                ERROR("failed to issue stabilize request for %ld", ticket);
-            }
-            return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
-                              ctx.success(), type);
-        }
-
-        if (send_writeback_request_to(ticket, key, ctx.value(), ctx.timestamp(),
-                                      type,
-                                      ctx.out_of_date_server_idx()) != 0) {
-            ERROR("failed to issue writeback request for %ld", ticket);
-        }
-    }
-
+// metadata get
+int metadata_get_handler_sync(int64_t ticket, int64_t key,
+                              std::array<uint8_t, REGISTER_SIZE> const &value,
+                              int64_t timestamp) {
+    g_metadata_get_result = std::make_tuple(key, value, timestamp);
     return 0;
 }
-
-int get_protocol_writeback_round(GetContext &ctx, int64_t ticket,
-                                 int64_t timestamp, bool success,
-                                 call_type type) {
-    if (!ctx.add_put_resp()) {
-        return get_finish(ticket, -1, -1, std::array<uint8_t, REGISTER_SIZE>(),
-                          false, type);
-    } else if (ctx.finished_writeback(write_quorum_size())) {
-        if (send_stabilize_request_to(ticket, ctx.key(), ctx.timestamp(),
-                                      ctx.unstable_or_outdated_server_idx()) !=
-            0) {
-            ERROR("failed to issue stabilize request for %ld", ticket);
-        }
-        return get_finish(ticket, ctx.key(), ctx.timestamp(), ctx.value(),
-                          ctx.success(), type);
-    }
-
-    return 0;
-}
-
-int get_finish(int64_t ticket, int64_t key, int64_t timestamp,
-               ::std::array<uint8_t, REGISTER_SIZE> value, bool success,
-               call_type type) {
-    g_calls_concluded++;
-    switch (type) {
-        case call_type::SYNC:
-            return get_finish_sync(ticket, key, timestamp, value, success);
-        case call_type::ASYNC:
-            return get_finish_async(ticket, key, timestamp, value, success);
-        case call_type::CALLBACK:
-            return get_finish_cb(ticket, key, timestamp, value, success);
-    }
-}
-
-int get_finish_sync(int64_t, int64_t key, int64_t timestamp,
-                    ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
-    g_get_key_result = key;
-    g_get_timestamp_result = timestamp;
-    std::copy(std::cbegin(value), std::cend(value),
-              std::begin(g_get_value_result));
-    g_get_success_result = success;
-    g_get_sync_ticket = -1;
-    return 0;
-}
-int get_finish_async(int64_t ticket, int64_t key, int64_t timestamp,
-                     ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
-    auto it = g_get_ctx_map.find(ticket);
-    if (it == g_get_ctx_map.end()) {
-        return 0;
-    }
-    g_get_ctx_map.erase(it);
-    g_results_map.emplace(
-        ticket,
-        std::unique_ptr<result>(
-            std::make_unique<one_val_result<std::tuple<
-                int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool>>>(
-                one_val_result<
-                    std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                               int64_t, bool>>(
-                    std::make_tuple(key, value, timestamp, success)))));
-    return 0;
-}
-
-int get_finish_cb(int64_t ticket, int64_t key, int64_t timestamp,
-                  ::std::array<uint8_t, REGISTER_SIZE> value, bool success) {
-    auto it = g_get_ctx_map.find(ticket);
-    if (it == g_get_ctx_map.end()) {
-        return 0;
-    }
-    g_get_ctx_map.erase(it);
-
-    g_get_callback(ticket, key, value, timestamp, success);
-    return 0;
-}
-
-// put
-int put_handler(size_t peer_idx, int64_t ticket, bool success,
-                int64_t timestamp) {
-    call_type const type = get_call_type(ticket);
-
-    if (operation_finished(ticket, type)) {
-        FINE("already finished operation with ticket %ld", ticket);
-        return 0;
-    }
-
-    if (is_get(ticket, type)) {
-        GetContext *ctx = get_get_ctx(ticket, type);
-        if (ctx == nullptr) {
-            ERROR("Failed to retrieve context for ticket %ld", ticket);
-            return -1;
-        }
-
-        return get_protocol_writeback_round(*ctx, ticket, timestamp, success,
-                                            type);
-    } else if (is_put(ticket, type)) {
-        PutContext *ctx = get_put_ctx(ticket, type);
-        if (ctx == nullptr) {
-            ERROR("Failed to retrieve context for ticket %ld", ticket);
-            return -1;
-        }
-        return put_protocol_put_round(*ctx, ticket, timestamp, success, type);
-    }
-
-    ERROR(
-        "received a put response to an operation which 1: has not finished; 2: "
-        "is not a get (writeback); 3: is not a put. [ticket %ld]",
-        ticket);
-    return -1;
-}
-
-PutContext *get_put_ctx(int64_t ticket, call_type type) {
-    if (type == call_type::SYNC) {
-        return (g_put_sync_ticket == ticket) ? &g_put_sync_ctx : nullptr;
-    }
-
-    auto it = g_put_ctx_map.find(ticket);
-    if (it == g_put_ctx_map.end()) {
-        return nullptr;
-    }
-
-    return &it->second;
-}
-
-int put_protocol_get_round(PutContext &ctx, int64_t ticket, int64_t key,
-                           int64_t timestamp, bool suspicious, call_type type) {
-    if (!ctx.add_get_resp(timestamp, suspicious)) {
-        return put_finish(ticket, -1, false, type);
-    } else if (ctx.finished_get_phase(read_quorum_size(ctx.n_suspicions())) &&
-               !ctx.started_put_phase()) {
-        ctx.finish_get_phase();
-        if (send_put_request(ticket, key, ctx.value(), ctx.next_timestamp(),
-                             type) != 0) {
-            ERROR("failed to issue write request for %ld", ticket);
-        }
-    }
-
-    return 0;
-}
-
-int put_protocol_put_round(PutContext &ctx, int64_t ticket, int64_t timestamp,
-                           bool success, call_type type) {
-    if (!ctx.add_put_resp()) {
-        return put_finish(ticket, -1, false, type);
-    } else if (ctx.finished_put_phase(write_quorum_size())) {
-        return put_finish(ticket, ctx.next_timestamp(), ctx.success(), type);
-    }
-
-    return 0;
-}
-
-int put_finish(int64_t ticket, int64_t timestamp, bool success,
-               call_type type) {
-    g_calls_concluded++;
-    switch (type) {
-        case call_type::SYNC:
-            return put_finish_sync(ticket, timestamp, success);
-        case call_type::ASYNC:
-            return put_finish_async(ticket, timestamp, success);
-        case call_type::CALLBACK:
-            return put_finish_cb(ticket, timestamp, success);
-    }
-}
-
-int put_finish_sync(int64_t ticket, int64_t timestamp, bool success) {
-    g_put_timestamp_result = timestamp;
-    g_put_success_result = success;
-    g_put_sync_ticket = -1;
-    return 0;
-}
-
-int put_finish_async(int64_t ticket, int64_t timestamp, bool success) {
-    auto it = g_put_ctx_map.find(ticket);
-    if (it == g_put_ctx_map.end()) {
-        return 0;
-    }
-    g_put_ctx_map.erase(it);
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(
-                    std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
-                        one_val_result<std::pair<int64_t, bool>>(
-                            std::make_pair(timestamp, success)))));
-    return 0;
-}
-int put_finish_cb(int64_t ticket, int64_t timestamp, bool success) {
-    auto it = g_put_ctx_map.find(ticket);
-    if (it == g_put_ctx_map.end()) {
-        return 0;
-    }
-    g_put_ctx_map.erase(it);
-    g_put_callback(ticket, success, timestamp);
-    return 0;
-}
-
-// proxy get
-int proxy_get_handler_sync(int64_t ticket, int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> const &value,
-                           int64_t timestamp) {
-    g_proxy_get_result = std::make_tuple(key, value, timestamp);
-    return 0;
-}
-int proxy_get_handler_async(int64_t ticket, int64_t key,
-                            std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp) {
+int metadata_get_handler_async(int64_t ticket, int64_t key,
+                               std::array<uint8_t, REGISTER_SIZE> const &value,
+                               int64_t timestamp) {
     g_results_map.emplace(
         ticket,
         std::unique_ptr<result>(
@@ -894,29 +288,30 @@ int proxy_get_handler_async(int64_t ticket, int64_t key,
                     std::make_tuple(key, value, timestamp)))));
     return 0;
 }
-int proxy_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                      std::array<uint8_t, REGISTER_SIZE> const &value,
-                      int64_t timestamp) {
+int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                         std::array<uint8_t, REGISTER_SIZE> const &value,
+                         int64_t timestamp) {
     g_calls_concluded++;
     switch (ticket % 3) {
         case 0:  // SYNC
-            return proxy_get_handler_sync(ticket, key, value, timestamp);
+            return metadata_get_handler_sync(ticket, key, value, timestamp);
         case 1:  // ASYNC
-            return proxy_get_handler_async(ticket, key, value, timestamp);
+            return metadata_get_handler_async(ticket, key, value, timestamp);
         case 2:  // CALLBACK
-            g_proxy_get_callback(ticket, key, value, timestamp);
+            g_metadata_get_callback(ticket, key, value, timestamp);
             return 0;
     }
     // unreachable (could use __builtin_unreachable)
     return -1;
 }
 
-// proxy put
-int proxy_put_handler_sync(int64_t ticket, bool success, int64_t timestamp) {
-    g_proxy_put_result = std::make_pair(timestamp, success);
+// metadata put
+int metadata_put_handler_sync(int64_t ticket, bool success, int64_t timestamp) {
+    g_metadata_put_result = std::make_pair(timestamp, success);
     return 0;
 }
-int proxy_put_handler_async(int64_t ticket, bool success, int64_t timestamp) {
+int metadata_put_handler_async(int64_t ticket, bool success,
+                               int64_t timestamp) {
     g_results_map.emplace(
         ticket, std::unique_ptr<result>(
                     std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
@@ -924,16 +319,16 @@ int proxy_put_handler_async(int64_t ticket, bool success, int64_t timestamp) {
                             std::make_pair(timestamp, success)))));
     return 0;
 }
-int proxy_put_handler(size_t peer_idx, int64_t ticket, bool success,
-                      int64_t timestamp) {
+int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
+                         int64_t timestamp) {
     g_calls_concluded++;
     switch (ticket % 3) {
         case 0:  // SYNC
-            return proxy_put_handler_sync(ticket, success, timestamp);
+            return metadata_put_handler_sync(ticket, success, timestamp);
         case 1:  // ASYNC
-            return proxy_put_handler_async(ticket, success, timestamp);
+            return metadata_put_handler_async(ticket, success, timestamp);
         case 2:  // CALLBACK
-            g_proxy_put_callback(ticket, success, timestamp);
+            g_metadata_put_callback(ticket, success, timestamp);
             return 0;
     }
     // unreachable (could use __builtin_unreachable)

@@ -67,10 +67,8 @@ size_t n_calls_outlasting();
  *
  * RPC-style calls
  */
-bool get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value, int64_t &timestamp);
-bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t &timestamp);
-bool proxy_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value, int64_t &timestamp);
-bool proxy_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t &timestamp);
+bool metadata_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value, int64_t &timestamp);
+bool metadata_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const& value, int64_t &timestamp);
 void ping(void);
 void reset(void);
 
@@ -84,10 +82,8 @@ void reset(void);
  * when a reply is ready, get_reply can be called (at most once per ticket) to retrieve the result
  *
  */
-int64_t get_async(int64_t key);
-int64_t put_async(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
-int64_t proxy_get_async(int64_t key);
-int64_t proxy_put_async(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
+int64_t metadata_get_async(int64_t key);
+int64_t metadata_put_async(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
 int64_t ping_async(void);
 int64_t reset_async(void);
 
@@ -111,17 +107,11 @@ T get_reply(int64_t ticket);
  */
 
 // -1 means error
-int get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool)> cb);
-int64_t get_cb(int64_t key);
+int metadata_get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t)> cb);
+int64_t metadata_get_cb(int64_t key);
 
-int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
-int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
-
-int proxy_get_set_cb(std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t)> cb);
-int64_t proxy_get_cb(int64_t key);
-
-int proxy_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
-int64_t proxy_put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
+int metadata_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb);
+int64_t metadata_put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);

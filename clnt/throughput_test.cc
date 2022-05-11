@@ -61,19 +61,16 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
     {"get",
      {// if you need to use more intricate things for the arguments, you can add
       // global variables
-      []() -> int64_t { return get_cb(1); },
+      []() -> int64_t { return metadata_get_cb(1); },
       []() {
           auto get_callbck = [](int64_t ticket, int64_t,
                                 std::array<uint8_t, teems::REGISTER_SIZE>,
-                                int64_t, bool success) {
-              if (success) {
-                  fprintf(stdout,
-                          "%lu, %ld, %ld, %ld, %ld, teems get, reply,\n",
-                          now_usecs(), global_load, global_tick_duration,
-                          g_curr_tick, ticket);
-              }
+                                int64_t) {
+              fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, teems get, reply,\n",
+                      now_usecs(), global_load, global_tick_duration,
+                      g_curr_tick, ticket);
           };
-          if (get_set_cb(get_callbck) == -1) {
+          if (metadata_get_set_cb(get_callbck) == -1) {
               KILL("failed to set fast get callback");
           }
       }}},
@@ -83,7 +80,7 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
       []() -> int64_t {
           std::array<uint8_t, teems::REGISTER_SIZE> value;
           value.fill(1);
-          return put_cb(3, value);
+          return metadata_put_cb(3, value);
       },
       []() {
           auto put_callbck = [](int64_t ticket, bool, int64_t) {
@@ -91,7 +88,7 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
                       now_usecs(), global_load, global_tick_duration,
                       g_curr_tick, ticket);
           };
-          if (put_set_cb(put_callbck) == -1) {
+          if (metadata_put_set_cb(put_callbck) == -1) {
               KILL("failed to set put callback");
           }
       }}},

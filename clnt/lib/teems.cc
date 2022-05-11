@@ -5,12 +5,12 @@
 #include "teems.h"
 
 #include "config.h"
-#include "context.h"
 #include "log.h"
 #include "network.h"
 #include "protocol_helpers.h"
 #include "result.h"
 #include "ssl_util.h"
+#include "teems_config.h"
 #include "teems_generated.h"
 
 #include <errno.h>
@@ -26,18 +26,10 @@ namespace teems {
 using FBValue = flatbuffers::Array<uint8_t, REGISTER_SIZE>;
 
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
-extern int64_t g_get_sync_ticket;
-extern int64_t g_get_timestamp_result;
-extern ::std::array<uint8_t, REGISTER_SIZE> g_get_value_result;
-extern bool g_get_success_result;
-
-extern int64_t g_put_sync_ticket;
-extern int64_t g_put_timestamp_result;
-extern bool g_put_success_result;
 
 extern std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
-    g_proxy_get_result;
-extern std::pair<int64_t, bool> g_proxy_put_result;
+    g_metadata_get_result;
+extern std::pair<int64_t, bool> g_metadata_put_result;
 
 // protocol globals
 
@@ -52,27 +44,13 @@ size_t g_calls_concluded = 0;
 
 // callbacks
 std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                   int64_t, bool)>
-    g_get_callback = [](int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                        int64_t, bool) {};
-std::function<void(int64_t, bool, int64_t)> g_put_callback = [](int64_t, bool,
-                                                                int64_t) {};
-std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                    int64_t)>
-    g_proxy_get_callback =
+    g_metadata_get_callback =
         [](int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t) {};
-std::function<void(int64_t, bool, int64_t)> g_proxy_put_callback =
+std::function<void(int64_t, bool, int64_t)> g_metadata_put_callback =
     [](int64_t, bool, int64_t) {};
 std::function<void(int64_t)> g_ping_callback = [](int64_t) {};
 std::function<void(int64_t)> g_reset_callback = [](int64_t) {};
-
-// state of calls
-::std::unordered_map<int64_t, GetContext> g_get_ctx_map;
-::std::unordered_map<int64_t, PutContext> g_put_ctx_map;
-
-GetContext g_get_sync_ctx = GetContext(-1, 0);  // invalid context
-PutContext g_put_sync_ctx =
-    PutContext(-1, ::std::array<uint8_t, REGISTER_SIZE>());
 
 // connection globals
 SSL_CTX *g_client_ctx = nullptr;
@@ -181,57 +159,9 @@ size_t n_calls_issued() { return g_calls_issued; }
 size_t n_calls_concluded() { return g_calls_concluded; }
 size_t n_calls_outlasting() { return n_calls_issued() - n_calls_concluded(); }
 
-// sync api
-bool get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
-         int64_t &timestamp) {
-    g_get_sync_ctx = GetContext(key, g_servers.size());
-    int64_t ticket = send_get_request(key, call_type::SYNC);
-    g_get_sync_ticket = ticket;
-
-    if (ticket == -1) {
-        ERROR("Failed to send fast get");
-        return false;
-    }
-
-    while (g_get_sync_ticket == ticket) {
-        struct timeval timeout = g_timeout;
-        auto res = process_peers(&timeout);
-        if (res == process_res::ERR) {
-            return false;
-        }
-    }
-
-    timestamp = g_get_timestamp_result;
-    std::copy(std::cbegin(g_get_value_result), std::cend(g_get_value_result),
-              std::begin(value));
-    return g_get_success_result;
-}
-
-bool put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
-         int64_t &timestamp) {
-    g_put_sync_ctx = PutContext(key, value);
-    int64_t ticket = send_get_timestamp_request(key, call_type::SYNC);
-    g_put_sync_ticket = ticket;
-
-    if (ticket == -1) {
-        ERROR("Failed to put");
-        return false;
-    }
-    while (g_put_sync_ticket == ticket) {
-        struct timeval timeout = g_timeout;
-        auto res = process_peers(&timeout);
-        if (res == process_res::ERR) {
-            return false;
-        }
-    }
-
-    timestamp = g_put_timestamp_result;
-    return g_put_success_result;
-}
-
-bool proxy_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
-               int64_t &timestamp) {
-    if (send_proxy_get_request(g_servers[0], key, call_type::SYNC) == -1) {
+bool metadata_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
+                  int64_t &timestamp) {
+    if (send_metadata_get_request(g_servers[0], key, call_type::SYNC) == -1) {
         ERROR("Failed to ping");
         return false;
     }
@@ -241,16 +171,16 @@ bool proxy_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
         return false;
     }
 
-    timestamp = std::get<2>(g_proxy_get_result);
-    std::copy(std::cbegin(std::get<1>(g_proxy_get_result)),
-              std::cend(std::get<1>(g_proxy_get_result)), std::begin(value));
+    timestamp = std::get<2>(g_metadata_get_result);
+    std::copy(std::cbegin(std::get<1>(g_metadata_get_result)),
+              std::cend(std::get<1>(g_metadata_get_result)), std::begin(value));
 
     return true;
 }
 
-bool proxy_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
-               int64_t &timestamp) {
-    if (send_proxy_put_request(g_servers[0], key, value, call_type::SYNC) ==
+bool metadata_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
+                  int64_t &timestamp) {
+    if (send_metadata_put_request(g_servers[0], key, value, call_type::SYNC) ==
         -1) {
         ERROR("Failed to ping");
         return false;
@@ -261,8 +191,8 @@ bool proxy_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
         return false;
     }
 
-    timestamp = std::get<0>(g_proxy_put_result);
-    return std::get<1>(g_proxy_put_result);
+    timestamp = std::get<0>(g_metadata_put_result);
+    return std::get<1>(g_metadata_put_result);
 }
 
 void ping() {
@@ -290,23 +220,13 @@ void reset() {
 }
 
 // async api
-int64_t get_async(int64_t key) {
-    int64_t const ticket = send_get_request(key, call_type::ASYNC);
-    g_get_ctx_map.emplace(ticket, GetContext(key, g_servers.size()));
-    return ticket;
+int64_t metadata_get_async(int64_t key) {
+    return send_metadata_get_request(g_servers[0], key, call_type::ASYNC);
 }
-int64_t put_async(int64_t key,
-                  std::array<uint8_t, REGISTER_SIZE> const &value) {
-    int64_t const ticket = send_get_timestamp_request(key, call_type::ASYNC);
-    g_put_ctx_map.emplace(ticket, PutContext(key, value));
-    return ticket;
-}
-int64_t proxy_get_async(int64_t key) {
-    return send_proxy_get_request(g_servers[0], key, call_type::ASYNC);
-}
-int64_t proxy_put_async(int64_t key,
-                        std::array<uint8_t, REGISTER_SIZE> const &value) {
-    return send_proxy_put_request(g_servers[0], key, value, call_type::ASYNC);
+int64_t metadata_put_async(int64_t key,
+                           std::array<uint8_t, REGISTER_SIZE> const &value) {
+    return send_metadata_put_request(g_servers[0], key, value,
+                                     call_type::ASYNC);
 }
 int64_t ping_async() {
     return send_ping_request(g_servers[0], call_type::ASYNC);
@@ -316,48 +236,25 @@ int64_t reset_async() {
 }
 
 // callback api
-int get_set_cb(
-    std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                       int64_t, bool)>
-        cb) {
-    g_get_callback = cb;
-    return 0;
-}
-int64_t get_cb(int64_t key) {
-    int64_t const ticket = send_get_request(key, call_type::CALLBACK);
-    g_get_ctx_map.emplace(ticket, GetContext(key, g_servers.size()));
-    return ticket;
-}
-
-int put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
-    g_put_callback = cb;
-    return 0;
-}
-int64_t put_cb(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value) {
-    int64_t const ticket = send_get_timestamp_request(key, call_type::CALLBACK);
-    g_put_ctx_map.emplace(ticket, PutContext(key, value));
-    return ticket;
-}
-
-int proxy_get_set_cb(
+int metadata_get_set_cb(
     std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
                        int64_t)>
         cb) {
-    g_proxy_get_callback = cb;
+    g_metadata_get_callback = cb;
     return 0;
 }
-int64_t proxy_get_cb(int64_t key) {
-    return send_proxy_get_request(g_servers[0], key, call_type::CALLBACK);
+int64_t metadata_get_cb(int64_t key) {
+    return send_metadata_get_request(g_servers[0], key, call_type::CALLBACK);
 }
 
-int proxy_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
-    g_proxy_put_callback = cb;
+int metadata_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
+    g_metadata_put_callback = cb;
     return 0;
 }
-int64_t proxy_put_cb(int64_t key,
-                     std::array<uint8_t, REGISTER_SIZE> const &value) {
-    return send_proxy_put_request(g_servers[0], key, value,
-                                  call_type::CALLBACK);
+int64_t metadata_put_cb(int64_t key,
+                        std::array<uint8_t, REGISTER_SIZE> const &value) {
+    return send_metadata_put_request(g_servers[0], key, value,
+                                     call_type::CALLBACK);
 }
 
 int ping_set_cb(std::function<void(int64_t)> cb) {
@@ -381,26 +278,18 @@ poll_state poll(int64_t ticket) {
     if (ticket != -1 && has_result(ticket)) return poll_state::READY;
     if (n_calls_outlasting() == 0) return poll_state::NO_CALLS;
 
-    bool is_broadcast =
-        (g_get_ctx_map.find(ticket) != std::end(g_get_ctx_map)) ||
-        (ticket == -1 && g_get_ctx_map.size() > 0) ||
-        (g_put_ctx_map.find(ticket) != std::end(g_put_ctx_map)) ||
-        (ticket == -1 && g_put_ctx_map.size() > 0);
-
     if (!g_servers[0].connected()) {
         ERROR("no connection to proxy");
         return poll_state::ERR;
     }
-    if (is_broadcast &&
-        std::any_of(std::cbegin(g_servers), std::cend(g_servers),
+    if (std::any_of(std::cbegin(g_servers), std::cend(g_servers),
                     [](peer const &server) { return !server.connected(); })) {
         ERROR("no connection to proxies");
         return poll_state::ERR;
     }
 
     struct timeval timeout = g_timeout;
-    auto const res = (is_broadcast ? process_peers(&timeout)
-                                   : process_peer(0, g_servers[0], &timeout));
+    auto const res = process_peer(0, g_servers[0], &timeout);
     switch (res) {
         case process_res::ERR:
             ERROR("connection broke");
@@ -456,14 +345,10 @@ T get_reply(int64_t ticket) {
     return downcasted->get();
 }
 
-// for get
-template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t, bool>
-get_reply(int64_t ticket);
-
-// for put and proxy_put
+// for metadata put
 template std::pair<int64_t, bool> get_reply(int64_t ticket);
 
-// for proxy get
+// for metadata get
 template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
 get_reply(int64_t ticket);
 

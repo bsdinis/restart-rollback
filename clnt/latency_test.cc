@@ -51,14 +51,14 @@ std::map<std::string, do_func> funcs_by_op = {
      []() {
          int64_t timestamp;
          std::array<uint8_t, teems::REGISTER_SIZE> value;
-         get(2, value, timestamp);
+         metadata_get(2, value, timestamp);
      }},
     {"put",
      []() {
          int64_t timestamp;
          std::array<uint8_t, teems::REGISTER_SIZE> value;
          value.fill(1);
-         put(3, value, timestamp);
+         metadata_put(3, value, timestamp);
      }},
 };
 

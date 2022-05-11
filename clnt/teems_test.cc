@@ -41,8 +41,7 @@ static int test_n = 1;
     }
 
 namespace {
-void test_get_put();
-void test_proxy_get_put();
+void test_metadata_get_put();
 void test_ping();
 void test_pipelining();
 void test_cb();
@@ -64,8 +63,7 @@ int main(int argc, char** argv) {
     reset();
 
     test_ping();
-    test_get_put();
-    test_proxy_get_put();
+    test_metadata_get_put();
     test_pipelining();
     test_cb();
 
@@ -76,138 +74,44 @@ int main(int argc, char** argv) {
 }
 
 namespace {
-void test_get_put() {
+void test_metadata_get_put() {
     // sync test
     {
         // there is no value
         int64_t get_timestamp = -1;
         std::array<uint8_t, teems::REGISTER_SIZE> get_value;
-        EXPECT_EQ(get((int64_t)1, get_value, get_timestamp), true, "get");
-        EXPECT_EQ(get_timestamp, -1, "get");
+        EXPECT_EQ(metadata_get((int64_t)3, get_value, get_timestamp), true,
+                  "metadata get");
+        EXPECT_EQ(get_timestamp, -1, "metadata get");
 
         std::array<uint8_t, teems::REGISTER_SIZE> put_value;
         put_value.fill(1);
 
         int64_t put_timestamp = -1;
-        EXPECT_EQ(put((int64_t)1, put_value, put_timestamp), true, "put");
+        EXPECT_EQ(metadata_put((int64_t)3, put_value, put_timestamp), true,
+                  "metadata put");
 
-        EXPECT_EQ(get((int64_t)1, get_value, get_timestamp), true, "get");
-        EXPECT_EQ(get_timestamp, put_timestamp, "get");
-        EXPECT_EQ(get_value.size(), put_value.size(), "get");
-        EXPECT_EQ(get_value, put_value, "get");
+        EXPECT_EQ(metadata_get((int64_t)3, get_value, get_timestamp), true,
+                  "metadata get");
+        EXPECT_EQ(get_timestamp, put_timestamp, "metadata get");
+        EXPECT_EQ(get_value.size(), put_value.size(), "metadata get");
+        EXPECT_EQ(get_value, put_value, "metadata get");
 
         int64_t new_put_timestamp = -1;
         put_value.fill(2);
-        EXPECT_EQ(put((int64_t)1, put_value, new_put_timestamp), true, "put");
-        EXPECT_EQ(new_put_timestamp > put_timestamp, true, "put");
+        EXPECT_EQ(metadata_put((int64_t)3, put_value, new_put_timestamp), true,
+                  "metadata put");
+        EXPECT_EQ(new_put_timestamp > put_timestamp, true, "metadata put");
 
-        EXPECT_EQ(get((int64_t)1, get_value, get_timestamp), true, "get");
-        EXPECT_EQ(get_timestamp, new_put_timestamp, "get");
-        EXPECT_EQ(get_value, put_value, "get");
+        EXPECT_EQ(metadata_get((int64_t)3, get_value, get_timestamp), true,
+                  "metadata get");
+        EXPECT_EQ(get_timestamp, new_put_timestamp, "metadata get");
+        EXPECT_EQ(get_value, put_value, "metadata get");
     }
 
     // async test
     {
-        int64_t ticket = get_async(2);
-        if (wait_for(ticket) == poll_state::ERR) {
-            ERROR("failed to wait for get");
-            return;
-        }
-        auto g_reply = get_reply<std::tuple<
-            int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t, bool>>(
-            ticket);
-
-        EXPECT_EQ(std::get<2>(g_reply), -1, "get_async");
-        EXPECT_EQ(std::get<3>(g_reply), true, "get_async");
-
-        std::array<uint8_t, teems::REGISTER_SIZE> put_value;
-        put_value.fill(1);
-        ticket = put_async(2, put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
-            ERROR("failed to wait for put");
-            return;
-        }
-        auto put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(put_reply), true, "put_async");
-
-        ticket = get_async(2);
-        if (wait_for(ticket) == poll_state::ERR) {
-            ERROR("failed to wait for get");
-            return;
-        }
-        g_reply = get_reply<std::tuple<
-            int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t, bool>>(
-            ticket);
-
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "get_async");
-        EXPECT_EQ(std::get<2>(g_reply), std::get<0>(put_reply), "get_async");
-        EXPECT_EQ(std::get<3>(g_reply), true, "get_async");
-
-        put_value.fill(2);
-        ticket = put_async(2, put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
-            ERROR("failed to wait for put");
-            return;
-        }
-        auto new_put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(new_put_reply), true, "put_async");
-        EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
-                  "put_async");
-
-        ticket = get_async(2);
-        if (wait_for(ticket) == poll_state::ERR) {
-            ERROR("failed to wait for get");
-            return;
-        }
-        g_reply = get_reply<std::tuple<
-            int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t, bool>>(
-            ticket);
-
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "get_async");
-        EXPECT_EQ(std::get<2>(g_reply), std::get<0>(new_put_reply),
-                  "get_async");
-        EXPECT_EQ(std::get<3>(g_reply), true, "get_async");
-    }
-}
-
-void test_proxy_get_put() {
-    // sync test
-    {
-        // there is no value
-        int64_t get_timestamp = -1;
-        std::array<uint8_t, teems::REGISTER_SIZE> get_value;
-        EXPECT_EQ(proxy_get((int64_t)3, get_value, get_timestamp), true,
-                  "proxy get");
-        EXPECT_EQ(get_timestamp, -1, "proxy get");
-
-        std::array<uint8_t, teems::REGISTER_SIZE> put_value;
-        put_value.fill(1);
-
-        int64_t put_timestamp = -1;
-        EXPECT_EQ(proxy_put((int64_t)3, put_value, put_timestamp), true,
-                  "proxy put");
-
-        EXPECT_EQ(proxy_get((int64_t)3, get_value, get_timestamp), true,
-                  "proxy get");
-        EXPECT_EQ(get_timestamp, put_timestamp, "proxy get");
-        EXPECT_EQ(get_value.size(), put_value.size(), "proxy get");
-        EXPECT_EQ(get_value, put_value, "proxy get");
-
-        int64_t new_put_timestamp = -1;
-        put_value.fill(2);
-        EXPECT_EQ(proxy_put((int64_t)3, put_value, new_put_timestamp), true,
-                  "proxy put");
-        EXPECT_EQ(new_put_timestamp > put_timestamp, true, "proxy put");
-
-        EXPECT_EQ(proxy_get((int64_t)3, get_value, get_timestamp), true,
-                  "proxy get");
-        EXPECT_EQ(get_timestamp, new_put_timestamp, "proxy get");
-        EXPECT_EQ(get_value, put_value, "proxy get");
-    }
-
-    // async test
-    {
-        int64_t ticket = proxy_get_async(4);
+        int64_t ticket = metadata_get_async(4);
         if (wait_for(ticket) == poll_state::ERR) {
             ERROR("failed to wait for get");
             return;
@@ -216,19 +120,19 @@ void test_proxy_get_put() {
             int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<2>(g_reply), -1, "proxy get_async");
+        EXPECT_EQ(std::get<2>(g_reply), -1, "metadata get_async");
 
         std::array<uint8_t, teems::REGISTER_SIZE> put_value;
         put_value.fill(1);
-        ticket = proxy_put_async(4, put_value);
+        ticket = metadata_put_async(4, put_value);
         if (wait_for(ticket) == poll_state::ERR) {
             ERROR("failed to wait for put");
             return;
         }
         auto put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(put_reply), true, "proxy put_async");
+        EXPECT_EQ(std::get<1>(put_reply), true, "metadata put_async");
 
-        ticket = proxy_get_async(4);
+        ticket = metadata_get_async(4);
         if (wait_for(ticket) == poll_state::ERR) {
             ERROR("failed to wait for get");
             return;
@@ -237,22 +141,22 @@ void test_proxy_get_put() {
             int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "proxy get_async");
+        EXPECT_EQ(std::get<1>(g_reply), put_value, "metadata get_async");
         EXPECT_EQ(std::get<2>(g_reply), std::get<0>(put_reply),
-                  "proxy get_async");
+                  "metadata get_async");
 
         put_value.fill(2);
-        ticket = proxy_put_async(4, put_value);
+        ticket = metadata_put_async(4, put_value);
         if (wait_for(ticket) == poll_state::ERR) {
             ERROR("failed to wait for put");
             return;
         }
         auto new_put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(new_put_reply), true, "proxy put_async");
+        EXPECT_EQ(std::get<1>(new_put_reply), true, "metadata put_async");
         EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
-                  "proxy put_async");
+                  "metadata put_async");
 
-        ticket = proxy_get_async(4);
+        ticket = metadata_get_async(4);
         if (wait_for(ticket) == poll_state::ERR) {
             ERROR("failed to wait for get");
             return;
@@ -261,9 +165,9 @@ void test_proxy_get_put() {
             int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "proxy get_async");
+        EXPECT_EQ(std::get<1>(g_reply), put_value, "metadata get_async");
         EXPECT_EQ(std::get<2>(g_reply), std::get<0>(new_put_reply),
-                  "proxy get_async");
+                  "metadata get_async");
     }
 }
 
@@ -304,10 +208,10 @@ void test_pipelining() {
     for (int i = 0; i < 10; i++) {
         switch (i % 3) {
             case 0:
-                get_tickets.emplace_back(get_async(8));
+                get_tickets.emplace_back(metadata_get_async(8));
                 break;
             case 1:
-                put_tickets.emplace_back(put_async(9, value));
+                put_tickets.emplace_back(metadata_put_async(9, value));
                 break;
             case 2:
             default:
@@ -331,11 +235,10 @@ void test_pipelining() {
 
     for (int64_t const ticket : get_tickets) {
         auto reply = get_reply<std::tuple<
-            int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t, bool>>(
+            int64_t, std::array<uint8_t, teems::REGISTER_SIZE>, int64_t>>(
             ticket);
         EXPECT_EQ(std::get<0>(reply), 8, "pipelining");
         EXPECT_EQ(std::get<2>(reply), -1, "pipelining");
-        EXPECT_EQ(std::get<3>(reply), true, "pipelining");
     }
 
     for (int64_t const ticket : put_tickets) {
@@ -356,37 +259,40 @@ void test_cb() {
     int get_n = 0;
     int put_n = 0;
     int ping_n = 0;
-    ASSERT_EQ(get_set_cb([&get_n](int64_t, int64_t,
-                                  std::array<uint8_t, teems::REGISTER_SIZE>,
-                                  int64_t, bool) { get_n++; }),
-              0, "get_set_cb");
-    ASSERT_EQ(put_set_cb([&put_n](int64_t, bool, int64_t) { put_n++; }), 0,
-              "put_set_cb");
+    ASSERT_EQ(
+        metadata_get_set_cb([&get_n](int64_t, int64_t,
+                                     std::array<uint8_t, teems::REGISTER_SIZE>,
+                                     int64_t) { get_n++; }),
+        0, "get_set_cb");
+    ASSERT_EQ(
+        metadata_put_set_cb([&put_n](int64_t, bool, int64_t) { put_n++; }), 0,
+        "put_set_cb");
     ASSERT_EQ(ping_set_cb([&ping_n](int64_t) { ping_n++; }), 0, "ping_set_cb");
 
-    get_cb((int64_t)1);
+    metadata_get_cb((int64_t)1);
     ping_cb();
-    get_cb((int64_t)4);
+    metadata_get_cb((int64_t)4);
     ping_cb();
 
     std::array<uint8_t, teems::REGISTER_SIZE> value;
     value.fill(1);
-    put_cb((int64_t)4, value);
-    get_cb((int64_t)2);
-    get_cb((int64_t)5);
+    metadata_put_cb((int64_t)4, value);
+    metadata_get_cb((int64_t)2);
+    metadata_get_cb((int64_t)5);
     ping_cb();
-    put_cb((int64_t)6, value);
+    metadata_put_cb((int64_t)6, value);
 
     wait_for();
 
     EXPECT_EQ(get_n, 4, "callback get test");
     EXPECT_EQ(put_n, 2, "callback put test");
     EXPECT_EQ(ping_n, 3, "callback ping test");
-    ASSERT_EQ(get_set_cb([](int64_t, int64_t,
-                            std::array<uint8_t, teems::REGISTER_SIZE>, int64_t,
-                            bool) {}),
+    ASSERT_EQ(metadata_get_set_cb([](int64_t, int64_t,
+                                     std::array<uint8_t, teems::REGISTER_SIZE>,
+                                     int64_t) {}),
               0, "get_set_cb");
-    ASSERT_EQ(put_set_cb([](int64_t, bool, int64_t) {}), 0, "put_set_cb");
+    ASSERT_EQ(metadata_put_set_cb([](int64_t, bool, int64_t) {}), 0,
+              "put_set_cb");
     ASSERT_EQ(ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
 
