@@ -1,0 +1,5 @@
+close_remote.o: close_remote.cc lib/log.h lib/teems.h lib/teems_config.h
+latency_test.o: latency_test.cc lib/log.h lib/teems.h lib/teems_config.h
+teems_test.o: teems_test.cc lib/log.h lib/teems.h lib/teems_config.h
+throughput_test.o: throughput_test.cc lib/log.h lib/teems.h \
+  lib/teems_config.h
