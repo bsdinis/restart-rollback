@@ -34,8 +34,8 @@ void KeyValueStore::add_backing_store(void *persistent_backed_store,
                      sizeof(sgx_aes_gcm_128bit_tag_t)));
 }
 
-int64_t KeyValueStore::get(int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> *val) {
+int64_t KeyValueStore::get(int64_t key, std::array<uint8_t, REGISTER_SIZE> *val,
+                           std::vector<uint8_t> &signature) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
         return -1;
@@ -43,6 +43,10 @@ int64_t KeyValueStore::get(int64_t key,
 
     int64_t timestamp = key_it->second.m_ts_val.m_timestamp;
     *val = key_it->second.m_ts_val.m_val;
+    signature.clear();
+    std::copy(std::begin(key_it->second.m_ts_val.m_signature),
+              std::end(key_it->second.m_ts_val.m_signature),
+              std::back_inserter(signature));
     return timestamp;
 }
 
@@ -55,13 +59,14 @@ int64_t KeyValueStore::get_timestamp(int64_t key) {
     return key_it->second.m_ts_val.m_timestamp;
 }
 
-bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
+bool KeyValueStore::put(int64_t key, DataValue const *val, int64_t timestamp,
+                        std::vector<uint8_t> const &signature,
                         int64_t *current_timestamp) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
         *current_timestamp = timestamp;
         m_store.insert({key, MACedTimestampedValue(
-                                 TimestampedValue(val, timestamp),
+                                 TimestampedValue(val, timestamp, signature),
                                  this->get_persistent_pointer(key), key)});
         return true;
     }
@@ -73,7 +78,7 @@ bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
 
     *current_timestamp = timestamp;
     key_it->second =
-        MACedTimestampedValue(TimestampedValue(val, timestamp),
+        MACedTimestampedValue(TimestampedValue(val, timestamp, signature),
                               this->get_persistent_pointer(key), key);
     return true;
 }

@@ -3,7 +3,10 @@
  */
 
 #include "ssl_util.h"
+#include <errno.h>
+#include <openssl/pem.h>
 #include <stdbool.h>
+#include <string.h>
 #include <unistd.h>
 #include "log.h"
 
@@ -44,6 +47,29 @@ int load_certificates(SSL_CTX *ctx, const char *const cert,
         ret = -1;
     } else if (!SSL_CTX_check_private_key(ctx)) {
         ssl_perror("Failed to validate private key");
+        ret = -1;
+    }
+
+    return ret;
+}
+
+int load_key(RSA **priv_key, const char *const key_file) {
+    int ret = 0;
+    if (access(key_file, F_OK) != 0) {
+        ERROR("Key file %s not found", key_file);
+        return -1;
+    }
+
+    FILE *key_fp = fopen(key_file, "r");
+    if (key_file == nullptr) {
+        ERROR("Failed to open key file: %s", strerror(errno));
+        return -1;
+    }
+
+    *priv_key = PEM_read_RSAPrivateKey(key_fp, priv_key, NULL, NULL);
+    // set private key
+    if (*priv_key == nullptr) {
+        ssl_perror("Failed to set key file");
         ret = -1;
     }
 

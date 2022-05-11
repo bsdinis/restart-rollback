@@ -26,6 +26,7 @@ int init_server_ssl_ctx(SSL_CTX **);
 int close_ssl_ctx(SSL_CTX *);
 
 int load_certificates(SSL_CTX *, const char *const cert, const char *const key);
+int load_key(RSA **, const char *const key_file);
 
 }  // namespace ssl
 }  // namespace byzantine

@@ -2,6 +2,7 @@
 
 #include "byzantine_generated.h"
 #include "call_map.h"
+#include "digital_signature.h"
 #include "handler_helpers.h"
 #include "kv_store.h"
 #include "log.h"
@@ -34,19 +35,24 @@ int get_handler(peer &p, int64_t ticket,
     flatbuffers::FlatBufferBuilder builder;
 
     std::array<uint8_t, REGISTER_SIZE> value;
-    auto const timestamp = g_kv_store.get(args->key(), &value);
+    std::vector<uint8_t> signature;
+    auto const timestamp = g_kv_store.get(args->key(), &value, signature);
 
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto get_res = register_sgx::byzantine::CreateGetResult(
-        builder, args->key(), &fb_value, timestamp);
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, args->key(), &data_value, timestamp);
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &signature);
+    auto get_res =
+        register_sgx::byzantine::CreateGetResult(builder, signed_value);
 
     auto result = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_get_resp, ticket,
@@ -65,10 +71,25 @@ int get_timestamp_handler(
 
     flatbuffers::FlatBufferBuilder builder;
 
-    auto const timestamp = g_kv_store.get_timestamp(args->key());
+    std::array<uint8_t, REGISTER_SIZE> value;
+    std::vector<uint8_t> signature;
+    auto const timestamp = g_kv_store.get(args->key(), &value, signature);
 
+    auto data_value = register_sgx::byzantine::DataValue();
+    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+        data_value.mutable_data();
+    {
+        for (size_t idx = 0; idx < value.size(); ++idx) {
+            fb_arr->Mutate(idx, value[idx]);
+        }
+    }
+
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, args->key(), &data_value, timestamp);
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &signature);
     auto get_timestamp_res = register_sgx::byzantine::CreateGetTimestampResult(
-        builder, args->key(), timestamp);
+        builder, signed_value);
 
     auto result = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_get_timestamp_resp,
@@ -83,11 +104,28 @@ int get_timestamp_handler(
 
 int put_handler(peer &p, int64_t ticket,
                 register_sgx::byzantine::PutArgs const *args) {
-    LOG("put request [%ld]: key %ld", ticket, args->key());
+    LOG("put request [%ld]: key %ld", ticket,
+        args->signed_value()->value()->key());
+
+    bool authentic = false;
+    if (args->signed_value()->value()->timestamp() > 0 &&
+        (verify_value(args->signed_value(), &authentic) != 0 || !authentic)) {
+        ERROR("failed to authenticate value");
+        return -1;
+    }
+
+    std::vector<uint8_t> signature;
+    signature.reserve(args->signed_value()->signature()->size());
+    std::copy(args->signed_value()->signature()->cbegin(),
+              args->signed_value()->signature()->cend(),
+              std::back_inserter(signature));
 
     int64_t current_timestamp = 0;
-    bool const success = g_kv_store.put(args->key(), args->value(),
-                                        args->timestamp(), &current_timestamp);
+    bool const success =
+        g_kv_store.put(args->signed_value()->value()->key(),
+                       args->signed_value()->value()->data_value(),
+                       args->signed_value()->value()->timestamp(), signature,
+                       &current_timestamp);
 
     flatbuffers::FlatBufferBuilder builder;
 
@@ -107,7 +145,15 @@ int put_handler(peer &p, int64_t ticket,
 
 int get_resp_handler(peer &p, size_t peer_idx, int64_t ticket,
                      GetResult const *args) {
-    LOG("get response [%ld]: key %ld", ticket, args->key());
+    LOG("get response [%ld]: key %ld", ticket,
+        args->signed_value()->value()->key());
+
+    bool authentic = false;
+    if (args->signed_value()->value()->timestamp() > 0 &&
+        (verify_value(args->signed_value(), &authentic) != 0 || !authentic)) {
+        ERROR("failed to authenticate value");
+        return -1;
+    }
 
     GetCallContext *ctx = g_call_map.get_get_ctx(ticket);
     if (ctx == nullptr) {  // call ended
@@ -115,21 +161,30 @@ int get_resp_handler(peer &p, size_t peer_idx, int64_t ticket,
     }
 
     std::array<uint8_t, REGISTER_SIZE> value;
-    auto const *fb_value = args->value()->data();
+    auto const *fb_value = args->signed_value()->value()->data_value()->data();
     for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
         value[idx] = fb_value->Get(idx);
     }
 
-    return get_resp_handler_action(*ctx, peer_idx, value, args->timestamp());
+    std::vector<uint8_t> signature;
+    signature.reserve(args->signed_value()->signature()->size());
+    std::copy(args->signed_value()->signature()->cbegin(),
+              args->signed_value()->signature()->cend(),
+              std::back_inserter(signature));
+
+    return get_resp_handler_action(*ctx, peer_idx, value,
+                                   args->signed_value()->value()->timestamp(),
+                                   std::move(signature));
 }
 int get_resp_handler_action(GetCallContext &context, size_t peer_idx,
                             std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp) {
+                            int64_t timestamp,
+                            std::vector<uint8_t> &&signature) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
-    context.add_get_reply(peer_idx, timestamp, value);
+    context.add_get_reply(peer_idx, timestamp, value, std::move(signature));
 
     if (context.get_done()) {
         context.finish_get_phase();
@@ -145,13 +200,23 @@ int get_resp_handler_action(GetCallContext &context, size_t peer_idx,
 
 int get_timestamp_resp_handler(peer &p, int64_t ticket,
                                GetTimestampResult const *args) {
-    LOG("get timestamp response [%ld]: key %ld", ticket, args->key());
+    LOG("get timestamp response [%ld]: key %ld", ticket,
+        args->signed_value()->value()->key());
+
+    bool authentic = false;
+    if (args->signed_value()->value()->timestamp() > 0 &&
+        (verify_value(args->signed_value(), &authentic) != 0 || !authentic)) {
+        ERROR("failed to authenticate value");
+        return -1;
+    }
+
     PutCallContext *ctx = g_call_map.get_put_ctx(ticket);
     if (ctx == nullptr) {  // call ended
         return 0;
     }
 
-    return get_timestamp_resp_handler_action(*ctx, args->timestamp());
+    return get_timestamp_resp_handler_action(
+        *ctx, args->signed_value()->value()->timestamp());
 }
 int get_timestamp_resp_handler_action(PutCallContext &context,
                                       int64_t timestamp) {
@@ -191,21 +256,25 @@ int put_resp_handler(peer &p, int64_t ticket, PutResult const *args) {
 
 namespace {
 int get_return_to_client(GetCallContext const &context) {
-    LOG("get [%ld]: returning to client", context.ticket());
+    LOG("get [%ld]: returning to client (%ld)", context.ticket());
     flatbuffers::FlatBufferBuilder builder;
 
     auto const &value = context.value();
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto get_res = register_sgx::byzantine::CreateGetResult(
-        builder, context.key(), &fb_value, context.timestamp());
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, context.key(), &data_value, context.timestamp());
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &context.signature());
+    auto get_res =
+        register_sgx::byzantine::CreateGetResult(builder, signed_value);
 
     auto result = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_proxy_get_resp,
@@ -222,17 +291,22 @@ int get_writeback(GetCallContext &context) {
     flatbuffers::FlatBufferBuilder builder;
 
     auto const &value = context.value();
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto put_args = register_sgx::byzantine::CreatePutArgs(
-        builder, context.key(), &fb_value, context.timestamp());
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, context.key(), &data_value, context.timestamp());
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &context.signature());
+
+    auto put_args =
+        register_sgx::byzantine::CreatePutArgs(builder, signed_value);
 
     auto put_request = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_put_req, context.ticket(),
@@ -242,8 +316,9 @@ int get_writeback(GetCallContext &context) {
 
     if (context.self_outdated()) {
         int64_t current_timestamp = 0;
-        bool const success = g_kv_store.put(
-            context.key(), &fb_value, context.timestamp(), &current_timestamp);
+        bool const success =
+            g_kv_store.put(context.key(), &data_value, context.timestamp(),
+                           context.signature(), &current_timestamp);
         if (put_resp_handler_get_action(context, success, current_timestamp) !=
             0) {
             ERROR("failed to register own action");
@@ -272,20 +347,29 @@ int put_return_to_client(PutCallContext const &context) {
 }
 
 int put_do_write(PutCallContext &context) {
+    if (context.sign() != 0) {
+        ERROR("failed to sign value");
+        return -1;
+    }
+
     flatbuffers::FlatBufferBuilder builder;
 
     auto const &value = context.value();
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto put_args = register_sgx::byzantine::CreatePutArgs(
-        builder, context.key(), &fb_value, context.next_timestamp());
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, context.key(), &data_value, context.next_timestamp());
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &context.signature());
+    auto put_args =
+        register_sgx::byzantine::CreatePutArgs(builder, signed_value);
 
     auto put_request = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_put_req, context.ticket(),
@@ -294,8 +378,9 @@ int put_do_write(PutCallContext &context) {
     builder.Finish(put_request);
 
     int64_t current_timestamp = 0;
-    bool const success = g_kv_store.put(
-        context.key(), &fb_value, context.next_timestamp(), &current_timestamp);
+    bool const success =
+        g_kv_store.put(context.key(), &data_value, context.next_timestamp(),
+                       context.signature(), &current_timestamp);
     if (put_resp_handler_put_action(context, success, current_timestamp) != 0) {
         ERROR("failed to register own action");
     }

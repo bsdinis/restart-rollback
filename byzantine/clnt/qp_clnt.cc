@@ -76,6 +76,8 @@ PutContext g_put_sync_ctx =
 
 // connection globals
 SSL_CTX *g_client_ctx = nullptr;
+RSA *g_rsa_priv_key = nullptr;
+EVP_PKEY *g_rsa_key = nullptr;
 timeval g_timeout;
 ::std::vector<peer> g_servers;
 
@@ -104,9 +106,16 @@ int init(
     }
 
     if (load_certificates(g_client_ctx, cert_path, key_path) == -1) {
-        ERROR("failed load certs");
+        ERROR("failed to load certs");
         return -1;
     }
+
+    if (load_key(&g_rsa_priv_key, key_path) == -1) {
+        ERROR("failed to load keys");
+        return -1;
+    }
+    g_rsa_key = EVP_PKEY_new();
+    EVP_PKEY_assign_RSA(g_rsa_key, g_rsa_priv_key);
 
     for (ssize_t idx = 0; idx < conf.size; ++idx) {
         auto const &peer_node = conf.nodes[idx];
@@ -171,6 +180,10 @@ int close(bool close_remote) {
     }
 
     close_ssl_ctx(g_client_ctx);
+    EVP_PKEY_free(g_rsa_key);
+    g_client_ctx = nullptr;
+    g_rsa_key = nullptr;
+    g_rsa_priv_key = nullptr;
     g_servers.clear();
     return 0;
 }

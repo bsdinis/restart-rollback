@@ -19,12 +19,23 @@ namespace byzantine {
 struct TimestampedValue {
     std::array<uint8_t, REGISTER_SIZE> m_val;
     int64_t m_timestamp;
+    // Assumption: the signature is a signed hash, which is at most 2048 bits
+    // <-> 256 B
+    std::array<uint8_t, 256> m_signature;
 
-    TimestampedValue(Value const *val, int64_t timestamp)
+    TimestampedValue(DataValue const *val, int64_t timestamp,
+                     std::vector<uint8_t> const &signature)
         : m_timestamp(timestamp) {
         for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
             m_val[idx] = val->data()->Get(idx);
         }
+
+        if (signature.size() > m_signature.size()) {
+            KILL("SIGNATURE TOO LARGE: %zu > %zu", signature.size(),
+                 m_signature.size());
+        }
+        std::copy(std::begin(signature), std::end(signature),
+                  std::begin(m_signature));
     }
 };
 
@@ -56,10 +67,11 @@ class KeyValueStore {
     void add_backing_store(void *persistent_backed_store,
                            size_t persistent_backed_store_size);
 
-    int64_t get(int64_t key, std::array<uint8_t, REGISTER_SIZE> *val);
+    int64_t get(int64_t key, std::array<uint8_t, REGISTER_SIZE> *val,
+                std::vector<uint8_t> &signature);
     int64_t get_timestamp(int64_t key);
-    bool put(int64_t key, Value const *val, int64_t timestamp,
-             int64_t *current_timestamp);
+    bool put(int64_t key, DataValue const *val, int64_t timestamp,
+             std::vector<uint8_t> const &signature, int64_t *current_timestamp);
     void reset();
 };
 

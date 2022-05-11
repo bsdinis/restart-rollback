@@ -30,7 +30,8 @@ int put_resp_handler(peer &p, int64_t ticket, PutResult const *args);
 // direct handlers: handlers for calls we execute ourselves
 int get_resp_handler_action(GetCallContext &context, size_t peer_idx,
                             std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp);
+                            int64_t timestamp,
+                            std::vector<uint8_t> &&signature);
 int get_timestamp_resp_handler_action(PutCallContext &context,
                                       int64_t timestamp);
 

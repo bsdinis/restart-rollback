@@ -1,5 +1,6 @@
 #include "qp_helpers.h"
 #include "qp_context.h"
+#include "qp_crypto.h"
 #include "qp_network.h"
 #include "qp_result.h"
 
@@ -60,7 +61,7 @@ std::pair<int64_t, bool> g_proxy_put_result;
 ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 
 namespace {
-inline size_t quorum_size() { return ((g_servers.size() - 1) / 2) + 1; }
+inline size_t quorum_size() { return 2 * ((g_servers.size() - 1) / 3) + 1; }
 
 int send_payload_to(peer &server, uint8_t const *payload, size_t size) {
     if (server.append(&size, 1) == -1) {
@@ -135,9 +136,15 @@ call_type get_call_type(int64_t ticket);
 
 int greeting_handler(size_t peer_idx, int32_t id);
 
+int get_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value);
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                 std::array<uint8_t, REGISTER_SIZE> const &value,
                 int64_t timestamp);
+int get_timestamp_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value);
 int get_timestamp_handler(size_t peer_idx, int64_t ticket, int64_t key,
                           int64_t timestamp);
 GetContext *get_get_ctx(int64_t ticket, call_type type);
@@ -172,6 +179,9 @@ int put_finish_sync(int64_t ticket, int64_t timestamp, bool success);
 int put_finish_async(int64_t ticket, int64_t timestamp, bool success);
 int put_finish_cb(int64_t ticket, int64_t timestamp, bool success);
 
+int proxy_get_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value);
 int proxy_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                       std::array<uint8_t, REGISTER_SIZE> const &value,
                       int64_t timestamp);
@@ -249,19 +259,30 @@ int64_t send_get_timestamp_request(int64_t key, call_type type) {
 int send_put_request(int64_t ticket, int64_t key,
                      std::array<uint8_t, REGISTER_SIZE> const &value,
                      int64_t timestamp, call_type type) {
+    std::vector<uint8_t> v_signature;
+    if (sign_value(key, timestamp, value, v_signature) != 0) {
+        ERROR("failed to sign value [%ld]", ticket);
+        return -1;
+    }
+
     flatbuffers::FlatBufferBuilder builder;
 
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
         for (size_t idx = 0; idx < value.size(); ++idx) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto put_args = register_sgx::byzantine::CreatePutArgs(
-        builder, key, &fb_value, timestamp);
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, key, &data_value, timestamp);
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &v_signature);
+
+    auto put_args =
+        register_sgx::byzantine::CreatePutArgs(builder, signed_value);
 
     auto request = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_put_req, ticket,
@@ -283,20 +304,30 @@ int send_writeback_request_to(int64_t ticket, int64_t key,
                               std::array<uint8_t, REGISTER_SIZE> const &value,
                               int64_t timestamp, call_type type,
                               std::vector<size_t> send_list) {
+    std::vector<uint8_t> v_signature;
+    if (sign_value(key, timestamp, value, v_signature) != 0) {
+        ERROR("failed to sign value [%ld]", ticket);
+        return -1;
+    }
+
     flatbuffers::FlatBufferBuilder builder;
 
-    auto fb_value = register_sgx::byzantine::Value();
+    auto data_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
+        data_value.mutable_data();
     {
-        ssize_t idx = 0;
-        for (auto x : value) {
-            fb_arr->Mutate(idx, x);
+        for (size_t idx = 0; idx < value.size(); ++idx) {
+            fb_arr->Mutate(idx, value[idx]);
         }
     }
 
-    auto put_args = register_sgx::byzantine::CreatePutArgs(
-        builder, key, &fb_value, timestamp);
+    auto fb_value = register_sgx::byzantine::CreateValue(
+        builder, key, &data_value, timestamp);
+    auto signed_value = register_sgx::byzantine::CreateSignedValueDirect(
+        builder, fb_value, &v_signature);
+
+    auto put_args =
+        register_sgx::byzantine::CreatePutArgs(builder, signed_value);
 
     auto request = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_put_req, ticket,
@@ -348,7 +379,7 @@ int64_t send_proxy_put_request(peer &server, int64_t key,
 
     flatbuffers::FlatBufferBuilder builder;
 
-    auto fb_value = register_sgx::byzantine::Value();
+    auto fb_value = register_sgx::byzantine::DataValue();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
         fb_value.mutable_data();
     {
@@ -358,7 +389,7 @@ int64_t send_proxy_put_request(peer &server, int64_t key,
     }
 
     auto put_args = register_sgx::byzantine::CreateProxyPutArgs(
-        builder, key, &fb_value, g_client_id);
+        builder, key, g_client_id, &fb_value);
 
     auto request = register_sgx::byzantine::CreateMessage(
         builder, register_sgx::byzantine::MessageType_proxy_put_req, ticket,
@@ -449,7 +480,6 @@ int handle_received_message(size_t idx, peer &p) {
         FINE("resp size: %zu B (according to header)", total_size);
         if (total_size + sizeof(size_t) > p.buffer().size()) return 0;
 
-        std::array<uint8_t, REGISTER_SIZE> value;
         auto response = register_sgx::byzantine::GetMessage(p.buffer().data() +
                                                             sizeof(size_t));
 
@@ -460,21 +490,15 @@ int handle_received_message(size_t idx, peer &p) {
                 break;
             case register_sgx::byzantine::MessageType_get_resp:
                 FINE("get response [ticket %ld]", response->ticket());
-                for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
-                    value[idx] =
-                        response->message_as_GetResult()->value()->data()->Get(
-                            idx);
-                }
-                get_handler(idx, response->ticket(),
-                            response->message_as_GetResult()->key(), value,
-                            response->message_as_GetResult()->timestamp());
+                get_handler_verify(
+                    idx, response->ticket(),
+                    response->message_as_GetResult()->signed_value());
                 break;
             case register_sgx::byzantine::MessageType_get_timestamp_resp:
                 FINE("get timestamp response [ticket %ld]", response->ticket());
-                get_timestamp_handler(
+                get_timestamp_handler_verify(
                     idx, response->ticket(),
-                    response->message_as_GetTimestampResult()->key(),
-                    response->message_as_GetTimestampResult()->timestamp());
+                    response->message_as_GetTimestampResult()->signed_value());
                 break;
             case register_sgx::byzantine::MessageType_put_resp:
                 FINE("put response [ticket %ld]", response->ticket());
@@ -484,15 +508,9 @@ int handle_received_message(size_t idx, peer &p) {
                 break;
             case register_sgx::byzantine::MessageType_proxy_get_resp:
                 FINE("proxy get response [ticket %ld]", response->ticket());
-                for (ssize_t idx = 0; idx < REGISTER_SIZE; ++idx) {
-                    value[idx] =
-                        response->message_as_GetResult()->value()->data()->Get(
-                            idx);
-                }
-                proxy_get_handler(
+                proxy_get_handler_verify(
                     idx, response->ticket(),
-                    response->message_as_GetResult()->key(), value,
-                    response->message_as_GetResult()->timestamp());
+                    response->message_as_GetResult()->signed_value());
                 break;
             case register_sgx::byzantine::MessageType_proxy_put_resp:
                 FINE("proxy put response [ticket %ld]", response->ticket());
@@ -544,6 +562,65 @@ int greeting_handler(size_t peer_idx, int32_t id) {
     }
 
     return 0;
+}
+
+int handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value,
+    std::function<int(size_t, int64_t,
+                      register_sgx::byzantine::SignedValue const *signed_value)>
+        continuation) {
+    bool authentic = false;
+    if (signed_value->value()->timestamp() > 0 &&
+        (verify_value(signed_value, &authentic) != 0 || !authentic)) {
+        LOG("%ld %s", signed_value->value()->timestamp(),
+            authentic ? "authentic" : "invalid");
+        ERROR("failed to verify a value [%ld]", ticket);
+        return -1;
+    }
+    return continuation(peer_idx, ticket, signed_value);
+}
+
+int get_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value) {
+    return handler_verify(
+        peer_idx, ticket, signed_value,
+        [](size_t p, int64_t t,
+           register_sgx::byzantine::SignedValue const *s_value) {
+            std::array<uint8_t, REGISTER_SIZE> value;
+            for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
+                value[idx] = s_value->value()->data_value()->data()->Get(idx);
+            }
+            return get_handler(p, t, s_value->value()->key(), value,
+                               s_value->value()->timestamp());
+        });
+}
+int get_timestamp_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value) {
+    return handler_verify(
+        peer_idx, ticket, signed_value,
+        [](size_t p, int64_t t,
+           register_sgx::byzantine::SignedValue const *s_value) {
+            return get_timestamp_handler(p, t, s_value->value()->key(),
+                                         s_value->value()->timestamp());
+        });
+}
+int proxy_get_handler_verify(
+    size_t peer_idx, int64_t ticket,
+    register_sgx::byzantine::SignedValue const *signed_value) {
+    return handler_verify(
+        peer_idx, ticket, signed_value,
+        [](size_t p, int64_t t,
+           register_sgx::byzantine::SignedValue const *s_value) {
+            std::array<uint8_t, REGISTER_SIZE> value;
+            for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
+                value[idx] = s_value->value()->data_value()->data()->Get(idx);
+            }
+            return proxy_get_handler(p, t, s_value->value()->key(), value,
+                                     s_value->value()->timestamp());
+        });
 }
 
 int get_handler(size_t peer_idx, int64_t ticket, int64_t key,

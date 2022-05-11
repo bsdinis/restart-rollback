@@ -92,7 +92,7 @@ int SGX_CDECL main(int argc, char *argv[]) {
     INFO("starting enclave");
     byzantine_enclave_start(global_eid, conf, my_idx,
                             create_mapping(mapping_filename), MAPPED_SIZE,
-                            stats.data(), stats.size(), (conf.size - 1) / 2);
+                            stats.data(), stats.size(), (conf.size - 1) / 3);
     config_free(&conf);
 }
 

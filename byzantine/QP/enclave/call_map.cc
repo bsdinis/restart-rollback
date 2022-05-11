@@ -1,5 +1,6 @@
 #include "call_map.h"
 #include "byzantine_generated.h"
+#include "digital_signature.h"
 #include "handler_helpers.h"
 #include "log.h"
 
@@ -10,11 +11,15 @@ namespace byzantine {
 
 void GetCallContext::add_get_reply(
     int64_t peer_idx, int64_t timestamp,
-    std::array<uint8_t, REGISTER_SIZE> const& value) {
+    std::array<uint8_t, REGISTER_SIZE> const& value,
+    std::vector<uint8_t>&& signature) {
     m_n_get_replies += 1;
     if (timestamp > m_timestamp) {
         m_timestamp = timestamp;
-        std::copy(std::begin(value), std::end(value), std::begin(m_value));
+        if (m_timestamp > 0) {
+            std::copy(std::begin(value), std::end(value), std::begin(m_value));
+            m_signature = signature;
+        }
     }
 
     if (peer_idx >= 0) {
@@ -49,6 +54,10 @@ void PutCallContext::add_get_reply(int64_t timestamp) {
 }
 void PutCallContext::add_put_reply() { m_n_put_replies += 1; }
 
+int PutCallContext::sign() {
+    return sign_value(m_key, next_timestamp(), m_value, m_signature);
+}
+
 // call map
 
 GetCallContext* CallMap::add_get_call(peer* client, int64_t ticket,
@@ -57,7 +66,8 @@ GetCallContext* CallMap::add_get_call(peer* client, int64_t ticket,
                 .first->second;
 }
 PutCallContext* CallMap::add_put_call(peer* client, int64_t ticket, int64_t key,
-                                      int32_t client_id, Value const* value) {
+                                      int32_t client_id,
+                                      DataValue const* value) {
     return &m_put_map
                 .emplace(ticket,
                          PutCallContext(client, ticket, key, client_id, value))

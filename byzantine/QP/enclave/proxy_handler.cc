@@ -37,15 +37,17 @@ int proxy_get_handler(peer &p, int64_t ticket, GetArgs const *args) {
     }
 
     std::array<uint8_t, REGISTER_SIZE> value;
-    auto const timestamp = g_kv_store.get(args->key(), &value);
-    return get_resp_handler_action(*ctx, -1, value, timestamp);
+    std::vector<uint8_t> signature;
+    auto const timestamp = g_kv_store.get(args->key(), &value, signature);
+    return get_resp_handler_action(*ctx, -1, value, timestamp,
+                                   std::move(signature));
 }
 
 int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
     LOG("proxy put request [%ld]: key %ld", ticket, args->key());
 
     auto ctx = g_call_map.add_put_call(&p, ticket, args->key(),
-                                       args->client_id(), args->value());
+                                       args->client_id(), args->data_value());
 
     flatbuffers::FlatBufferBuilder builder;
     auto get_timestamp_args =

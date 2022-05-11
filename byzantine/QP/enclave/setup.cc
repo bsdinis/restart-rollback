@@ -26,19 +26,23 @@ register_sgx::byzantine::KeyValueStore g_kv_store;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
 
+EVP_PKEY* g_rsa_pkey = nullptr;
+
 namespace {
 
 int g_my_idx = -1;
 int client_listen_sock_ = -1;
 int replica_listen_sock_ = -1;
-SSL_CTX* ssl_server_ctx;
-SSL_CTX* ssl_client_ctx;
+SSL_CTX* ssl_server_ctx = nullptr;
+SSL_CTX* ssl_client_ctx = nullptr;
+RSA* g_rsa_raw_key = nullptr;
 bool closed_ = false;
 
 size_t g_fault_tolerance = 0;
 
 char const* server_crt = "certs/server.crt";
 char const* server_key = "certs/server.key";
+char const* client_key = "certs/client.key";
 
 int connect_replica(config_node_t const& peer_config) {
     FINE("connecting to %s:%d", peer_config.addr, peer_config.port * 2);
@@ -152,6 +156,11 @@ void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
     if (ssl::load_certificates(ssl_client_ctx, server_crt, server_key) != 0) {
         KILL("failed to load certificates for client SSL");
     }
+    if (ssl::load_key(&g_rsa_raw_key, client_key) != 0) {
+        KILL("failed to load RSA key");
+    }
+    g_rsa_pkey = EVP_PKEY_new();
+    EVP_PKEY_assign_RSA(g_rsa_pkey, g_rsa_raw_key);
 
     if (connect_to_all_replicas(conf, idx) != 0) {
         KILL("failed to connect to replicas");
@@ -166,9 +175,13 @@ void close() {
 
     if (ssl_server_ctx) SSL_CTX_free(ssl_server_ctx);
     if (ssl_client_ctx) SSL_CTX_free(ssl_client_ctx);
+    if (g_rsa_pkey) EVP_PKEY_free(g_rsa_pkey);
     client_listen_sock_ = -1;
     replica_listen_sock_ = -1;
     ssl_server_ctx = nullptr;
+    ssl_client_ctx = nullptr;
+    g_rsa_pkey = nullptr;
+    g_rsa_raw_key = nullptr;
     closed_ = true;
 }
 
@@ -177,8 +190,8 @@ int client_listen_sock() { return client_listen_sock_; }
 int replica_listen_sock() { return replica_listen_sock_; }
 bool closed() { return closed_; }
 
-size_t quorum_size() { return g_fault_tolerance + 1; }
-size_t n_replicas() { return 2 * g_fault_tolerance + 1; }
+size_t quorum_size() { return 2 * g_fault_tolerance + 1; }
+size_t n_replicas() { return 3 * g_fault_tolerance + 1; }
 ssize_t my_idx() { return g_my_idx; }
 
 }  // namespace setup

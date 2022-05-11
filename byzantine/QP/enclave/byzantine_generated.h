@@ -8,7 +8,13 @@
 namespace register_sgx {
 namespace byzantine {
 
+struct DataValue;
+
 struct Value;
+struct ValueBuilder;
+
+struct SignedValue;
+struct SignedValueBuilder;
 
 struct GetArgs;
 struct GetArgsBuilder;
@@ -211,13 +217,13 @@ bool VerifyBasicMessageVector(
     const flatbuffers::Vector<flatbuffers::Offset<void>> *values,
     const flatbuffers::Vector<uint8_t> *types);
 
-FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) Value FLATBUFFERS_FINAL_CLASS {
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) DataValue FLATBUFFERS_FINAL_CLASS {
    private:
     uint8_t data_[2048];
 
    public:
-    Value() : data_() {}
-    Value(flatbuffers::span<const uint8_t, 2048> _data) {
+    DataValue() : data_() {}
+    DataValue(flatbuffers::span<const uint8_t, 2048> _data) {
         flatbuffers::CastToArray(data_).CopyFromSpan(_data);
     }
     const flatbuffers::Array<uint8_t, 2048> *data() const {
@@ -227,7 +233,137 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) Value FLATBUFFERS_FINAL_CLASS {
         return &flatbuffers::CastToArray(data_);
     }
 };
-FLATBUFFERS_STRUCT_END(Value, 2048);
+FLATBUFFERS_STRUCT_END(DataValue, 2048);
+
+struct Value FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef ValueBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_DATA_VALUE = 6,
+        VT_TIMESTAMP = 8
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    const register_sgx::byzantine::DataValue *data_value() const {
+        return GetStruct<const register_sgx::byzantine::DataValue *>(
+            VT_DATA_VALUE);
+    }
+    register_sgx::byzantine::DataValue *mutable_data_value() {
+        return GetStruct<register_sgx::byzantine::DataValue *>(VT_DATA_VALUE);
+    }
+    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
+    bool mutate_timestamp(int64_t _timestamp) {
+        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<register_sgx::byzantine::DataValue>(verifier,
+                                                               VT_DATA_VALUE) &&
+               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
+               verifier.EndTable();
+    }
+};
+
+struct ValueBuilder {
+    typedef Value Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(Value::VT_KEY, key, 0);
+    }
+    void add_data_value(const register_sgx::byzantine::DataValue *data_value) {
+        fbb_.AddStruct(Value::VT_DATA_VALUE, data_value);
+    }
+    void add_timestamp(int64_t timestamp) {
+        fbb_.AddElement<int64_t>(Value::VT_TIMESTAMP, timestamp, 0);
+    }
+    explicit ValueBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<Value> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<Value>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<Value> CreateValue(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    const register_sgx::byzantine::DataValue *data_value = 0,
+    int64_t timestamp = 0) {
+    ValueBuilder builder_(_fbb);
+    builder_.add_timestamp(timestamp);
+    builder_.add_key(key);
+    builder_.add_data_value(data_value);
+    return builder_.Finish();
+}
+
+struct SignedValue FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef SignedValueBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_VALUE = 4,
+        VT_SIGNATURE = 6
+    };
+    const register_sgx::byzantine::Value *value() const {
+        return GetPointer<const register_sgx::byzantine::Value *>(VT_VALUE);
+    }
+    register_sgx::byzantine::Value *mutable_value() {
+        return GetPointer<register_sgx::byzantine::Value *>(VT_VALUE);
+    }
+    const flatbuffers::Vector<uint8_t> *signature() const {
+        return GetPointer<const flatbuffers::Vector<uint8_t> *>(VT_SIGNATURE);
+    }
+    flatbuffers::Vector<uint8_t> *mutable_signature() {
+        return GetPointer<flatbuffers::Vector<uint8_t> *>(VT_SIGNATURE);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) && VerifyOffset(verifier, VT_VALUE) &&
+               verifier.VerifyTable(value()) &&
+               VerifyOffset(verifier, VT_SIGNATURE) &&
+               verifier.VerifyVector(signature()) && verifier.EndTable();
+    }
+};
+
+struct SignedValueBuilder {
+    typedef SignedValue Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_value(flatbuffers::Offset<register_sgx::byzantine::Value> value) {
+        fbb_.AddOffset(SignedValue::VT_VALUE, value);
+    }
+    void add_signature(
+        flatbuffers::Offset<flatbuffers::Vector<uint8_t>> signature) {
+        fbb_.AddOffset(SignedValue::VT_SIGNATURE, signature);
+    }
+    explicit SignedValueBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<SignedValue> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<SignedValue>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<SignedValue> CreateSignedValue(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<register_sgx::byzantine::Value> value = 0,
+    flatbuffers::Offset<flatbuffers::Vector<uint8_t>> signature = 0) {
+    SignedValueBuilder builder_(_fbb);
+    builder_.add_signature(signature);
+    builder_.add_value(value);
+    return builder_.Finish();
+}
+
+inline flatbuffers::Offset<SignedValue> CreateSignedValueDirect(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<register_sgx::byzantine::Value> value = 0,
+    const std::vector<uint8_t> *signature = nullptr) {
+    auto signature__ = signature ? _fbb.CreateVector<uint8_t>(*signature) : 0;
+    return register_sgx::byzantine::CreateSignedValue(_fbb, value, signature__);
+}
 
 struct GetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetArgsBuilder Builder;
@@ -269,29 +405,20 @@ inline flatbuffers::Offset<GetArgs> CreateGetArgs(
 struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4,
-        VT_VALUE = 6,
-        VT_TIMESTAMP = 8
+        VT_SIGNED_VALUE = 4
     };
-    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
-    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
-    const register_sgx::byzantine::Value *value() const {
-        return GetStruct<const register_sgx::byzantine::Value *>(VT_VALUE);
+    const register_sgx::byzantine::SignedValue *signed_value() const {
+        return GetPointer<const register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
     }
-    register_sgx::byzantine::Value *mutable_value() {
-        return GetStruct<register_sgx::byzantine::Value *>(VT_VALUE);
-    }
-    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
-    bool mutate_timestamp(int64_t _timestamp) {
-        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    register_sgx::byzantine::SignedValue *mutable_signed_value() {
+        return GetPointer<register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
     }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_KEY) &&
-               VerifyField<register_sgx::byzantine::Value>(verifier,
-                                                           VT_VALUE) &&
-               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
-               verifier.EndTable();
+               VerifyOffset(verifier, VT_SIGNED_VALUE) &&
+               verifier.VerifyTable(signed_value()) && verifier.EndTable();
     }
 };
 
@@ -299,14 +426,10 @@ struct GetResultBuilder {
     typedef GetResult Table;
     flatbuffers::FlatBufferBuilder &fbb_;
     flatbuffers::uoffset_t start_;
-    void add_key(int64_t key) {
-        fbb_.AddElement<int64_t>(GetResult::VT_KEY, key, 0);
-    }
-    void add_value(const register_sgx::byzantine::Value *value) {
-        fbb_.AddStruct(GetResult::VT_VALUE, value);
-    }
-    void add_timestamp(int64_t timestamp) {
-        fbb_.AddElement<int64_t>(GetResult::VT_TIMESTAMP, timestamp, 0);
+    void add_signed_value(
+        flatbuffers::Offset<register_sgx::byzantine::SignedValue>
+            signed_value) {
+        fbb_.AddOffset(GetResult::VT_SIGNED_VALUE, signed_value);
     }
     explicit GetResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -320,12 +443,11 @@ struct GetResultBuilder {
 };
 
 inline flatbuffers::Offset<GetResult> CreateGetResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const register_sgx::byzantine::Value *value = 0, int64_t timestamp = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<register_sgx::byzantine::SignedValue> signed_value =
+        0) {
     GetResultBuilder builder_(_fbb);
-    builder_.add_timestamp(timestamp);
-    builder_.add_key(key);
-    builder_.add_value(value);
+    builder_.add_signed_value(signed_value);
     return builder_.Finish();
 }
 
@@ -370,20 +492,20 @@ inline flatbuffers::Offset<GetTimestampArgs> CreateGetTimestampArgs(
 struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetTimestampResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4,
-        VT_TIMESTAMP = 6
+        VT_SIGNED_VALUE = 4
     };
-    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
-    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
-    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
-    bool mutate_timestamp(int64_t _timestamp) {
-        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    const register_sgx::byzantine::SignedValue *signed_value() const {
+        return GetPointer<const register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
+    }
+    register_sgx::byzantine::SignedValue *mutable_signed_value() {
+        return GetPointer<register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
     }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_KEY) &&
-               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
-               verifier.EndTable();
+               VerifyOffset(verifier, VT_SIGNED_VALUE) &&
+               verifier.VerifyTable(signed_value()) && verifier.EndTable();
     }
 };
 
@@ -391,12 +513,10 @@ struct GetTimestampResultBuilder {
     typedef GetTimestampResult Table;
     flatbuffers::FlatBufferBuilder &fbb_;
     flatbuffers::uoffset_t start_;
-    void add_key(int64_t key) {
-        fbb_.AddElement<int64_t>(GetTimestampResult::VT_KEY, key, 0);
-    }
-    void add_timestamp(int64_t timestamp) {
-        fbb_.AddElement<int64_t>(GetTimestampResult::VT_TIMESTAMP, timestamp,
-                                 0);
+    void add_signed_value(
+        flatbuffers::Offset<register_sgx::byzantine::SignedValue>
+            signed_value) {
+        fbb_.AddOffset(GetTimestampResult::VT_SIGNED_VALUE, signed_value);
     }
     explicit GetTimestampResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -410,11 +530,11 @@ struct GetTimestampResultBuilder {
 };
 
 inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    int64_t timestamp = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<register_sgx::byzantine::SignedValue> signed_value =
+        0) {
     GetTimestampResultBuilder builder_(_fbb);
-    builder_.add_timestamp(timestamp);
-    builder_.add_key(key);
+    builder_.add_signed_value(signed_value);
     return builder_.Finish();
 }
 
@@ -422,27 +542,28 @@ struct ProxyPutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef ProxyPutArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_VALUE = 6,
-        VT_CLIENT_ID = 8
+        VT_CLIENT_ID = 6,
+        VT_DATA_VALUE = 8
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
-    const register_sgx::byzantine::Value *value() const {
-        return GetStruct<const register_sgx::byzantine::Value *>(VT_VALUE);
-    }
-    register_sgx::byzantine::Value *mutable_value() {
-        return GetStruct<register_sgx::byzantine::Value *>(VT_VALUE);
-    }
     int32_t client_id() const { return GetField<int32_t>(VT_CLIENT_ID, 0); }
     bool mutate_client_id(int32_t _client_id) {
         return SetField<int32_t>(VT_CLIENT_ID, _client_id, 0);
     }
+    const register_sgx::byzantine::DataValue *data_value() const {
+        return GetStruct<const register_sgx::byzantine::DataValue *>(
+            VT_DATA_VALUE);
+    }
+    register_sgx::byzantine::DataValue *mutable_data_value() {
+        return GetStruct<register_sgx::byzantine::DataValue *>(VT_DATA_VALUE);
+    }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
-               VerifyField<register_sgx::byzantine::Value>(verifier,
-                                                           VT_VALUE) &&
                VerifyField<int32_t>(verifier, VT_CLIENT_ID) &&
+               VerifyField<register_sgx::byzantine::DataValue>(verifier,
+                                                               VT_DATA_VALUE) &&
                verifier.EndTable();
     }
 };
@@ -454,11 +575,11 @@ struct ProxyPutArgsBuilder {
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(ProxyPutArgs::VT_KEY, key, 0);
     }
-    void add_value(const register_sgx::byzantine::Value *value) {
-        fbb_.AddStruct(ProxyPutArgs::VT_VALUE, value);
-    }
     void add_client_id(int32_t client_id) {
         fbb_.AddElement<int32_t>(ProxyPutArgs::VT_CLIENT_ID, client_id, 0);
+    }
+    void add_data_value(const register_sgx::byzantine::DataValue *data_value) {
+        fbb_.AddStruct(ProxyPutArgs::VT_DATA_VALUE, data_value);
     }
     explicit ProxyPutArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -473,40 +594,32 @@ struct ProxyPutArgsBuilder {
 
 inline flatbuffers::Offset<ProxyPutArgs> CreateProxyPutArgs(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const register_sgx::byzantine::Value *value = 0, int32_t client_id = 0) {
+    int32_t client_id = 0,
+    const register_sgx::byzantine::DataValue *data_value = 0) {
     ProxyPutArgsBuilder builder_(_fbb);
     builder_.add_key(key);
+    builder_.add_data_value(data_value);
     builder_.add_client_id(client_id);
-    builder_.add_value(value);
     return builder_.Finish();
 }
 
 struct PutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef PutArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4,
-        VT_VALUE = 6,
-        VT_TIMESTAMP = 8
+        VT_SIGNED_VALUE = 4
     };
-    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
-    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
-    const register_sgx::byzantine::Value *value() const {
-        return GetStruct<const register_sgx::byzantine::Value *>(VT_VALUE);
+    const register_sgx::byzantine::SignedValue *signed_value() const {
+        return GetPointer<const register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
     }
-    register_sgx::byzantine::Value *mutable_value() {
-        return GetStruct<register_sgx::byzantine::Value *>(VT_VALUE);
-    }
-    int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
-    bool mutate_timestamp(int64_t _timestamp) {
-        return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
+    register_sgx::byzantine::SignedValue *mutable_signed_value() {
+        return GetPointer<register_sgx::byzantine::SignedValue *>(
+            VT_SIGNED_VALUE);
     }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_KEY) &&
-               VerifyField<register_sgx::byzantine::Value>(verifier,
-                                                           VT_VALUE) &&
-               VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
-               verifier.EndTable();
+               VerifyOffset(verifier, VT_SIGNED_VALUE) &&
+               verifier.VerifyTable(signed_value()) && verifier.EndTable();
     }
 };
 
@@ -514,14 +627,10 @@ struct PutArgsBuilder {
     typedef PutArgs Table;
     flatbuffers::FlatBufferBuilder &fbb_;
     flatbuffers::uoffset_t start_;
-    void add_key(int64_t key) {
-        fbb_.AddElement<int64_t>(PutArgs::VT_KEY, key, 0);
-    }
-    void add_value(const register_sgx::byzantine::Value *value) {
-        fbb_.AddStruct(PutArgs::VT_VALUE, value);
-    }
-    void add_timestamp(int64_t timestamp) {
-        fbb_.AddElement<int64_t>(PutArgs::VT_TIMESTAMP, timestamp, 0);
+    void add_signed_value(
+        flatbuffers::Offset<register_sgx::byzantine::SignedValue>
+            signed_value) {
+        fbb_.AddOffset(PutArgs::VT_SIGNED_VALUE, signed_value);
     }
     explicit PutArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
@@ -534,12 +643,11 @@ struct PutArgsBuilder {
 };
 
 inline flatbuffers::Offset<PutArgs> CreatePutArgs(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const register_sgx::byzantine::Value *value = 0, int64_t timestamp = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<register_sgx::byzantine::SignedValue> signed_value =
+        0) {
     PutArgsBuilder builder_(_fbb);
-    builder_.add_timestamp(timestamp);
-    builder_.add_key(key);
-    builder_.add_value(value);
+    builder_.add_signed_value(signed_value);
     return builder_.Finish();
 }
 

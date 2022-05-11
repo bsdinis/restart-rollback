@@ -27,8 +27,20 @@ enum MessageType:byte {
     close_req,
 }
 
-struct Value {
+struct DataValue {
     data: [ubyte:2048];
+}
+
+
+table Value {
+    key: int64;
+    data_value: DataValue;
+    timestamp: int64;
+}
+
+table SignedValue {
+    value: Value;
+    signature: [ubyte];
 }
 
 table GetArgs {
@@ -36,9 +48,7 @@ table GetArgs {
 }
 
 table GetResult {
-    key : int64;
-    value : Value;
-    timestamp: int64;
+    signed_value: SignedValue;
 }
 
 table GetTimestampArgs {
@@ -46,20 +56,17 @@ table GetTimestampArgs {
 }
 
 table GetTimestampResult {
-    key : int64;
-    timestamp: int64;
+    signed_value: SignedValue;
 }
 
 table ProxyPutArgs {
-    key : int64;
-    value : Value;
+    key: int64;
     client_id: int32;
+    data_value: DataValue;
 }
 
 table PutArgs {
-    key : int64;
-    value : Value;
-    timestamp: int64;
+    signed_value: SignedValue;
 }
 
 table PutResult {
