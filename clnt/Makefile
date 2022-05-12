@@ -19,6 +19,7 @@ else
   CFLAGS += -O3
 endif
 CXXFLAGS := $(CFLAGS) -Wall -Werror -std=c++14
+CXXFLAGS := $(CXXFLAGS) -Wno-unused-function
 
 LIB_SOURCES=$(wildcard lib/*.cc)
 LIG_OBJECTS=$(LIB_SOURCES:.cc=.o)
@@ -38,6 +39,7 @@ libteems.a: $(LIG_OBJECTS)
 test: libteems.a $(TESTS)
 	@for t in $(TESTS) ; do echo $$t; echo; ./$$t ; echo; done
 
+metadata_test: metadata_test.o libteems.a
 teems_test: teems_test.o libteems.a
 close_remote: close_remote.o libteems.a
 latency_test: latency_test.o libteems.a

@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "log.h"
+#include "metadata.h"
 #include "network.h"
 #include "protocol_helpers.h"
 #include "result.h"
@@ -27,15 +28,12 @@ using FBValue = flatbuffers::Array<uint8_t, REGISTER_SIZE>;
 
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 
-extern std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
-    g_metadata_get_result;
+extern std::tuple<int64_t, Metadata, int64_t> g_metadata_get_result;
 extern std::pair<int64_t, bool> g_metadata_put_result;
 
 // protocol globals
 
 int32_t g_client_id = -1;
-size_t g_rollback_tolerance = 0;
-size_t g_crash_tolerance = 0;
 
 // ticket of the last call to be made
 int64_t g_call_ticket = 0;
@@ -43,12 +41,13 @@ size_t g_calls_issued = 0;
 size_t g_calls_concluded = 0;
 
 // callbacks
-std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                   int64_t)>
-    g_metadata_get_callback =
-        [](int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t) {};
-std::function<void(int64_t, bool, int64_t)> g_metadata_put_callback =
-    [](int64_t, bool, int64_t) {};
+std::function<void(int64_t, int64_t, std::vector<uint8_t>, int64_t, int64_t)>
+    g_get_callback =
+        [](int64_t, int64_t, std::vector<uint8_t>, int64_t, int64_t) {};
+std::function<void(int64_t, int64_t, int64_t, int64_t)> g_put_callback =
+    [](int64_t, int64_t, int64_t, int64_t) {};
+std::function<void(int64_t, int64_t, int64_t)> g_change_policy_callback =
+    [](int64_t, int64_t, int64_t) {};
 std::function<void(int64_t)> g_ping_callback = [](int64_t) {};
 std::function<void(int64_t)> g_reset_callback = [](int64_t) {};
 
@@ -99,8 +98,6 @@ int init(
         INFO("connected to QP on %s:%d", peer_node.addr, peer_node.port);
     }
 
-    g_rollback_tolerance = conf.r;
-    g_crash_tolerance = conf.f;
     config_free(&conf);
     g_results_map.reserve(concurrent_hint);
 
@@ -158,43 +155,23 @@ int close(bool close_remote) {
 size_t n_calls_issued() { return g_calls_issued; }
 size_t n_calls_concluded() { return g_calls_concluded; }
 size_t n_calls_outlasting() { return n_calls_issued() - n_calls_concluded(); }
+int32_t client_id() { return g_client_id; }
 
-bool metadata_get(int64_t key, std::array<uint8_t, REGISTER_SIZE> &value,
-                  int64_t &timestamp) {
-    if (send_metadata_get_request(g_servers[0], key, call_type::SYNC) == -1) {
-        ERROR("Failed to ping");
-        return false;
-    }
-
-    if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
-        return false;
-    }
-
-    timestamp = std::get<2>(g_metadata_get_result);
-    std::copy(std::cbegin(std::get<1>(g_metadata_get_result)),
-              std::cend(std::get<1>(g_metadata_get_result)), std::begin(value));
-
+// sync api
+bool get(int64_t key, std::vector<uint8_t> &value, int64_t &policy_version,
+         int64_t &timestamp) {
+    // TODO
     return true;
 }
-
-bool metadata_put(int64_t key, std::array<uint8_t, REGISTER_SIZE> const &value,
-                  int64_t &timestamp) {
-    if (send_metadata_put_request(g_servers[0], key, value, call_type::SYNC) ==
-        -1) {
-        ERROR("Failed to ping");
-        return false;
-    }
-
-    if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
-        return false;
-    }
-
-    timestamp = std::get<0>(g_metadata_put_result);
-    return std::get<1>(g_metadata_put_result);
+bool put(int64_t key, std::vector<uint8_t> const &value,
+         int64_t &policy_version, int64_t &timestamp) {
+    // TODO
+    return true;
 }
-
+bool change_policy(int64_t key, uint64_t policy, int64_t &policy_version) {
+    // TODO
+    return true;
+}
 void ping() {
     if (send_ping_request(g_servers[0], call_type::SYNC) == -1) {
         ERROR("Failed to ping");
@@ -220,13 +197,17 @@ void reset() {
 }
 
 // async api
-int64_t metadata_get_async(int64_t key) {
-    return send_metadata_get_request(g_servers[0], key, call_type::ASYNC);
+int64_t get_async(int64_t key) {
+    // TODO
+    return -1;
 }
-int64_t metadata_put_async(int64_t key,
-                           std::array<uint8_t, REGISTER_SIZE> const &value) {
-    return send_metadata_put_request(g_servers[0], key, value,
-                                     call_type::ASYNC);
+int64_t put_async(int64_t key, std::vector<uint8_t> const &value) {
+    // TODO
+    return -1;
+}
+int64_t change_policy_async(int64_t key, uint64_t policy) {
+    // TODO
+    return -1;
 }
 int64_t ping_async() {
     return send_ping_request(g_servers[0], call_type::ASYNC);
@@ -236,25 +217,33 @@ int64_t reset_async() {
 }
 
 // callback api
-int metadata_get_set_cb(
-    std::function<void(int64_t, int64_t, std::array<uint8_t, REGISTER_SIZE>,
-                       int64_t)>
-        cb) {
-    g_metadata_get_callback = cb;
+int get_set_cb(std::function<void(int64_t, int64_t, std::vector<uint8_t>,
+                                  int64_t, int64_t)>
+                   cb) {
+    g_get_callback = cb;
     return 0;
 }
-int64_t metadata_get_cb(int64_t key) {
-    return send_metadata_get_request(g_servers[0], key, call_type::CALLBACK);
+int64_t get_cb(int64_t key) {
+    // TODO
+    return -1;
 }
 
-int metadata_put_set_cb(std::function<void(int64_t, bool, int64_t)> cb) {
-    g_metadata_put_callback = cb;
+int put_set_cb(std::function<void(int64_t, int64_t, int64_t, int64_t)> cb) {
+    g_put_callback = cb;
     return 0;
 }
-int64_t metadata_put_cb(int64_t key,
-                        std::array<uint8_t, REGISTER_SIZE> const &value) {
-    return send_metadata_put_request(g_servers[0], key, value,
-                                     call_type::CALLBACK);
+int64_t put_cb(int64_t key, std::vector<uint8_t> const &value) {
+    // TODO
+    return -1;
+}
+
+int change_policy_set_cb(std::function<void(int64_t, int64_t, int64_t)> cb) {
+    g_change_policy_callback = cb;
+    return 0;
+}
+int64_t change_policy_cb(int64_t key, uint64_t policy) {
+    // TODO
+    return -1;
 }
 
 int ping_set_cb(std::function<void(int64_t)> cb) {
@@ -345,12 +334,18 @@ T get_reply(int64_t ticket) {
     return downcasted->get();
 }
 
+// for put
+template std::tuple<int64_t, int64_t, int64_t> get_reply(int64_t ticket);
+
+// for get
+template std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t> get_reply(
+    int64_t ticket);
+
 // for metadata put
 template std::pair<int64_t, bool> get_reply(int64_t ticket);
 
 // for metadata get
-template std::tuple<int64_t, std::array<uint8_t, REGISTER_SIZE>, int64_t>
-get_reply(int64_t ticket);
+template std::tuple<int64_t, Metadata, int64_t> get_reply(int64_t ticket);
 
 // for ping reset
 template <>

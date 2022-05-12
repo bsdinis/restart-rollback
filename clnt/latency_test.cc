@@ -49,16 +49,18 @@ std::map<std::string, do_func> funcs_by_op = {
     // global variables
     {"get",
      []() {
+         int64_t policy_version;
          int64_t timestamp;
-         std::array<uint8_t, teems::REGISTER_SIZE> value;
-         metadata_get(2, value, timestamp);
+         std::vector<uint8_t> value;
+         get(2, value, policy_version, timestamp);
      }},
     {"put",
      []() {
+         int64_t policy_version;
          int64_t timestamp;
-         std::array<uint8_t, teems::REGISTER_SIZE> value;
-         value.fill(1);
-         metadata_put(3, value, timestamp);
+         std::vector<uint8_t> value;
+         value.emplace_back(1);
+         put(3, value, policy_version, timestamp);
      }},
 };
 
