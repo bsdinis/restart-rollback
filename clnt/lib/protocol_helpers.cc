@@ -1,5 +1,6 @@
 #include "protocol_helpers.h"
 
+#include "async.h"
 #include "log.h"
 #include "metadata.h"
 #include "network.h"
@@ -21,10 +22,9 @@ extern size_t g_calls_concluded;
 extern std::function<void(int64_t)> g_ping_callback;
 extern std::function<void(int64_t)> g_reset_callback;
 
-// global variables to channel the results of synchronous calls to
+extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 
-// async results
-::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
+// global variables to channel the results of synchronous calls to
 
 namespace {
 int greeting_handler(size_t peer_idx, int32_t id);
@@ -43,7 +43,7 @@ int reset_handler_async(int64_t ticket);
 // send request
 // =================================
 int64_t send_ping_request(peer &server, call_type type) {
-    int64_t const ticket = gen_ticket(type);
+    int64_t const ticket = gen_teems_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
     auto ping_args = teems::CreateEmpty(builder);
@@ -71,7 +71,7 @@ int64_t send_ping_request(peer &server, call_type type) {
 }
 
 int64_t send_reset_request(peer &server, call_type type) {
-    int64_t const ticket = gen_ticket(type);
+    int64_t const ticket = gen_teems_ticket(type);
 
     flatbuffers::FlatBufferBuilder builder;
     auto reset_args = teems::CreateEmpty(builder);
@@ -147,10 +147,6 @@ int handle_received_message(size_t idx, peer &p) {
         p.skip(sizeof(size_t) + total_size);
     }
     return 0;
-}
-
-bool has_result(int64_t ticket) {
-    return g_results_map.find(ticket) != std::end(g_results_map);
 }
 
 namespace {

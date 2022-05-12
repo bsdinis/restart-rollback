@@ -1,12 +1,14 @@
 ## Makefile for clnt lib
 CC := clang
 CXX := clang++
-INCLUDES := -I. -I./lib
-CFLAGS := -fdiagnostics-color=always $(INCLUDES) # -fsanitize=address
-LDFLAGS := -L. $(INCLUDES) # -fsanitize=address
+INCLUDES := -I. -I./lib -I/usr/include/hiredis
+CFLAGS := -fdiagnostics-color=always $(INCLUDES) -fsanitize=address
+LDFLAGS := -L. $(INCLUDES) -fsanitize=address
 LDLIBS += -lssl -lcrypto
 LDLIBS += -lstdc++ -lm
 LDLIBS += -lflatbuffers
+LDLIBS += -lhiredis
+LDLIBS += -ls3
 LDLIBS += -lteems
 
 ifneq ($(strip $(DEBUG)), no)
@@ -25,7 +27,7 @@ LIB_SOURCES=$(wildcard lib/*.cc)
 LIG_OBJECTS=$(LIB_SOURCES:.cc=.o)
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(SOURCES:.cc=.o)
-TESTS := teems_test latency_test throughput_test close_remote
+TESTS := teems_test latency_test throughput_test close_remote untrusted_test
 
 
 all: libteems.a $(TESTS)
@@ -39,6 +41,7 @@ libteems.a: $(LIG_OBJECTS)
 test: libteems.a $(TESTS)
 	@for t in $(TESTS) ; do echo $$t; echo; ./$$t ; echo; done
 
+untrusted_test: untrusted_test.o libteems.a
 metadata_test: metadata_test.o libteems.a
 teems_test: teems_test.o libteems.a
 close_remote: close_remote.o libteems.a
@@ -54,6 +57,7 @@ fmt:
 .PHONY: clean
 clean:
 	rm -f *.o *.a vgcore* $(TESTS) lib/*.o
+	rm -rf teems_ustor.*
 
 depend : $(SOURCES)
 	$(CXX) $(CFLAGS) $(INCLUDES) -MM $(SOURCES) > autodep

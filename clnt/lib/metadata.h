@@ -6,6 +6,7 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#include "async.h"
 #include "teems_config.h"
 
 namespace teems {
@@ -32,15 +33,17 @@ class Metadata {
     // TODO
 };
 
-bool metadata_get(int64_t key, Metadata *value, int64_t &timestamp);
-bool metadata_put(int64_t key, Metadata const& value, int64_t &timestamp);
+bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata *value, int64_t &timestamp);
+bool metadata_put(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata const& value, int64_t &timestamp);
 
-int64_t metadata_get_async(int64_t key);
-int64_t metadata_put_async(int64_t key, Metadata const &value);
+int64_t metadata_get_async(int64_t super_ticket, uint8_t call_number, int64_t key);
+int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata const &value);
 
 int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                          Metadata &&value,
                          int64_t timestamp);
 int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
                          int64_t timestamp);
+
+poll_state poll_metadata(int64_t ticket);
 }  // namespace teems

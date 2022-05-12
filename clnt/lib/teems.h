@@ -29,12 +29,13 @@
 
 #include "teems_config.h"
 #include "types.h"
+#include "async.h"
 
 namespace teems{
 
 // initialize the connection
 int init(
-        char const * config = "../QP/default.conf",
+        char const * config = "../server/default.conf",
         size_t concurrent_hint = 1<<15,   // hint for number of concurrent calls permitted
         struct timeval timeout = { 0, 0 }, // timeout for select
         char const * cert_path = "certs/client.crt",
@@ -47,12 +48,6 @@ int close(bool close_remote = false);
 // number of servers we are connected to
 size_t n_servers();
 
-/**
- * information about the calls made
- */
-size_t n_calls_issued();
-size_t n_calls_concluded();
-size_t n_calls_outlasting();
 
 int32_t client_id();
 
@@ -85,11 +80,6 @@ int64_t change_policy_async(int64_t key, uint64_t policy);
 
 int64_t ping_async(void);
 int64_t reset_async(void);
-
-poll_state poll(int64_t ticket = -1);
-poll_state wait_for(int64_t ticket = -1);
-template<typename T>
-T get_reply(int64_t ticket);
 
 /**
  * callback API

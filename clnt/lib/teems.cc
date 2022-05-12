@@ -4,6 +4,7 @@
 
 #include "teems.h"
 
+#include "async.h"
 #include "config.h"
 #include "log.h"
 #include "metadata.h"
@@ -26,19 +27,12 @@ namespace teems {
 
 using FBValue = flatbuffers::Array<uint8_t, REGISTER_SIZE>;
 
-extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
-
 extern std::tuple<int64_t, Metadata, int64_t> g_metadata_get_result;
 extern std::pair<int64_t, bool> g_metadata_put_result;
 
 // protocol globals
 
 int32_t g_client_id = -1;
-
-// ticket of the last call to be made
-int64_t g_call_ticket = 0;
-size_t g_calls_issued = 0;
-size_t g_calls_concluded = 0;
 
 // callbacks
 std::function<void(int64_t, int64_t, std::vector<uint8_t>, int64_t, int64_t)>
@@ -99,7 +93,11 @@ int init(
     }
 
     config_free(&conf);
-    g_results_map.reserve(concurrent_hint);
+
+    if (async_init(concurrent_hint) != 0) {
+        ERROR("failed to initialize the async context");
+        return -1;
+    }
 
     while (g_client_id == -1) {
         struct timeval timeout = g_timeout;
@@ -114,7 +112,7 @@ int init(
 int close(bool close_remote) {
     // this will close the remote QP
     if (close_remote) {
-        int64_t const ticket = gen_ticket(call_type::SYNC);
+        int64_t const ticket = gen_teems_ticket(call_type::Sync);
         flatbuffers::FlatBufferBuilder builder;
         auto close_args = teems::CreateEmpty(builder);
         auto request =
@@ -148,13 +146,16 @@ int close(bool close_remote) {
     }
 
     close_ssl_ctx(g_client_ctx);
+
+    if (async_close() != 0) {
+        ERROR("failed to close async context");
+        return -1;
+    }
+
     g_servers.clear();
     return 0;
 }
 
-size_t n_calls_issued() { return g_calls_issued; }
-size_t n_calls_concluded() { return g_calls_concluded; }
-size_t n_calls_outlasting() { return n_calls_issued() - n_calls_concluded(); }
 int32_t client_id() { return g_client_id; }
 
 // sync api
@@ -173,7 +174,7 @@ bool change_policy(int64_t key, uint64_t policy, int64_t &policy_version) {
     return true;
 }
 void ping() {
-    if (send_ping_request(g_servers[0], call_type::SYNC) == -1) {
+    if (send_ping_request(g_servers[0], call_type::Sync) == -1) {
         ERROR("Failed to ping");
         return;
     }
@@ -186,7 +187,7 @@ void ping() {
 void reset() {
     for (size_t idx = 0; idx < g_servers.size(); ++idx) {
         auto &server = g_servers[idx];
-        if (send_reset_request(server, call_type::SYNC) == -1) {
+        if (send_reset_request(server, call_type::Sync) == -1) {
             ERROR("Failed to reset");
             return;
         }
@@ -210,10 +211,10 @@ int64_t change_policy_async(int64_t key, uint64_t policy) {
     return -1;
 }
 int64_t ping_async() {
-    return send_ping_request(g_servers[0], call_type::ASYNC);
+    return send_ping_request(g_servers[0], call_type::Async);
 }
 int64_t reset_async() {
-    return send_reset_request(g_servers[0], call_type::ASYNC);
+    return send_reset_request(g_servers[0], call_type::Async);
 }
 
 // callback api
@@ -251,7 +252,7 @@ int ping_set_cb(std::function<void(int64_t)> cb) {
     return 0;
 }
 int64_t ping_cb() {
-    return send_ping_request(g_servers[0], call_type::CALLBACK);
+    return send_ping_request(g_servers[0], call_type::Callback);
 }
 
 int reset_set_cb(std::function<void(int64_t)> cb) {
@@ -259,114 +260,7 @@ int reset_set_cb(std::function<void(int64_t)> cb) {
     return 0;
 }
 int64_t reset_cb() {
-    return send_reset_request(g_servers[0], call_type::CALLBACK);
+    return send_reset_request(g_servers[0], call_type::Callback);
 }
-
-// functions to advance state
-poll_state poll(int64_t ticket) {
-    if (ticket != -1 && has_result(ticket)) return poll_state::READY;
-    if (n_calls_outlasting() == 0) return poll_state::NO_CALLS;
-
-    if (!g_servers[0].connected()) {
-        ERROR("no connection to proxy");
-        return poll_state::ERR;
-    }
-    if (std::any_of(std::cbegin(g_servers), std::cend(g_servers),
-                    [](peer const &server) { return !server.connected(); })) {
-        ERROR("no connection to proxies");
-        return poll_state::ERR;
-    }
-
-    struct timeval timeout = g_timeout;
-    auto const res = process_peer(0, g_servers[0], &timeout);
-    switch (res) {
-        case process_res::ERR:
-            ERROR("connection broke");
-            return poll_state::ERR;
-
-        case process_res::HANDLED_MSG:
-            return (ticket == -1 || has_result(ticket)) ? poll_state::READY
-                                                        : poll_state::PENDING;
-
-        case process_res::NOOP:
-            return poll_state::PENDING;
-    }
-    return n_calls_outlasting() == 0 ? poll_state::NO_CALLS
-                                     : poll_state::PENDING;
-}
-
-poll_state wait_for(int64_t ticket) {
-    if (ticket == -1) {
-        poll_state res = poll_state::PENDING;
-        while (res != poll_state::NO_CALLS && res != poll_state::ERR)
-            res = poll();
-
-        return res;
-    } else {
-        while (poll(ticket) == poll_state::PENDING)
-            ;
-        if (poll(ticket) == poll_state::ERR) return poll_state::ERR;
-        return poll_state::READY;
-    }
-}
-
-template <typename T>
-T get_reply(int64_t ticket) {
-    auto it = g_results_map.find(ticket);
-    if (it == std::end(g_results_map)) {
-        ERROR("failed to find reply for %ld", ticket);
-        return T();
-    }
-    std::unique_ptr<result> res = std::move(it->second);  // mv constructor
-    g_results_map.erase(it);
-
-    if (res->type() != result_type::OneVal) {
-        ERROR(
-            "the default template implementation of %s() only works for OneVal "
-            "results",
-            __func__);
-        ERROR("returning default constructed value");
-        return T();
-    }
-
-    one_val_result<T> *downcasted =
-        dynamic_cast<one_val_result<T> *>(res.get());
-    return downcasted->get();
-}
-
-// for put
-template std::tuple<int64_t, int64_t, int64_t> get_reply(int64_t ticket);
-
-// for get
-template std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t> get_reply(
-    int64_t ticket);
-
-// for metadata put
-template std::pair<int64_t, bool> get_reply(int64_t ticket);
-
-// for metadata get
-template std::tuple<int64_t, Metadata, int64_t> get_reply(int64_t ticket);
-
-// for ping reset
-template <>
-void get_reply(int64_t ticket) {
-    auto it = g_results_map.find(ticket);
-    if (it == std::end(g_results_map)) {
-        ERROR("failed to find reply for %ld", ticket);
-        return;
-    }
-
-    std::unique_ptr<result> res = std::move(it->second);
-    if (res->type() != result_type::None)
-        ERROR(
-            "the template specialization of %s for None was called with "
-            "another value",
-            __func__);
-    g_results_map.erase(it);
-}
-
-// eg: if you are adding an RPC like `double avg(std::vector<int64_t> & const
-// v)` you should add the following line `template double get_reply(int64_t
-// double)`
 
 }  // namespace teems
