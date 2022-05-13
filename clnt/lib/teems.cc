@@ -105,12 +105,63 @@ int32_t client_id() { return g_client_id; }
 // sync api
 bool get(int64_t key, std::vector<uint8_t> &value, int64_t &policy_version,
          int64_t &timestamp) {
-    // TODO
+    int64_t const ticket = gen_teems_ticket(call_type::Sync);
+
+    Metadata metadata;
+    if (metadata_get(ticket, 0, key, &metadata, timestamp) == false) {
+        ERROR("get(%ld): failed to read metadata from TEEMS", key);
+        return false;
+    }
+    if (timestamp == -1) {
+        value.clear();
+        policy_version = -1;
+        return true;
+    }
+    policy_version = 0;  // TODO
+
+    std::string const ustor_name = metadata.ustor_name();
+    std::vector<uint8_t> encrypted_value;
+    if (untrusted_get(ticket, 0, ustor_name, encrypted_value) == false) {
+        ERROR(
+            "get(%ld): failed to read encrypted value from untrusted storage "
+            "under %s",
+            key, ustor_name.c_str());
+        return false;
+    }
+
+    if (metadata.decrypt_value(encrypted_value, value) == false) {
+        ERROR("get(%ld): failed to decrypt value", key);
+        return false;
+    }
+
     return true;
 }
+
 bool put(int64_t key, std::vector<uint8_t> const &value,
          int64_t &policy_version, int64_t &timestamp) {
-    // TODO
+    Metadata metadata;
+    std::vector<uint8_t> encrypted_value;
+    if (metadata.encrypt_value(value, encrypted_value) == false) {
+        ERROR("put(%ld): failed to encrypt value", key);
+        return false;
+    }
+
+    int64_t const ticket = gen_teems_ticket(call_type::Sync);
+    std::string const ustor_name = metadata.ustor_name();
+    if (untrusted_put(ticket, 0, ustor_name, encrypted_value) == false) {
+        ERROR(
+            "put(%ld): failed to write encrypted value to untrusted storage "
+            "under %s",
+            key, ustor_name.c_str());
+        return false;
+    }
+
+    if (metadata_put(ticket, 0, key, metadata, timestamp) == false) {
+        ERROR("put(%ld): failed to write metadata to TEEMS", key);
+        return false;
+    }
+
+    policy_version = 0;  // TODO
     return true;
 }
 bool change_policy(int64_t key, uint64_t policy, int64_t &policy_version) {

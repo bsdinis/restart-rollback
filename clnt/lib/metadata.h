@@ -40,6 +40,8 @@ class Metadata {
         return m_key == rhs.m_key && m_iv == rhs.m_iv && m_mac == rhs.m_mac && m_ustor_name == rhs.m_ustor_name;
     }
 
+    inline std::string ustor_name() const { return std::string((char const *)m_ustor_name.data()); }
+
     private:
     std::array<uint8_t, KEY_LEN> m_key;
     std::array<uint8_t, IV_LEN> m_iv;
