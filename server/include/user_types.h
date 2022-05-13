@@ -12,9 +12,9 @@ typedef struct selected_t {
 } selected_t;
 
 #if defined(__cplusplus)
-constexpr size_t REGISTER_SIZE = 2048;
+constexpr size_t REGISTER_SIZE = 128;
 #else
-#define REGISTER_SIZE 2048
+#define REGISTER_SIZE 128
 #endif
 
 #if defined(__cplusplus)

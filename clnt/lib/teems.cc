@@ -5,7 +5,6 @@
 #include "teems.h"
 
 #include "async.h"
-#include "config.h"
 #include "log.h"
 #include "metadata.h"
 #include "network.h"
@@ -14,6 +13,7 @@
 #include "ssl_util.h"
 #include "teems_config.h"
 #include "teems_generated.h"
+#include "untrusted.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -58,101 +58,45 @@ int init(
     size_t concurrent_hint,  // hint for number of concurrent calls permitted
     struct timeval timeout,  // timeout for select
     char const *cert_path,   // certificate for the client
-    char const *key_path     // private key of the certificate
+    char const *key_path,    // private key of the certificate
+    UntrustedStoreType ustor_type  // type of untrusted storage
 ) {
     g_timeout = timeout;
-    config_t conf;
-    if (config_parse(&conf, config) == -1) {
-        ERROR("failed to stat configuration: %s", config);
-        return -1;
-    }
-
-    g_servers.reserve(conf.size);
-
-    if (init_client_ssl_ctx(&g_client_ctx) == -1) {
-        ERROR("failed to setup ssl ctx");
-        return -1;
-    }
-
-    if (load_certificates(g_client_ctx, cert_path, key_path) == -1) {
-        ERROR("failed load certs");
-        return -1;
-    }
-
-    for (ssize_t idx = 0; idx < conf.size; ++idx) {
-        auto const &peer_node = conf.nodes[idx];
-        if (connect_to_proxy(peer_node) == -1) {
-            ERROR("failed to connect to QP on %s:%d", peer_node.addr,
-                  peer_node.port);
-            config_free(&conf);
-            close_ssl_ctx(g_client_ctx);
-            return -1;
-        }
-
-        INFO("connected to QP on %s:%d", peer_node.addr, peer_node.port);
-    }
-
-    config_free(&conf);
 
     if (async_init(concurrent_hint) != 0) {
         ERROR("failed to initialize the async context");
         return -1;
     }
 
-    while (g_client_id == -1) {
-        struct timeval timeout = g_timeout;
-        auto res = process_peers(&timeout);
-        if (res == process_res::ERR) {
-            return false;
-        }
+    if (metadata_init(config, cert_path, key_path) != 0) {
+        ERROR("failed to initialize the metadata subsystem");
+        return -1;
     }
+
+    if (untrusted_change_store(ustor_type) != 0) {
+        ERROR("failed to initialize the untrusted storage subsystem");
+        return -1;
+    }
+
     return 0;
 }
 
 int close(bool close_remote) {
-    // this will close the remote QP
-    if (close_remote) {
-        int64_t const ticket = gen_teems_ticket(call_type::Sync);
-        flatbuffers::FlatBufferBuilder builder;
-        auto close_args = teems::CreateEmpty(builder);
-        auto request =
-            teems::CreateMessage(builder, teems::MessageType_close_req, ticket,
-                                 teems::BasicMessage_Empty, close_args.Union());
-        builder.Finish(request);
-
-        size_t const size = builder.GetSize();
-        uint8_t const *payload = builder.GetBufferPointer();
-
-        for (size_t idx = 0; idx < g_servers.size(); ++idx) {
-            auto &server = g_servers[idx];
-            if (server.append(&size, 1) == -1) {
-                // encode message header
-                ERROR("failed to prepare message to send");
-                return -1;
-            }
-            if (server.append(payload, size) ==
-                -1) {  // then the segment itself
-                ERROR("failed to prepare message to send");
-                return -1;
-            }
-
-            server.flush();
-            process_peer(idx, server, nullptr);  // block, gets released by EOF
-        }
+    if (metadata_close(close_remote) != 0) {
+        ERROR("failed to close metadata subsystem");
+        return -1;
     }
 
-    for (auto &server : g_servers) {
-        server.close();
+    if (untrusted_close() != 0) {
+        ERROR("failed to close untrusted subsystem");
+        return -1;
     }
-
-    close_ssl_ctx(g_client_ctx);
 
     if (async_close() != 0) {
         ERROR("failed to close async context");
         return -1;
     }
 
-    g_servers.clear();
     return 0;
 }
 
@@ -180,7 +124,7 @@ void ping() {
     }
 
     if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
+        ERROR("failed to get a return from the basicserver");
     }
 }
 
@@ -192,7 +136,7 @@ void reset() {
             return;
         }
         if (block_until_return(idx, server) == -1) {
-            ERROR("failed to get a return from the basicQP");
+            ERROR("failed to get a return from the basicserver");
         }
     }
 }

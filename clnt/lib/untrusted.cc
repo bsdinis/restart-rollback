@@ -2,7 +2,6 @@
 
 #include "log.h"
 #include "result.h"
-#include "types.h"
 
 #include <libs3.h>
 #include <sys/signal.h>

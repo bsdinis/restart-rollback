@@ -4,6 +4,6 @@
 
 namespace teems{
 
-constexpr size_t REGISTER_SIZE = 2048;
+constexpr size_t REGISTER_SIZE = 128;
 
 } // namespace teems

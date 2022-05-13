@@ -2,14 +2,23 @@
 CC := clang
 CXX := clang++
 INCLUDES := -I. -I./lib -I/usr/include/hiredis
+#ifneq ($(strip $(OPENSSL_AES)), yes)
+# INCLUDES +=  -I$(HOME)/opt/intel-ipp-crypto/include
+#endif
 CFLAGS := -fdiagnostics-color=always $(INCLUDES) -fsanitize=address
 LDFLAGS := -L. $(INCLUDES) -fsanitize=address
+
+#ifneq ($(strip $(OPENSSL_AES)), yes)
+# LDFLAGS += -L$(HOME)/opt/intel-ipp-crypto/lib -rpath $(HOME)/opt/intel-ipp-crypto/lib
+# LDLIBS += -lippcp
+#endif
 LDLIBS += -lssl -lcrypto
 LDLIBS += -lstdc++ -lm
 LDLIBS += -lflatbuffers
 LDLIBS += -lhiredis
 LDLIBS += -ls3
 LDLIBS += -lteems
+
 
 ifneq ($(strip $(DEBUG)), no)
   CFLAGS += -g
@@ -27,8 +36,17 @@ LIB_SOURCES=$(wildcard lib/*.cc)
 LIG_OBJECTS=$(LIB_SOURCES:.cc=.o)
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(SOURCES:.cc=.o)
-TESTS := teems_test latency_test throughput_test close_remote untrusted_test
+TESTS := teems_test latency_test throughput_test close_remote metadata_test untrusted_test
 
+#ifeq ($(strip $(OPENSSL_AES)), no)
+  AES_MODE = -DOPENSSL_AES
+  $(warning ***** building OpenSSL version ******)
+#else
+#  AES_MODE = -DINTEL_AES
+#  $(info ***** building Intel IPP version ******)
+#endif
+CXXFLAGS += $(AES_MODE)
+INCLUDES += $(AES_MODE)
 
 all: libteems.a $(TESTS)
 	@rm -f vgcore.*

@@ -4,6 +4,6 @@
 
 for f in $(ls *.h);
 do
-    cp $f ../clnt;
+    cp $f ../clnt/lib;
     cp $f ../server/enclave;
 done

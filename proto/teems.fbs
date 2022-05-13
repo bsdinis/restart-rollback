@@ -30,7 +30,7 @@ enum MessageType:byte {
 }
 
 struct Value {
-    data: [ubyte:2048];
+    data: [ubyte:128];
 }
 
 table GetArgs {

@@ -23,7 +23,7 @@ class GetCallContext {
     GetCallContext(peer* client, int64_t ticket, int64_t key)
         : m_client(client),
           m_ticket(ticket),
-          m_key(ticket),
+          m_key(key),
           m_peer_timestamps(std::vector<int64_t>(g_replica_list.size(), -1)),
           m_peer_stable(std::vector<bool>(g_replica_list.size(), false)) {}
 

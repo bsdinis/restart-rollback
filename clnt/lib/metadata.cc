@@ -1,12 +1,16 @@
 #include "metadata.h"
 
+#include "config.h"
 #include "log.h"
 #include "network.h"
 #include "peer.h"
 #include "result.h"
+#include "ssl_util.h"
 #include "teems_generated.h"
-#include "types.h"
 
+#include <cctype>
+#include <cstdlib>
+#include <ctime>
 #include <unordered_map>
 #include <vector>
 
@@ -55,34 +59,199 @@ extern timeval g_timeout;
 extern ssize_t g_calls_issued;
 extern ssize_t g_calls_concluded;
 
+extern SSL_CTX *g_client_ctx;
+extern ::std::vector<peer> g_servers;
+
 //==========================================
 // METADATA
 //==========================================
 
-Metadata::Metadata() {
-    // TODO
+std::array<uint8_t, UNSTRUSTED_NAME_LEN> gen_ustor_name() {
+    static bool initialized = false;
+
+    if (!initialized) {
+        timespec current;
+        clock_gettime(CLOCK_REALTIME, &current);
+        srand(current.tv_sec + current.tv_nsec);
+        srand48(current.tv_sec + current.tv_nsec);
+        initialized = true;
+    }
+
+    std::array<uint8_t, UNSTRUSTED_NAME_LEN> name;
+    for (size_t idx = 0; idx < UNSTRUSTED_NAME_LEN; ++idx) {
+        uint8_t b = 0;
+        do {
+            b = rand() % 256;
+        } while (!isalnum(b));
+
+        name[idx] = b;
+    }
+
+    return name;
 }
 
-Metadata::Metadata(int todo) {
-    // TODO
+template <size_t N>
+std::string array_to_str(std::array<uint8_t, N> const &arr) {
+    char str[N * 2 + 1];
+    for (ssize_t idx = 0; idx < N; ++idx) {
+        str[2 * idx] = "0123456789abcdef"[arr[idx] / 16];
+        str[2 * idx + 1] = "0123456789abcdef"[arr[idx] % 16];
+    }
+
+    str[2 * N] = 0;
+    return std::string(str);
+}
+
+template <size_t N>
+std::string fb_array_to_str(flatbuffers::Array<uint8_t, N> const *arr) {
+    char str[N * 2 + 1];
+    for (ssize_t idx = 0; idx < N; ++idx) {
+        str[2 * idx] = "0123456789abcdef"[arr->Data()[idx] / 16];
+        str[2 * idx + 1] = "0123456789abcdef"[arr->Data()[idx] % 16];
+    }
+
+    str[2 * N] = 0;
+    return std::string(str);
 }
 
 Metadata::Metadata(
     flatbuffers::Array<uint8_t, REGISTER_SIZE> const *serialized_metadata) {
-    // TODO
+    std::copy(serialized_metadata->cbegin(),
+              serialized_metadata->cbegin() + KEY_LEN, std::begin(m_key));
+    std::copy(serialized_metadata->cbegin() + KEY_LEN,
+              serialized_metadata->cbegin() + KEY_LEN + IV_LEN,
+              std::begin(m_iv));
+    std::copy(serialized_metadata->cbegin() + KEY_LEN + IV_LEN,
+              serialized_metadata->cbegin() + KEY_LEN + IV_LEN + MAC_LEN,
+              std::begin(m_mac));
+    std::copy(serialized_metadata->cbegin() + KEY_LEN + IV_LEN + MAC_LEN,
+              serialized_metadata->cbegin() + KEY_LEN + IV_LEN + MAC_LEN +
+                  UNSTRUSTED_NAME_LEN,
+              std::begin(m_ustor_name));
 }
 
 void Metadata::serialize_to_flatbuffers(
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *array) const {
-    // TODO
-    for (size_t idx = 0; idx < REGISTER_SIZE; ++idx) {
-        array->Mutate(idx, 0);
-    }
+    std::copy(std::cbegin(m_key), std::cend(m_key), array->Data());
+    std::copy(std::cbegin(m_iv), std::cend(m_iv), array->Data() + KEY_LEN);
+    std::copy(std::cbegin(m_mac), std::cend(m_mac),
+              array->Data() + KEY_LEN + IV_LEN);
+    std::copy(std::cbegin(m_ustor_name), std::cend(m_ustor_name),
+              array->Data() + KEY_LEN + IV_LEN + MAC_LEN);
 }
 
+bool Metadata::encrypt_value(std::vector<uint8_t> const &plaintext,
+                             std::vector<uint8_t> &ciphertext) {
+    if (aes_encrypt(plaintext, m_key, m_iv, m_mac, ciphertext) != 0) {
+        ERROR("failed to encrypt value");
+        return false;
+    }
+
+    return true;
+}
+bool Metadata::decrypt_value(std::vector<uint8_t> const &ciphertext,
+                             std::vector<uint8_t> &plaintext) const {
+    if (aes_decrypt(ciphertext, m_key, m_iv, m_mac, plaintext) != 0) {
+        ERROR("failed to decrypt value (MAC check may have failed)");
+        return false;
+    }
+
+    return true;
+}
 //==========================================
 // LIBRARY IMPLEMENTATION
 //==========================================
+
+int metadata_init(char const *config, char const *cert_path,
+                  char const *key_path) {
+    config_t conf;
+    if (config_parse(&conf, config) == -1) {
+        ERROR("failed to stat configuration: %s", config);
+        return -1;
+    }
+
+    g_servers.reserve(conf.size);
+
+    if (init_client_ssl_ctx(&g_client_ctx) == -1) {
+        ERROR("failed to setup ssl ctx");
+        config_free(&conf);
+        return -1;
+    }
+
+    if (load_certificates(g_client_ctx, cert_path, key_path) == -1) {
+        ERROR("failed load certs");
+        config_free(&conf);
+        close_ssl_ctx(g_client_ctx);
+        return -1;
+    }
+
+    for (ssize_t idx = 0; idx < conf.size; ++idx) {
+        auto const &peer_node = conf.nodes[idx];
+        if (connect_to_proxy(peer_node) == -1) {
+            ERROR("failed to connect to server on %s:%d", peer_node.addr,
+                  peer_node.port);
+            config_free(&conf);
+            close_ssl_ctx(g_client_ctx);
+            return -1;
+        }
+
+        INFO("connected to server on %s:%d", peer_node.addr, peer_node.port);
+    }
+
+    config_free(&conf);
+
+    while (g_client_id == -1) {
+        struct timeval timeout = g_timeout;
+        auto res = process_peers(&timeout);
+        if (res == process_res::ERR) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int metadata_close(bool close_remote) {
+    // this will close the remote server
+    if (close_remote) {
+        int64_t const ticket = gen_teems_ticket(call_type::Sync);
+        flatbuffers::FlatBufferBuilder builder;
+        auto close_args = teems::CreateEmpty(builder);
+        auto request =
+            teems::CreateMessage(builder, teems::MessageType_close_req, ticket,
+                                 teems::BasicMessage_Empty, close_args.Union());
+        builder.Finish(request);
+
+        size_t const size = builder.GetSize();
+        uint8_t const *payload = builder.GetBufferPointer();
+
+        for (size_t idx = 0; idx < g_servers.size(); ++idx) {
+            auto &server = g_servers[idx];
+            if (server.append(&size, 1) == -1) {
+                // encode message header
+                ERROR("failed to prepare message to send");
+                return -1;
+            }
+            if (server.append(payload, size) ==
+                -1) {  // then the segment itself
+                ERROR("failed to prepare message to send");
+                return -1;
+            }
+
+            server.flush();
+            process_peer(idx, server, nullptr);  // block, gets released by EOF
+        }
+    }
+
+    for (auto &server : g_servers) {
+        server.close();
+    }
+
+    close_ssl_ctx(g_client_ctx);
+    g_servers.clear();
+
+    return 0;
+}
 
 // sync
 bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key,
@@ -94,7 +263,7 @@ bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key,
     }
 
     if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
+        ERROR("failed to get a return from the basicserver");
         return false;
     }
 
@@ -113,7 +282,7 @@ bool metadata_put(int64_t super_ticket, uint8_t call_number, int64_t key,
     }
 
     if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicQP");
+        ERROR("failed to get a return from the basicserver");
         return false;
     }
 

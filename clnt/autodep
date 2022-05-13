@@ -1,11 +1,11 @@
-close_remote.o: close_remote.cc lib/log.h lib/teems.h lib/teems_config.h \
-  lib/types.h lib/async.h
-latency_test.o: latency_test.cc lib/log.h lib/teems.h lib/teems_config.h \
-  lib/types.h lib/async.h
+close_remote.o: close_remote.cc lib/log.h lib/teems.h lib/async.h \
+  lib/teems_config.h lib/untrusted.h
+latency_test.o: latency_test.cc lib/log.h lib/teems.h lib/async.h \
+  lib/teems_config.h lib/untrusted.h
 metadata_test.o: metadata_test.cc lib/log.h lib/metadata.h lib/async.h \
-  lib/teems_config.h lib/teems.h lib/types.h
-teems_test.o: teems_test.cc lib/log.h lib/teems.h lib/teems_config.h \
-  lib/types.h lib/async.h
-throughput_test.o: throughput_test.cc lib/log.h lib/teems.h \
-  lib/teems_config.h lib/types.h lib/async.h
+  lib/crypto.h lib/teems_config.h
+teems_test.o: teems_test.cc lib/log.h lib/teems.h lib/async.h \
+  lib/teems_config.h lib/untrusted.h
+throughput_test.o: throughput_test.cc lib/log.h lib/teems.h lib/async.h \
+  lib/teems_config.h lib/untrusted.h
 untrusted_test.o: untrusted_test.cc lib/async.h lib/log.h lib/untrusted.h

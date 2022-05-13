@@ -224,23 +224,23 @@ bool VerifyBasicMessageVector(flatbuffers::Verifier &verifier, const flatbuffers
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) Value FLATBUFFERS_FINAL_CLASS {
  private:
-  uint8_t data_[2048];
+  uint8_t data_[128];
 
  public:
   Value()
       : data_() {
   }
-  Value(flatbuffers::span<const uint8_t, 2048> _data) {
+  Value(flatbuffers::span<const uint8_t, 128> _data) {
     flatbuffers::CastToArray(data_).CopyFromSpan(_data);
   }
-  const flatbuffers::Array<uint8_t, 2048> *data() const {
+  const flatbuffers::Array<uint8_t, 128> *data() const {
     return &flatbuffers::CastToArray(data_);
   }
-  flatbuffers::Array<uint8_t, 2048> *mutable_data() {
+  flatbuffers::Array<uint8_t, 128> *mutable_data() {
     return &flatbuffers::CastToArray(data_);
   }
 };
-FLATBUFFERS_STRUCT_END(Value, 2048);
+FLATBUFFERS_STRUCT_END(Value, 128);
 
 struct GetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef GetArgsBuilder Builder;
