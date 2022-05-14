@@ -42,7 +42,7 @@ class get_call_ctx {
 
     // metadata
     Metadata m_metadata;
-    bool m_metadata_set = false;
+    // bool m_metadata_set = false;
 
     // hint
     std::string m_name_hint;

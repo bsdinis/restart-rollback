@@ -253,7 +253,7 @@ void parse_cli_args(int argc, char** argv) {
     opterr = 0;  // ignore default error
     int opt;
 
-    while ((opt = getopt(argc, argv, "c:d:l:o:t:h")) != -1) {
+    while ((opt = getopt(argc, argv, "a:b:c:d:l:o:t:s:h")) != -1) {
         switch (opt) {
             case 'a':
                 errno = 0;

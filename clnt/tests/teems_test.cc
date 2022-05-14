@@ -345,7 +345,7 @@ void parse_cli_args(int argc, char** argv) {
     opterr = 0;  // ignore default error
     int opt;
 
-    while ((opt = getopt(argc, argv, "c:i:h")) != -1) {
+    while ((opt = getopt(argc, argv, "c:i:a:b:s:h")) != -1) {
         switch (opt) {
             case 'c':
                 g_config_path = std::string(optarg, strlen(optarg));
