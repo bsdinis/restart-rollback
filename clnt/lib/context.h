@@ -51,8 +51,12 @@ class get_call_ctx {
 
 class put_call_ctx {
    public:
-    put_call_ctx(int64_t ticket, int64_t key, Metadata&& metadata)
-        : m_untrusted_ticket(ticket), m_key(key), m_metadata(metadata) {}
+    put_call_ctx(int64_t ticket, int64_t key, Metadata&& metadata,
+                 std::vector<uint8_t> const& value)
+        : m_untrusted_ticket(ticket),
+          m_key(key),
+          m_metadata(metadata),
+          m_value(value) {}
 
     void set_metadata_ticket(int64_t ticket) {
         m_metadata_ticket = ticket;
@@ -60,6 +64,7 @@ class put_call_ctx {
     }
 
     Metadata const& metadata() const& { return m_metadata; }
+    std::vector<uint8_t> const& value() const& { return m_value; }
 
     int64_t metadata_ticket() const { return m_metadata_ticket; }
     int64_t untrusted_ticket() const { return m_untrusted_ticket; }
@@ -70,10 +75,12 @@ class put_call_ctx {
     int64_t m_untrusted_ticket = -1;
     int64_t m_key = -1;
     Metadata m_metadata;
+    std::vector<uint8_t> m_value;
 };
 
 int add_get_call(int64_t metadata_ticket, int64_t key);
-int add_put_call(int64_t untrusted_ticket, int64_t key, Metadata&& metadata);
+int add_put_call(int64_t untrusted_ticket, int64_t key, Metadata&& metadata,
+                 std::vector<uint8_t> const& value);
 
 int rem_get_call(int64_t super_ticket);
 int rem_put_call(int64_t super_ticket);

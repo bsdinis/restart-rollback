@@ -1,6 +1,7 @@
 #include "protocol_helpers.h"
 
 #include "async.h"
+#include "cache.h"
 #include "context.h"
 #include "log.h"
 #include "metadata.h"
@@ -48,7 +49,9 @@ int teems_finish_get(int64_t ticket, int64_t key, bool success,
                      std::vector<uint8_t> &&value, int64_t policy_version,
                      int64_t timestamp);
 int teems_finish_put(int64_t ticket, int64_t key, bool success,
-                     int64_t policy_version, int64_t timestamp);
+                     int64_t policy_version = -1, int64_t timestamp = -1,
+                     std::string ustor_name = std::string(),
+                     std::vector<uint8_t> value = std::vector<uint8_t>());
 
 }  // anonymous namespace
 
@@ -175,10 +178,12 @@ int teems_handle_metadata_put(int64_t ticket, int64_t policy_version,
         return -1;
     }
     int64_t key = ctx->key();
+    auto name = ctx->metadata().ustor_name();
+    auto value = ctx->value();
 
     if (!success) {
         ERROR("put(%ld): failed to write metadata to TEEMS", key);
-        if (teems_finish_put(super_ticket, key, false, -1, -1) != 0) {
+        if (teems_finish_put(super_ticket, key, false) != 0) {
             ERROR("put(%ld): failed to finish TEEM put", key);
             return -1;
         }
@@ -386,8 +391,12 @@ int teems_finish_get(int64_t ticket, int64_t key, bool success,
     return 0;
 }
 int teems_finish_put(int64_t ticket, int64_t key, bool success,
-                     int64_t policy_version, int64_t timestamp) {
+                     int64_t policy_version, int64_t timestamp,
+                     std::string ustor_name, std::vector<uint8_t> value) {
     finished_call(ticket);
+    if (success) {
+        add_hint(key, ustor_name, value);
+    }
 
     if (ticket_call_type(ticket) == call_type::Async) {
         g_results_map.emplace(

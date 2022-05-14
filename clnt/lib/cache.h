@@ -6,7 +6,8 @@
 
 namespace teems {
 
-void add_hint(std::string const &name, std::vector<uint8_t> const &value);
+void add_hint(int64_t key, std::string const &name,
+              std::vector<uint8_t> const &value);
 
 void reset_name_cache(size_t capacity);
 size_t name_hits();

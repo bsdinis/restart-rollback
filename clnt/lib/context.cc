@@ -19,10 +19,11 @@ int add_get_call(int64_t metadata_ticket, int64_t key) {
     return std::get<1>(res) ? 0 : -1;
 }
 
-int add_put_call(int64_t untrusted_ticket, int64_t key, Metadata&& metadata) {
+int add_put_call(int64_t untrusted_ticket, int64_t key, Metadata&& metadata,
+                 std::vector<uint8_t> const& value) {
     auto res = g_put_calls.emplace(
         get_supercall_ticket(untrusted_ticket),
-        put_call_ctx(untrusted_ticket, key, std::move(metadata)));
+        put_call_ctx(untrusted_ticket, key, std::move(metadata), value));
     return std::get<1>(res) ? 0 : -1;
 }
 

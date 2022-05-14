@@ -274,7 +274,7 @@ int64_t put_non_sync(int64_t key, std::vector<uint8_t> const &value,
 
     int64_t const sub_ticket =
         gen_untrusted_ticket(ticket, 0, false, call_type::Async);
-    if (add_put_call(sub_ticket, key, std::move(metadata)) == -1) {
+    if (add_put_call(sub_ticket, key, std::move(metadata), value) == -1) {
         ERROR("put(%ld): failed to add call context", key);
         finished_call(ticket);
         return -1;
