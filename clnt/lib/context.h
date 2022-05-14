@@ -31,14 +31,22 @@ class get_call_ctx {
     int64_t policy_version() const { return m_policy_version; }
 
    private:
+    // tickets
     int64_t m_metadata_ticket = -1;
     int64_t m_untrusted_ticket = -1;
 
+    // return info
     int64_t m_key = -1;
-
     int64_t m_timestamp = -1;
     int64_t m_policy_version = -1;
+
+    // metadata
     Metadata m_metadata;
+    bool m_metadata_set = false;
+
+    // hint
+    std::string m_name_hint;
+    std::vector<uint8_t> m_value_hint;
 };
 
 class put_call_ctx {

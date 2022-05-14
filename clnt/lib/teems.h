@@ -35,12 +35,13 @@ namespace teems {
 
 // initialize the connection
 int init(char const *config = "../server/default.conf",
+         UntrustedStoreType ustor_type = UntrustedStoreType::S3,
+         size_t name_cache_size = 0, size_t value_cache_size = 0,
          size_t concurrent_hint =
              1 << 15,  // hint for number of concurrent calls permitted
          struct timeval timeout = {0, 0},  // timeout for select
          char const *cert_path = "certs/client.crt",
-         char const *key_path = "certs/client.key",
-         UntrustedStoreType ustor_type = UntrustedStoreType::S3);
+         char const *key_path = "certs/client.key");
 
 // close the connection
 int close(bool close_remote = false);

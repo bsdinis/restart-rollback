@@ -52,6 +52,12 @@ size_t teems::get_size_for_lru<int64_t>(int64_t const &v) {
     return sizeof(int64_t);
 }
 
+template <>
+size_t teems::get_size_for_lru<std::vector<uint8_t>>(
+    std::vector<uint8_t> const &v) {
+    return v.size() * sizeof(uint8_t);
+}
+
 using namespace teems;  // namespace sanity
                         //
 namespace {
@@ -103,6 +109,9 @@ void test_basic_int() {
 
     value = cache.get(3);
     EXPECT(value == nullptr, "value 3 was evicted");
+
+    EXPECT(cache.hits() == 5, "there were 5 hits");
+    EXPECT(cache.misses() == 2, "there were 2 misses");
 }
 
 void test_vector() {
@@ -147,6 +156,9 @@ void test_vector() {
     EXPECT(cache.get(3) == nullptr, "[1, 2, 3, 4], [1, 2, 3, 4, 5]");
     EXPECT(cache.get(4) != nullptr, "[1, 2, 3, 4], [1, 2, 3, 4, 5]");
     EXPECT(cache.get(5) != nullptr, "[1, 2, 3, 4], [1, 2, 3, 4, 5]");
+
+    EXPECT(cache.hits() == 17, "there were 5 hits");
+    EXPECT(cache.misses() == 4, "there were 4 misses");
 }
 
 void test_too_big() {
@@ -154,5 +166,6 @@ void test_too_big() {
 
     cache.insert(0, 0);
     EXPECT(cache.get(0) == nullptr, "value is too big for cache");
+    EXPECT(cache.misses() == 1, "there was 1 miss");
 }
 }  // namespace

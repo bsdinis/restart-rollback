@@ -5,6 +5,7 @@
 #include "teems.h"
 
 #include "async.h"
+#include "cache.h"
 #include "context.h"
 #include "log.h"
 #include "metadata.h"
@@ -63,15 +64,19 @@ timeval g_timeout;
 // public implementation
 // =================================
 int init(
-    char const *config,      // config file
-    size_t concurrent_hint,  // hint for number of concurrent calls permitted
-    struct timeval timeout,  // timeout for select
-    char const *cert_path,   // certificate for the client
-    char const *key_path,    // private key of the certificate
-    UntrustedStoreType ustor_type  // type of untrusted storage
+    char const *config,             // config file
+    UntrustedStoreType ustor_type,  // type of untrusted storage
+    size_t name_cache_size,   // size (in number of names) of the name cache
+    size_t value_cache_size,  // size (in number of bytes) of the value cache
+    size_t concurrent_hint,   // hint for number of concurrent calls permitted
+    struct timeval timeout,   // timeout for select
+    char const *cert_path,    // certificate for the client
+    char const *key_path      // private key of the certificate
 ) {
     g_timeout = timeout;
 
+    reset_name_cache(name_cache_size);
+    reset_value_cache(value_cache_size);
     if (async_init(concurrent_hint) != 0) {
         ERROR("failed to initialize the async context");
         return -1;

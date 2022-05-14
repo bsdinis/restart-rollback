@@ -29,14 +29,28 @@ using namespace teems;  // namespace sanity
 
 namespace {
 // cli options
-std::string global_config_path = "";
+std::string g_config_path = "../server/default.conf";
+size_t g_name_cache_size = 0;
+size_t g_value_cache_size = 0;
+UntrustedStoreType g_storage_type = UntrustedStoreType::S3;
+
+std::map<std::string, UntrustedStoreType> g_storage_types = {
+    {"s3", UntrustedStoreType::S3},
+    {"S3", UntrustedStoreType::S3},
+    {"fs", UntrustedStoreType::Filesystem},
+    {"FS", UntrustedStoreType::Filesystem},
+    {"filesystem", UntrustedStoreType::Filesystem},
+    {"file", UntrustedStoreType::Filesystem},
+    {"redis", UntrustedStoreType::Redis},
+    {"Redis", UntrustedStoreType::Redis},
+};
 
 // cli options
-int64_t global_load = 1000;           // ops/sec
-int64_t global_pct_read = 0;          // [0..100]
-double global_duration = 5.0;         // sec
-double global_warmup_duration = 1.0;  // sec
-int64_t global_tick_duration = -1;    // usec
+int64_t g_load = 1000;           // ops/sec
+int64_t g_pct_read = 0;          // [0..100]
+double g_duration = 5.0;         // sec
+double g_warmup_duration = 1.0;  // sec
+int64_t g_tick_duration = -1;    // usec
 
 int64_t g_curr_tick = 0;
 
@@ -66,8 +80,8 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
           auto get_callbck = [](int64_t ticket, int64_t, bool,
                                 std::vector<uint8_t>, int64_t, int64_t) {
               fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, teems get, reply,\n",
-                      now_usecs(), global_load, global_tick_duration,
-                      g_curr_tick, ticket);
+                      now_usecs(), g_load, g_tick_duration, g_curr_tick,
+                      ticket);
           };
           if (get_set_cb(get_callbck) == -1) {
               KILL("failed to set fast get callback");
@@ -85,8 +99,8 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
           auto put_callbck = [](int64_t ticket, int64_t, bool, int64_t,
                                 int64_t) {
               fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, teems put, reply,\n",
-                      now_usecs(), global_load, global_tick_duration,
-                      g_curr_tick, ticket);
+                      now_usecs(), g_load, g_tick_duration, g_curr_tick,
+                      ticket);
           };
           if (put_set_cb(put_callbck) == -1) {
               KILL("failed to set put callback");
@@ -108,7 +122,7 @@ void warmup(std::chrono::seconds duration) {
     while ((std::chrono::system_clock::now() - start) < duration) {
         auto const tick_start = std::chrono::system_clock::now();
         for (int i = 0; i < 100; i++) {
-            if (i % 100 < global_pct_read) {
+            if (i % 100 < g_pct_read) {
                 (funcs_by_op.at("get").first)();  // call lambda
             } else {
                 (funcs_by_op.at("put").first)();  // call lambda
@@ -125,29 +139,27 @@ void warmup(std::chrono::seconds duration) {
 }
 
 void load_test(std::chrono::seconds duration) {
-    std::chrono::microseconds const tick_duration(global_tick_duration);
+    std::chrono::microseconds const tick_duration(g_tick_duration);
 
     auto const baseline_calls = n_calls_concluded();
     auto const start = std::chrono::system_clock::now();
     size_t const n_ops = static_cast<size_t>(
-        static_cast<double>(global_load * tick_duration.count()) / 1000000.);
+        static_cast<double>(g_load * tick_duration.count()) / 1000000.);
     while ((std::chrono::system_clock::now() - start) < duration) {
         auto const tick_start = std::chrono::system_clock::now();
         for (size_t i = 0; i < n_ops; i++) {
-            if (i % 100 < global_pct_read) {
+            if (i % 100 < g_pct_read) {
                 int64_t const ticket =
                     (funcs_by_op.at("get").first)();  // call lambda
-                fprintf(stdout,
-                        "%lu, %ld, %ld, %ld, %ld, teems get, request,\n",
-                        now_usecs(), global_load, global_tick_duration,
-                        g_curr_tick, ticket);
+                fprintf(
+                    stdout, "%lu, %ld, %ld, %ld, %ld, teems get, request,\n",
+                    now_usecs(), g_load, g_tick_duration, g_curr_tick, ticket);
             } else {
                 int64_t const ticket =
                     (funcs_by_op.at("put").first)();  // call lambda
-                fprintf(stdout,
-                        "%lu, %ld, %ld, %ld, %ld, teems put, request,\n",
-                        now_usecs(), global_load, global_tick_duration,
-                        g_curr_tick, ticket);
+                fprintf(
+                    stdout, "%lu, %ld, %ld, %ld, %ld, teems put, request,\n",
+                    now_usecs(), g_load, g_tick_duration, g_curr_tick, ticket);
             }
         }
 
@@ -170,9 +182,11 @@ int main(int argc, char** argv) {
             " | load: %zd\n"
             " | configuration: %s\n"
             " | duration: %lf\n"
-            " | tick duration: %ld\n",
-            global_pct_read, global_load, global_config_path.c_str(),
-            global_duration, global_tick_duration);
+            " | tick duration: %ld\n"
+            " | name cache size: %zu\n"
+            " | value cache size: %zu\n",
+            g_pct_read, g_load, g_config_path.c_str(), g_duration,
+            g_tick_duration, g_name_cache_size, g_value_cache_size);
 
     std::time_t const now =
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -183,15 +197,17 @@ int main(int argc, char** argv) {
             "# | configuration: %s\n"
             "# | duration: %lf\n"
             "# | tick duration: %ld\n"
+            "# | name cache size: %zu\n"
+            "# | value cache size: %zu\n"
             "# | began at %s"
             "# | everything in us\n",
-            global_pct_read, global_load, global_config_path.c_str(),
-            global_duration, global_tick_duration, std::ctime(&now));
+            g_pct_read, g_load, g_config_path.c_str(), g_duration,
+            g_tick_duration, g_name_cache_size, g_value_cache_size,
+            std::ctime(&now));
     fflush(stdout);
 
-    if (global_config_path.empty()) {
-        if (init() != 0) KILL("failed to init connection to server");
-    } else if (init(global_config_path.c_str()) != 0) {
+    if (init(g_config_path.c_str(), g_storage_type, g_name_cache_size,
+             g_value_cache_size) != 0) {
         KILL("failed to init connection to server");
     }
 
@@ -200,7 +216,7 @@ int main(int argc, char** argv) {
     INFO("starting warmup");
     // warmup
     std::chrono::seconds warmup_duration(
-        static_cast<int>(global_warmup_duration + 1));
+        static_cast<int>(g_warmup_duration + 1));
     warmup(warmup_duration);
     INFO("finished warmup");
 
@@ -209,7 +225,7 @@ int main(int argc, char** argv) {
     (funcs_by_op.at("put").second)();
 
     // test
-    std::chrono::seconds test_duration(static_cast<int>(global_duration + 1));
+    std::chrono::seconds test_duration(static_cast<int>(g_duration + 1));
     load_test(test_duration);
     INFO("finished test");
     close(true);
@@ -223,14 +239,12 @@ void usage(char* arg0) {
         known_ops += pair.first + "|";
     }
     fprintf(stderr, "usage: %s\n", basename(arg0));
-    fprintf(stderr, "\t-c [configuration file = %s]\n",
-            global_config_path.c_str());
-    fprintf(stderr, "\t-d [duration = %3.4f sec]\n", global_duration);
-    fprintf(stderr, "\t-l [load = %ld ops/sec]\n", global_load);
-    fprintf(stderr, "\t-o [op = %ld (0..100)]\n", global_pct_read);
-    fprintf(stderr, "\t-t [tick duration = %ld usec]\n", global_tick_duration);
-    fprintf(stderr, "\t-w [warmup duration = %3.4f sec]\n",
-            global_warmup_duration);
+    fprintf(stderr, "\t-c [configuration file = %s]\n", g_config_path.c_str());
+    fprintf(stderr, "\t-d [duration = %3.4f sec]\n", g_duration);
+    fprintf(stderr, "\t-l [load = %ld ops/sec]\n", g_load);
+    fprintf(stderr, "\t-o [op = %ld (0..100)]\n", g_pct_read);
+    fprintf(stderr, "\t-t [tick duration = %ld usec]\n", g_tick_duration);
+    fprintf(stderr, "\t-w [warmup duration = %3.4f sec]\n", g_warmup_duration);
     fprintf(stderr, "\t-h : print help message\n");
 }
 
@@ -241,72 +255,109 @@ void parse_cli_args(int argc, char** argv) {
 
     while ((opt = getopt(argc, argv, "c:d:l:o:t:h")) != -1) {
         switch (opt) {
+            case 'a':
+                errno = 0;
+                g_name_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
+            case 'b':
+                errno = 0;
+                g_value_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
             case 'c':
-                global_config_path = std::string(optarg, strlen(optarg));
+                g_config_path = std::string(optarg, strlen(optarg));
                 break;
 
             case 'd':
                 errno = 0;
-                global_duration = std::stod(optarg);
+                g_duration = std::stod(optarg);
                 if (errno != 0) {
                     fprintf(stderr, "Failed to parse %s as double: %s\n",
                             optarg, strerror(errno));
                     usage(argv[0]);
                     exit(EXIT_FAILURE);
                 }
-                if (global_duration <= 0.0)
-                    KILL("Duration needs to be positive: %ld",
-                         global_tick_duration);
+                if (g_duration <= 0.0)
+                    KILL("Duration needs to be positive: %ld", g_tick_duration);
                 break;
 
             case 'l':
                 errno = 0;
-                global_load = std::stoll(optarg);
+                g_load = std::stoll(optarg);
                 if (errno != 0) {
                     fprintf(stderr, "Failed to parse %s as integer: %s\n",
                             optarg, strerror(errno));
                     usage(argv[0]);
                     exit(EXIT_FAILURE);
                 }
-                if (global_load <= 0)
-                    KILL("Load needs to be positive: %ld",
-                         global_tick_duration);
+                if (g_load <= 0)
+                    KILL("Load needs to be positive: %ld", g_tick_duration);
 
                 break;
 
             case 'o':
-                global_pct_read = std::stoll(optarg);
-                if (global_pct_read < 0 || global_pct_read > 100) {
-                    KILL("invalid pct: %ld global_pct_read", global_pct_read);
+                g_pct_read = std::stoll(optarg);
+                if (g_pct_read < 0 || g_pct_read > 100) {
+                    KILL("invalid pct: %ld g_pct_read", g_pct_read);
                 }
                 break;
 
+            case 's': {
+                auto storage_type = std::string(optarg, strlen(optarg));
+                if (g_storage_types.find(storage_type) ==
+                    std::end(g_storage_types)) {
+                    std::string known_types = "|";
+                    for (auto const& pair : g_storage_types) {
+                        known_types += pair.first + "|";
+                    }
+                    KILL("Store type %s is unknown. Know these: %s",
+                         storage_type.c_str(), known_types.c_str());
+                }
+
+                g_storage_type = g_storage_types[storage_type];
+            } break;
+
             case 't':
                 errno = 0;
-                global_tick_duration = std::stol(optarg);
+                g_tick_duration = std::stol(optarg);
                 if (errno != 0) {
                     fprintf(stderr, "Failed to parse %s as integer: %s\n",
                             optarg, strerror(errno));
                     usage(argv[0]);
                     exit(EXIT_FAILURE);
                 }
-                if (global_tick_duration <= 0)
+                if (g_tick_duration <= 0)
                     KILL("Tick Duration needs to be positive: %ld",
-                         global_tick_duration);
+                         g_tick_duration);
                 break;
 
             case 'w':
                 errno = 0;
-                global_warmup_duration = std::stod(optarg);
+                g_warmup_duration = std::stod(optarg);
                 if (errno != 0) {
                     fprintf(stderr, "Failed to parse %s as double: %s\n",
                             optarg, strerror(errno));
                     usage(argv[0]);
                     exit(EXIT_FAILURE);
                 }
-                if (global_warmup_duration <= 0.0)
+                if (g_warmup_duration <= 0.0)
                     KILL("Warmup Duration needs to be positive: %ld",
-                         global_tick_duration);
+                         g_tick_duration);
                 break;
 
             case 'h':
@@ -321,11 +372,10 @@ void parse_cli_args(int argc, char** argv) {
         }
     }
 
-    if (global_tick_duration == -1) {
-        global_tick_duration =
-            std::max(50000L, minimum_tick_duration(global_load) * 50);
+    if (g_tick_duration == -1) {
+        g_tick_duration = std::max(50000L, minimum_tick_duration(g_load) * 50);
     } else {
-        global_tick_duration = std::max(50000L, global_tick_duration);
+        g_tick_duration = std::max(50000L, g_tick_duration);
     }
 }
 

@@ -1,11 +1,8 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <list>
-#include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace teems {
 
@@ -25,6 +22,9 @@ class LRUCache {
     V const *get(K const &key);
     void insert(K key, V value);
 
+    inline size_t hits() { return m_hits; }
+    inline size_t misses() { return m_misses; }
+
    private:
     // list of (key, value size) ordered by time of access
     std::list<std::pair<K, size_t>> m_lru_keys;
@@ -34,6 +34,9 @@ class LRUCache {
         m_map;
     size_t m_max_capacity = 0;
     size_t m_size = 0;
+
+    size_t m_hits = 0;
+    size_t m_misses = 0;
 };
 
 template <typename K, typename V>
@@ -73,6 +76,7 @@ void LRUCache<K, V>::insert(K key, V value) {
 template <typename K, typename V>
 V const *LRUCache<K, V>::get(K const &key) {
     if (m_map.find(key) == m_map.end()) {
+        m_misses += 1;
         return nullptr;
     }
 
@@ -82,17 +86,8 @@ V const *LRUCache<K, V>::get(K const &key) {
     m_lru_keys.push_front(std::make_pair(key, value_size));
     m_map[key].first = m_lru_keys.begin();
 
+    m_hits += 1;
     return &m_map[key].second;
-}
-
-template <>
-size_t get_size_for_lru<std::vector<uint8_t>>(std::vector<uint8_t> const &v) {
-    return v.size() * sizeof(uint8_t);
-}
-
-template <>
-size_t get_size_for_lru<std::string>(std::string const &a) {
-    return (a.size() + 1) * sizeof(char);
 }
 
 }  // namespace teems

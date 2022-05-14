@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 #include "log.h"
@@ -41,24 +42,41 @@ static int test_n = 1;
         } while (false);                                                   \
     }
 
+using namespace teems;
+
 namespace {
 void test_get_put();
 void test_ping();
 void test_pipelining();
 void test_cb();
 
-std::string global_config_path = "../server/default.conf";
+std::string g_config_path = "../server/default.conf";
+size_t g_name_cache_size = 0;
+size_t g_value_cache_size = 0;
+UntrustedStoreType g_storage_type = UntrustedStoreType::S3;
+
+std::map<std::string, UntrustedStoreType> g_storage_types = {
+    {"s3", UntrustedStoreType::S3},
+    {"S3", UntrustedStoreType::S3},
+    {"fs", UntrustedStoreType::Filesystem},
+    {"FS", UntrustedStoreType::Filesystem},
+    {"filesystem", UntrustedStoreType::Filesystem},
+    {"file", UntrustedStoreType::Filesystem},
+    {"redis", UntrustedStoreType::Redis},
+    {"Redis", UntrustedStoreType::Redis},
+};
+
 void parse_cli_args(int argc, char** argv);
 }  // anonymous namespace
-
-using namespace teems;  // namespace sanity
 
 int main(int argc, char** argv) {
     parse_cli_args(argc, argv);
     setlinebuf(stdout);
 
     INFO("starting test");
-    ASSERT_EQ(init(global_config_path.c_str()), 0, "init");
+    ASSERT_EQ(init(g_config_path.c_str(), g_storage_type, g_name_cache_size,
+                   g_value_cache_size),
+              0, "init");
 
     reset();
 
@@ -318,8 +336,7 @@ void test_cb() {
 
 void usage(char* arg0) {
     fprintf(stderr, "usage: %s\n", basename(arg0));
-    fprintf(stderr, "\t-c [configuration file = %s]\n",
-            global_config_path.c_str());
+    fprintf(stderr, "\t-c [configuration file = %s]\n", g_config_path.c_str());
     fprintf(stderr, "\t-h : print help message\n");
 }
 
@@ -331,8 +348,47 @@ void parse_cli_args(int argc, char** argv) {
     while ((opt = getopt(argc, argv, "c:i:h")) != -1) {
         switch (opt) {
             case 'c':
-                global_config_path = std::string(optarg, strlen(optarg));
+                g_config_path = std::string(optarg, strlen(optarg));
                 break;
+
+            case 'a':
+                errno = 0;
+                g_name_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
+            case 'b':
+                errno = 0;
+                g_value_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
+            case 's': {
+                auto storage_type = std::string(optarg, strlen(optarg));
+                if (g_storage_types.find(storage_type) ==
+                    std::end(g_storage_types)) {
+                    std::string known_types = "|";
+                    for (auto const& pair : g_storage_types) {
+                        known_types += pair.first + "|";
+                    }
+                    KILL("Store type %s is unknown. Know these: %s",
+                         storage_type.c_str(), known_types.c_str());
+                }
+
+                g_storage_type = g_storage_types[storage_type];
+            } break;
 
             case 'h':
                 usage(argv[0]);
