@@ -7,6 +7,7 @@
 #include <vector>
 #include "log.h"
 #include "teems.h"
+#include "untrusted.h"
 
 static int test_n = 1;
 
@@ -47,7 +48,6 @@ void test_pipelining();
 void test_cb();
 
 std::string global_config_path = "../server/default.conf";
-ssize_t global_index = 0;
 void parse_cli_args(int argc, char** argv);
 }  // anonymous namespace
 
@@ -58,14 +58,14 @@ int main(int argc, char** argv) {
     setlinebuf(stdout);
 
     INFO("starting test");
-    ASSERT_EQ(init(global_config_path.c_str(), global_index), 0, "init");
+    ASSERT_EQ(init(global_config_path.c_str()), 0, "init");
 
     reset();
 
-    // test_ping();
+    test_ping();
     test_get_put();
-    // test_pipelining();
-    // test_cb();
+    test_pipelining();
+    test_cb();
 
     ASSERT_EQ(close(true), 0, "close");
     INFO("finished test");
@@ -75,7 +75,6 @@ int main(int argc, char** argv) {
 
 namespace {
 void test_get_put() {
-    // sync test
     {
         // there is no value
         int64_t get_timestamp = -1;
@@ -116,72 +115,70 @@ void test_get_put() {
         EXPECT_EQ(get_value, put_value, "get");
     }
 
-    return;
-
     // async test
     {
         int64_t ticket = get_async(4);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
         auto g_reply = get_reply<
-            std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t>>(
+            std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<2>(g_reply), -1, "get_async");
         EXPECT_EQ(std::get<3>(g_reply), -1, "get_async");
+        EXPECT_EQ(std::get<4>(g_reply), -1, "get_async");
 
         std::vector<uint8_t> put_value;
         put_value.emplace_back(1);
         ticket = put_async(4, put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for put");
             return;
         }
         auto put_reply =
-            get_reply<std::tuple<int64_t, int64_t, int64_t>>(ticket);
-        EXPECT_EQ(std::get<1>(put_reply), client_id(), "put_async");
+            get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
+        EXPECT_EQ(std::get<2>(put_reply), client_id(), "put_async");
 
         ticket = get_async(4);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
         g_reply = get_reply<
-            std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t>>(
+            std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "get_async");
-        EXPECT_EQ(std::get<2>(g_reply), std::get<1>(put_reply), "get_async");
+        EXPECT_EQ(std::get<2>(g_reply), put_value, "get_async");
         EXPECT_EQ(std::get<3>(g_reply), std::get<2>(put_reply), "get_async");
+        EXPECT_EQ(std::get<4>(g_reply), std::get<3>(put_reply), "get_async");
 
         put_value.emplace_back(2);
         ticket = put_async(4, put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for put");
             return;
         }
         auto new_put_reply =
-            get_reply<std::tuple<int64_t, int64_t, int64_t>>(ticket);
-        EXPECT_EQ(std::get<1>(new_put_reply), std::get<0>(put_reply),
+            get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
+        EXPECT_EQ(std::get<2>(new_put_reply), std::get<2>(put_reply),
                   "put_async");
-        EXPECT_EQ(std::get<2>(new_put_reply) > std::get<2>(put_reply), true,
+        EXPECT_EQ(std::get<3>(new_put_reply) > std::get<3>(put_reply), true,
                   "put_async");
 
         ticket = get_async(4);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
         g_reply = get_reply<
-            std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t>>(
+            std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
 
-        EXPECT_EQ(std::get<1>(g_reply), put_value, "get_async");
-        EXPECT_EQ(std::get<2>(g_reply), std::get<1>(new_put_reply),
-                  "get_async");
+        EXPECT_EQ(std::get<2>(g_reply), put_value, "get_async");
         EXPECT_EQ(std::get<3>(g_reply), std::get<2>(new_put_reply),
+                  "get_async");
+        EXPECT_EQ(std::get<4>(g_reply), std::get<3>(new_put_reply),
                   "get_async");
     }
 }
@@ -196,7 +193,7 @@ void test_ping() {
     // async test
     {
         int64_t const ticket = ping_async();
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for ping");
             return;
         }
@@ -236,28 +233,30 @@ void test_pipelining() {
 
     while (std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }) ||
            std::any_of(std::cbegin(put_tickets), std::cend(put_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }) ||
            std::any_of(std::cbegin(ping_tickets), std::cend(ping_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }))
         ;
 
     for (int64_t const ticket : get_tickets) {
         auto reply = get_reply<
-            std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t>>(
+            std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
         EXPECT_EQ(std::get<0>(reply), 8, "pipelining");
-        EXPECT_EQ(std::get<2>(reply), -1, "pipelining");
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+        EXPECT_EQ(std::get<4>(reply), -1, "pipelining");
     }
 
     for (int64_t const ticket : put_tickets) {
-        auto reply = get_reply<std::pair<int64_t, bool>>(ticket);
+        auto reply =
+            get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
         EXPECT_EQ(std::get<1>(reply), true, "pipelining");
     }
 
@@ -275,17 +274,18 @@ void test_cb() {
     int put_n = 0;
     int change_policy_n = 0;
     int ping_n = 0;
-    ASSERT_EQ(get_set_cb([&get_n](int64_t, int64_t, std::vector<uint8_t>,
+    ASSERT_EQ(get_set_cb([&get_n](int64_t, int64_t, bool, std::vector<uint8_t>,
                                   int64_t, int64_t) { get_n++; }),
               0, "get_set_cb");
-    ASSERT_EQ(
-        put_set_cb([&put_n](int64_t, int64_t, int64_t, int64_t) { put_n++; }),
-        0, "put_set_cb");
-    ASSERT_EQ(
-        change_policy_set_cb([&change_policy_n](int64_t, int64_t, int64_t) {
-            change_policy_n++;
-        }),
-        0, "change_policy_set_cb");
+    ASSERT_EQ(put_set_cb([&put_n](int64_t, int64_t, bool, int64_t, int64_t) {
+                  put_n++;
+              }),
+              0, "put_set_cb");
+    ASSERT_EQ(change_policy_set_cb(
+                  [&change_policy_n](int64_t, int64_t, bool, int64_t) {
+                      change_policy_n++;
+                  }),
+              0, "change_policy_set_cb");
     ASSERT_EQ(ping_set_cb([&ping_n](int64_t) { ping_n++; }), 0, "ping_set_cb");
 
     get_cb((int64_t)1);
@@ -306,12 +306,12 @@ void test_cb() {
     EXPECT_EQ(get_n, 4, "callback get test");
     EXPECT_EQ(put_n, 2, "callback put test");
     EXPECT_EQ(ping_n, 3, "callback ping test");
-    ASSERT_EQ(get_set_cb([](int64_t, int64_t, std::vector<uint8_t>, int64_t,
-                            int64_t) {}),
+    ASSERT_EQ(get_set_cb([](int64_t, int64_t, bool, std::vector<uint8_t>,
+                            int64_t, int64_t) {}),
               0, "get_set_cb");
-    ASSERT_EQ(put_set_cb([](int64_t, int64_t, int64_t, int64_t) {}), 0,
+    ASSERT_EQ(put_set_cb([](int64_t, int64_t, bool, int64_t, int64_t) {}), 0,
               "put_set_cb");
-    ASSERT_EQ(change_policy_set_cb([](int64_t, int64_t, int64_t) {}), 0,
+    ASSERT_EQ(change_policy_set_cb([](int64_t, int64_t, bool, int64_t) {}), 0,
               "change_policy_set_cb");
     ASSERT_EQ(ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
@@ -320,7 +320,6 @@ void usage(char* arg0) {
     fprintf(stderr, "usage: %s\n", basename(arg0));
     fprintf(stderr, "\t-c [configuration file = %s]\n",
             global_config_path.c_str());
-    fprintf(stderr, "\t-i [index = %zd]\n", global_index);
     fprintf(stderr, "\t-h : print help message\n");
 }
 
@@ -333,17 +332,6 @@ void parse_cli_args(int argc, char** argv) {
         switch (opt) {
             case 'c':
                 global_config_path = std::string(optarg, strlen(optarg));
-                break;
-
-            case 'i':
-                errno = 0;
-                global_index = std::stoll(optarg);
-                if (errno != 0) {
-                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
-                            optarg, strerror(errno));
-                    usage(argv[0]);
-                    exit(EXIT_FAILURE);
-                }
                 break;
 
             case 'h':

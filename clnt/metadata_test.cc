@@ -100,18 +100,18 @@ void test_metadata_get_put() {
         // there is no value
         int64_t get_timestamp = -1;
         Metadata get_value;
-        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, 3,
+        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                &get_value, get_timestamp),
                   true, "metadata get");
         EXPECT_EQ(get_timestamp, -1, "metadata get");
 
         Metadata put_value;  // generates random keys, iv, name
         int64_t put_timestamp = -1;
-        EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, 3,
+        EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                put_value, put_timestamp),
                   true, "metadata put");
 
-        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, 3,
+        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                &get_value, get_timestamp),
                   true, "metadata get");
         EXPECT_EQ(get_timestamp, put_timestamp, "metadata get");
@@ -119,12 +119,12 @@ void test_metadata_get_put() {
 
         int64_t new_put_timestamp = -1;
         put_value = Metadata();  // refreshes keys, iv, name
-        EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, 3,
+        EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                put_value, new_put_timestamp),
                   true, "metadata put");
         EXPECT_EQ(new_put_timestamp > put_timestamp, true, "metadata put");
 
-        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, 3,
+        EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                &get_value, get_timestamp),
                   true, "metadata get");
         EXPECT_EQ(get_timestamp, new_put_timestamp, "metadata get");
@@ -134,8 +134,8 @@ void test_metadata_get_put() {
     // async test
     {
         int64_t ticket =
-            metadata_get_async(gen_teems_ticket(call_type::Sync), 0, 4);
-        if (wait_for(ticket) == poll_state::ERR) {
+            metadata_get_async(gen_teems_ticket(call_type::Sync), 0, true, 4);
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
@@ -145,17 +145,18 @@ void test_metadata_get_put() {
         EXPECT_EQ(std::get<2>(g_reply), -1, "metadata get_async");
 
         Metadata put_value;  // generates random keys, iv, name
-        ticket = metadata_put_async(gen_teems_ticket(call_type::Sync), 0, 4,
-                                    put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
+        ticket = metadata_put_async(gen_teems_ticket(call_type::Sync), 0, true,
+                                    4, put_value);
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for put");
             return;
         }
         auto put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
         EXPECT_EQ(std::get<1>(put_reply), true, "metadata put_async");
 
-        ticket = metadata_get_async(gen_teems_ticket(call_type::Sync), 0, 4);
-        if (wait_for(ticket) == poll_state::ERR) {
+        ticket =
+            metadata_get_async(gen_teems_ticket(call_type::Sync), 0, true, 4);
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
@@ -166,9 +167,9 @@ void test_metadata_get_put() {
                   "metadata get_async");
 
         put_value = Metadata();  // refreshes keys, iv, name
-        ticket = metadata_put_async(gen_teems_ticket(call_type::Sync), 0, 4,
-                                    put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
+        ticket = metadata_put_async(gen_teems_ticket(call_type::Sync), 0, true,
+                                    4, put_value);
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for put");
             return;
         }
@@ -177,8 +178,9 @@ void test_metadata_get_put() {
         EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
                   "metadata put_async");
 
-        ticket = metadata_get_async(gen_teems_ticket(call_type::Sync), 0, 4);
-        if (wait_for(ticket) == poll_state::ERR) {
+        ticket =
+            metadata_get_async(gen_teems_ticket(call_type::Sync), 0, true, 4);
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
@@ -200,11 +202,11 @@ void test_pipelining() {
         switch (i % 2) {
             case 0:
                 get_tickets.emplace_back(metadata_get_async(
-                    gen_teems_ticket(call_type::Sync), 0, 8));
+                    gen_teems_ticket(call_type::Sync), 0, true, 8));
                 break;
             case 1:
                 put_tickets.emplace_back(metadata_put_async(
-                    gen_teems_ticket(call_type::Sync), 0, 9, value));
+                    gen_teems_ticket(call_type::Sync), 0, true, 9, value));
                 break;
             default:
                 break;
@@ -213,11 +215,11 @@ void test_pipelining() {
 
     while (std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }) ||
            std::any_of(std::cbegin(put_tickets), std::cend(put_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }))
         ;
 

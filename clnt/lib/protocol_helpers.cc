@@ -1,12 +1,14 @@
 #include "protocol_helpers.h"
 
 #include "async.h"
+#include "context.h"
 #include "log.h"
 #include "metadata.h"
 #include "network.h"
 #include "result.h"
 #include "teems_config.h"
 #include "teems_generated.h"
+#include "untrusted.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -16,9 +18,14 @@ namespace teems {
 extern int32_t g_client_id;
 
 extern ::std::vector<peer> g_servers;
-extern size_t g_calls_issued;
-extern size_t g_calls_concluded;
 
+extern std::function<void(int64_t, int64_t, bool, std::vector<uint8_t>, int64_t,
+                          int64_t)>
+    g_get_callback;
+extern std::function<void(int64_t, int64_t, bool, int64_t, int64_t)>
+    g_put_callback;
+extern std::function<void(int64_t, int64_t, bool, int64_t)>
+    g_change_policy_callback;
 extern std::function<void(int64_t)> g_ping_callback;
 extern std::function<void(int64_t)> g_reset_callback;
 
@@ -37,13 +44,20 @@ int reset_handler(size_t peer_idx, int64_t ticket);
 int reset_handler_sync();
 int reset_handler_async(int64_t ticket);
 
+int teems_finish_get(int64_t ticket, int64_t key, bool success,
+                     std::vector<uint8_t> &&value, int64_t policy_version,
+                     int64_t timestamp);
+int teems_finish_put(int64_t ticket, int64_t key, bool success,
+                     int64_t policy_version, int64_t timestamp);
+
 }  // anonymous namespace
 
 // =================================
 // send request
 // =================================
 int64_t send_ping_request(peer &server, call_type type) {
-    int64_t const ticket = gen_teems_ticket(type);
+    int64_t const ticket =
+        gen_metadata_ticket(gen_teems_ticket(type), 0, true, type);
 
     flatbuffers::FlatBufferBuilder builder;
     auto ping_args = teems::CreateEmpty(builder);
@@ -66,12 +80,13 @@ int64_t send_ping_request(peer &server, call_type type) {
         return -1;
     }
 
-    g_calls_issued++;
+    issued_call(ticket);
     return ticket;
 }
 
 int64_t send_reset_request(peer &server, call_type type) {
-    int64_t const ticket = gen_teems_ticket(type);
+    int64_t const ticket =
+        gen_metadata_ticket(gen_teems_ticket(type), 0, true, type);
 
     flatbuffers::FlatBufferBuilder builder;
     auto reset_args = teems::CreateEmpty(builder);
@@ -94,8 +109,154 @@ int64_t send_reset_request(peer &server, call_type type) {
         return -1;
     }
 
-    g_calls_issued++;
+    issued_call(ticket);
     return ticket;
+}
+
+// =================================
+// continuations
+// =================================
+
+int teems_handle_metadata_get(int64_t ticket, int64_t key, Metadata value,
+                              int64_t policy_version, int64_t timestamp,
+                              bool success) {
+    int64_t super_ticket = get_supercall_ticket(ticket);
+
+    get_call_ctx *ctx = get_get_call_ctx(super_ticket);
+    if (ctx == nullptr) {
+        ERROR("failed to find context for TEEM get call %ld", super_ticket);
+        return -1;
+    }
+
+    if (!success) {
+        ERROR("get(%ld): failed to read metadata from TEEMS", key);
+        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
+                             -1, -1) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    if (timestamp == -1) {
+        if (teems_finish_get(super_ticket, key, true, std::vector<uint8_t>(),
+                             -1, -1) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    ctx->set_metadata(std::move(value), policy_version, timestamp);
+    int64_t const untrusted_ticket =
+        gen_untrusted_ticket(super_ticket, 0, false, call_type::Async);
+    ctx->set_untrusted_ticket(untrusted_ticket);
+
+    std::string const &ustor_name = ctx->metadata().ustor_name();
+    if (untrusted_get_async(super_ticket, 0, false, ustor_name) == -1) {
+        ERROR("get(%ld): failed to start untrusted read", key);
+        if (teems_finish_get(super_ticket, key, true, std::vector<uint8_t>(),
+                             -1, -1) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return -1;
+    }
+
+    return 0;
+}
+int teems_handle_metadata_put(int64_t ticket, int64_t policy_version,
+                              int64_t timestamp, bool success) {
+    int64_t super_ticket = get_supercall_ticket(ticket);
+
+    put_call_ctx *ctx = get_put_call_ctx(super_ticket);
+    if (ctx == nullptr) {
+        ERROR("failed to find context for TEEM put call %ld", super_ticket);
+        return -1;
+    }
+    int64_t key = ctx->key();
+
+    if (!success) {
+        ERROR("put(%ld): failed to write metadata to TEEMS", key);
+        if (teems_finish_put(super_ticket, key, false, -1, -1) != 0) {
+            ERROR("put(%ld): failed to finish TEEM put", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    return teems_finish_put(super_ticket, key, true, policy_version, timestamp);
+}
+
+int teems_handle_untrusted_get(int64_t ticket, bool success,
+                               std::vector<uint8_t> &&encrypted_value) {
+    int64_t super_ticket = get_supercall_ticket(ticket);
+    get_call_ctx *ctx = get_get_call_ctx(super_ticket);
+    if (ctx == nullptr) {
+        ERROR("failed to find context for TEEM get call %ld", super_ticket);
+        return -1;
+    }
+    int64_t key = ctx->key();
+
+    if (!success) {
+        ERROR("get(%ld): failed to read encrypted value from untrusted storage",
+              key);
+        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
+                             -1, -1) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    std::vector<uint8_t> value;
+    if (ctx->metadata().decrypt_value(encrypted_value, value) == false) {
+        ERROR("get(%ld): failed to decrypt value", key);
+        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
+                             -1, -1) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    return teems_finish_get(super_ticket, key, true, std::move(value),
+                            ctx->policy_version(), ctx->timestamp());
+}
+int teems_handle_untrusted_put(int64_t ticket, bool success) {
+    int64_t super_ticket = get_supercall_ticket(ticket);
+
+    put_call_ctx *ctx = get_put_call_ctx(super_ticket);
+    if (ctx == nullptr) {
+        ERROR("failed to find context for TEEM put call %ld", super_ticket);
+        return -1;
+    }
+    int64_t key = ctx->key();
+
+    if (!success) {
+        ERROR("put(%ld): failed to write encrypted value to untrusted storage",
+              key);
+        if (teems_finish_put(super_ticket, key, false, -1, -1) != 0) {
+            ERROR("put(%ld): failed to finish TEEM put", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    int64_t const metadata_ticket =
+        gen_metadata_ticket(super_ticket, 0, false, call_type::Async);
+    ctx->set_metadata_ticket(metadata_ticket);
+    if (metadata_put_async(super_ticket, 0, false, key, ctx->metadata()) ==
+        -1) {
+        ERROR("put(%ld): failed to start metadata write to TEEMS", key);
+        if (teems_finish_put(super_ticket, key, false, -1, -1) != 0) {
+            ERROR("put(%ld): failed to finish TEEM put", key);
+            return -1;
+        }
+        return -1;
+    }
+
+    return 0;
 }
 
 // =================================
@@ -166,13 +327,13 @@ int ping_handler_async(int64_t ticket) {
     return 0;
 }
 int ping_handler(size_t peer_idx, int64_t ticket) {
-    g_calls_concluded++;
-    switch (ticket % 3) {
-        case 0:  // SYNC
+    finished_call(ticket);
+    switch (ticket_call_type(ticket)) {
+        case call_type::Sync:
             return ping_handler_sync();
-        case 1:  // ASYNC
+        case call_type::Async:
             return ping_handler_async(ticket);
-        case 2:  // CALLBACK
+        case call_type::Callback:
             g_ping_callback(ticket);
             return 0;
     }
@@ -187,18 +348,61 @@ int reset_handler_async(int64_t ticket) {
     return 0;
 }
 int reset_handler(size_t peer_idx, int64_t ticket) {
-    g_calls_concluded++;
-    switch (ticket % 3) {
-        case 0:  // SYNC
+    finished_call(ticket);
+    switch (ticket_call_type(ticket)) {
+        case call_type::Sync:
             return reset_handler_sync();
-        case 1:  // ASYNC
+        case call_type::Async:
             return reset_handler_async(ticket);
-        case 2:  // CALLBACK
+        case call_type::Callback:
             g_reset_callback(ticket);
             return 0;
     }
     // unreachable (could use __builtin_unreachable)
     return -1;
+}
+
+int teems_finish_get(int64_t ticket, int64_t key, bool success,
+                     std::vector<uint8_t> &&value, int64_t policy_version,
+                     int64_t timestamp) {
+    finished_call(ticket);
+
+    if (ticket_call_type(ticket) == call_type::Async) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(
+                std::make_unique<one_val_result<std::tuple<
+                    int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>>(
+                    one_val_result<std::tuple<
+                        int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
+                        std::make_tuple(key, success, std::move(value),
+                                        policy_version, timestamp)))));
+    } else {
+        g_get_callback(ticket, key, success, std::move(value), policy_version,
+                       timestamp);
+        return 0;
+    }
+    rem_get_call(ticket);
+    return 0;
+}
+int teems_finish_put(int64_t ticket, int64_t key, bool success,
+                     int64_t policy_version, int64_t timestamp) {
+    finished_call(ticket);
+
+    if (ticket_call_type(ticket) == call_type::Async) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(
+                std::make_unique<one_val_result<
+                    std::tuple<int64_t, bool, int64_t, int64_t>>>(
+                    one_val_result<std::tuple<int64_t, bool, int64_t, int64_t>>(
+                        std::make_tuple(key, success, policy_version,
+                                        timestamp)))));
+    } else {
+        g_put_callback(ticket, key, success, policy_version, timestamp);
+    }
+    return 0;
+    rem_put_call(ticket);
 }
 
 }  // anonymous namespace

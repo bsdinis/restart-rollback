@@ -85,16 +85,16 @@ void test_get_put() {
     {
         // there is no value
         std::vector<uint8_t> get_value;
-        EXPECT_EQ(untrusted_get(gen_teems_ticket(call_type::Sync), 0,
+        EXPECT_EQ(untrusted_get(gen_teems_ticket(call_type::Sync), 0, true,
                                 std::to_string(3 * getpid()), get_value),
                   false, "get");
 
         std::vector<uint8_t> put_value(8 << 10, 1);
-        EXPECT_EQ(untrusted_put(gen_teems_ticket(call_type::Sync), 0,
+        EXPECT_EQ(untrusted_put(gen_teems_ticket(call_type::Sync), 0, true,
                                 std::to_string(3 * getpid()), put_value),
                   true, "put");
 
-        EXPECT_EQ(untrusted_get(gen_teems_ticket(call_type::Sync), 0,
+        EXPECT_EQ(untrusted_get(gen_teems_ticket(call_type::Sync), 0, true,
                                 std::to_string(3 * getpid()), get_value),
                   true, "get");
         EXPECT_EQ(get_value, put_value, "get");
@@ -102,9 +102,10 @@ void test_get_put() {
 
     // async test
     {
-        int64_t ticket = untrusted_get_async(gen_teems_ticket(call_type::Sync),
-                                             0, std::to_string(4 * getpid()));
-        if (wait_for(ticket) == poll_state::ERR) {
+        int64_t ticket =
+            untrusted_get_async(gen_teems_ticket(call_type::Sync), 0, true,
+                                std::to_string(4 * getpid()));
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
@@ -113,18 +114,18 @@ void test_get_put() {
         EXPECT_EQ(std::get<0>(g_reply), false, "get_async");
 
         std::vector<uint8_t> put_value(8 << 10, 1);
-        ticket = untrusted_put_async(gen_teems_ticket(call_type::Sync), 0,
+        ticket = untrusted_put_async(gen_teems_ticket(call_type::Sync), 0, true,
                                      std::to_string(4 * getpid()), put_value);
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for put");
             return;
         }
         auto put_reply = get_reply<bool>(ticket);
         EXPECT_EQ(put_reply, true, "put_async");
 
-        ticket = untrusted_get_async(gen_teems_ticket(call_type::Sync), 0,
+        ticket = untrusted_get_async(gen_teems_ticket(call_type::Sync), 0, true,
                                      std::to_string(4 * getpid()));
-        if (wait_for(ticket) == poll_state::ERR) {
+        if (wait_for(ticket) == poll_state::Error) {
             ERROR("failed to wait for get");
             return;
         }
@@ -144,13 +145,13 @@ void test_pipelining() {
     for (int i = 0; i < 10; i++) {
         switch (i % 2) {
             case 0:
-                get_tickets.emplace_back(
-                    untrusted_get_async(gen_teems_ticket(call_type::Sync), 0,
-                                        std::to_string(8 * getpid() + i)));
+                get_tickets.emplace_back(untrusted_get_async(
+                    gen_teems_ticket(call_type::Sync), 0, true,
+                    std::to_string(8 * getpid() + i)));
                 break;
             case 1:
                 put_tickets.emplace_back(untrusted_put_async(
-                    gen_teems_ticket(call_type::Sync), 0,
+                    gen_teems_ticket(call_type::Sync), 0, true,
                     std::to_string(8 * getpid() + i), value));
                 break;
             default:
@@ -160,11 +161,11 @@ void test_pipelining() {
 
     while (std::any_of(std::cbegin(get_tickets), std::cend(get_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }) ||
            std::any_of(std::cbegin(put_tickets), std::cend(put_tickets),
                        [](int64_t ticket) {
-                           return poll(ticket) == poll_state::PENDING;
+                           return poll(ticket) == poll_state::Pending;
                        }))
         ;
 

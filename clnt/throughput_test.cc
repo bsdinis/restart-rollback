@@ -63,8 +63,8 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
       // global variables
       []() -> int64_t { return get_cb(1); },
       []() {
-          auto get_callbck = [](int64_t ticket, int64_t, std::vector<uint8_t>,
-                                int64_t, int64_t) {
+          auto get_callbck = [](int64_t ticket, int64_t, bool,
+                                std::vector<uint8_t>, int64_t, int64_t) {
               fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, teems get, reply,\n",
                       now_usecs(), global_load, global_tick_duration,
                       g_curr_tick, ticket);
@@ -82,7 +82,8 @@ std::map<std::string, std::pair<cb_func, setup_func>> funcs_by_op = {
           return put_cb(3, value);
       },
       []() {
-          auto put_callbck = [](int64_t ticket, int64_t, int64_t, int64_t) {
+          auto put_callbck = [](int64_t ticket, int64_t, bool, int64_t,
+                                int64_t) {
               fprintf(stdout, "%lu, %ld, %ld, %ld, %ld, teems put, reply,\n",
                       now_usecs(), global_load, global_tick_duration,
                       g_curr_tick, ticket);

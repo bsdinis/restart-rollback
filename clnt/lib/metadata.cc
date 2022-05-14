@@ -4,6 +4,7 @@
 #include "log.h"
 #include "network.h"
 #include "peer.h"
+#include "protocol_helpers.h"
 #include "result.h"
 #include "ssl_util.h"
 #include "teems_generated.h"
@@ -21,11 +22,12 @@ namespace teems {
 //==========================================
 namespace {
 int64_t send_metadata_get_request(peer &server, int64_t super_ticket,
-                                  uint8_t call_number, int64_t key,
-                                  call_type type);
+                                  uint8_t call_number, bool independent,
+                                  int64_t key, call_type type);
 int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
-                                  uint8_t call_number, int64_t key,
-                                  Metadata const &value, call_type type);
+                                  uint8_t call_number, bool independent,
+                                  int64_t key, Metadata const &value,
+                                  call_type type);
 
 int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
                               int64_t timestamp);
@@ -55,9 +57,6 @@ extern int32_t g_client_id;
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 extern ::std::vector<peer> g_servers;
 extern timeval g_timeout;
-
-extern ssize_t g_calls_issued;
-extern ssize_t g_calls_concluded;
 
 extern SSL_CTX *g_client_ctx;
 extern ::std::vector<peer> g_servers;
@@ -215,6 +214,7 @@ int metadata_close(bool close_remote) {
     // this will close the remote server
     if (close_remote) {
         int64_t const ticket = gen_teems_ticket(call_type::Sync);
+
         flatbuffers::FlatBufferBuilder builder;
         auto close_args = teems::CreateEmpty(builder);
         auto request =
@@ -254,16 +254,18 @@ int metadata_close(bool close_remote) {
 }
 
 // sync
-bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key,
-                  Metadata *value, int64_t &timestamp) {
-    if (send_metadata_get_request(g_servers[0], super_ticket, call_number, key,
-                                  call_type::Sync) == -1) {
+bool metadata_get(int64_t super_ticket, uint8_t call_number, bool independent,
+                  int64_t key, Metadata *value, int64_t &timestamp) {
+    int64_t const ticket =
+        send_metadata_get_request(g_servers[0], super_ticket, call_number,
+                                  independent, key, call_type::Sync);
+    if (ticket == -1) {
         ERROR("Failed to send get");
         return false;
     }
 
     if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicserver");
+        ERROR("failed to get a return from the server");
         return false;
     }
 
@@ -273,16 +275,20 @@ bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key,
     return true;
 }
 
-bool metadata_put(int64_t super_ticket, uint8_t call_number, int64_t key,
-                  Metadata const &value, int64_t &timestamp) {
-    if (send_metadata_put_request(g_servers[0], super_ticket, call_number, key,
-                                  value, call_type::Sync) == -1) {
-        ERROR("Failed to sent put");
+bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent,
+                  int64_t key, Metadata const &value, int64_t &timestamp) {
+    int64_t const ticket =
+        send_metadata_put_request(g_servers[0], super_ticket, call_number,
+                                  independent, key, value, call_type::Sync);
+
+    if (ticket == -1) {
+        ERROR("Failed to send put");
         return false;
     }
 
     if (block_until_return(0, g_servers[0]) == -1) {
-        ERROR("failed to get a return from the basicserver");
+        ERROR("failed to get a return from the server");
+        finished_call(ticket);
         return false;
     }
 
@@ -292,20 +298,21 @@ bool metadata_put(int64_t super_ticket, uint8_t call_number, int64_t key,
 
 // async
 int64_t metadata_get_async(int64_t super_ticket, uint8_t call_number,
-                           int64_t key) {
+                           bool independent, int64_t key) {
     return send_metadata_get_request(g_servers[0], super_ticket, call_number,
-                                     key, call_type::Async);
+                                     independent, key, call_type::Async);
 }
 int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number,
-                           int64_t key, Metadata const &value) {
+                           bool independent, int64_t key,
+                           Metadata const &value) {
     return send_metadata_put_request(g_servers[0], super_ticket, call_number,
-                                     key, value, call_type::Async);
+                                     independent, key, value, call_type::Async);
 }
 
 // handlers
 int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                          Metadata &&value, int64_t timestamp) {
-    g_calls_concluded += 1;
+    finished_call(ticket);
     switch (ticket_call_type(ticket)) {
         case call_type::Sync:
             return metadata_get_handler_sync(ticket, key, std::move(value),
@@ -323,7 +330,7 @@ int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
 
 int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
                          int64_t timestamp) {
-    g_calls_concluded += 1;
+    finished_call(ticket);
     switch (ticket_call_type(ticket)) {
         case call_type::Sync:  // Sync
             return metadata_put_handler_sync(ticket, success, timestamp);
@@ -339,7 +346,7 @@ poll_state poll_metadata(int64_t ticket) {
     if (std::any_of(std::cbegin(g_servers), std::cend(g_servers),
                     [](peer const &server) { return !server.connected(); })) {
         ERROR("no connection to proxies");
-        return poll_state::ERR;
+        return poll_state::Error;
     }
 
     timeval timeout = g_timeout;
@@ -347,18 +354,18 @@ poll_state poll_metadata(int64_t ticket) {
     switch (res) {
         case process_res::ERR:
             ERROR("connection broke");
-            return poll_state::ERR;
+            return poll_state::Error;
 
         case process_res::HANDLED_MSG:
-            return (ticket == -1 || has_result(ticket)) ? poll_state::READY
-                                                        : poll_state::PENDING;
+            return (ticket == -1 || has_result(ticket)) ? poll_state::Ready
+                                                        : poll_state::Pending;
 
         case process_res::NOOP:
-            return poll_state::PENDING;
+            return poll_state::Pending;
     }
 
-    return n_calls_outlasting() == 0 ? poll_state::NO_CALLS
-                                     : poll_state::PENDING;
+    return n_calls_outlasting() == 0 ? poll_state::NoCalls
+                                     : poll_state::Pending;
 }
 
 //==========================================
@@ -366,9 +373,11 @@ poll_state poll_metadata(int64_t ticket) {
 //==========================================
 namespace {
 int64_t send_metadata_get_request(peer &server, int64_t super_ticket,
-                                  uint8_t call_number, int64_t key,
-                                  call_type type) {
-    int64_t const ticket = gen_metadata_ticket(super_ticket, call_number, type);
+                                  uint8_t call_number, bool independent,
+                                  int64_t key, call_type type) {
+    int64_t const ticket =
+        gen_metadata_ticket(super_ticket, call_number, independent, type);
+
     flatbuffers::FlatBufferBuilder builder;
     auto get_args = teems::CreateGetArgs(builder, key);
 
@@ -390,14 +399,16 @@ int64_t send_metadata_get_request(peer &server, int64_t super_ticket,
         return -1;
     }
 
-    g_calls_issued += 1;
+    issued_call(ticket);
     return ticket;
 }
 
 int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
-                                  uint8_t call_number, int64_t key,
-                                  Metadata const &value, call_type type) {
-    int64_t const ticket = gen_metadata_ticket(super_ticket, call_number, type);
+                                  uint8_t call_number, bool independent,
+                                  int64_t key, Metadata const &value,
+                                  call_type type) {
+    int64_t const ticket =
+        gen_metadata_ticket(super_ticket, call_number, independent, type);
     flatbuffers::FlatBufferBuilder builder;
 
     auto fb_value = teems::Value();
@@ -424,7 +435,7 @@ int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
         return -1;
     }
 
-    g_calls_issued += 1;
+    issued_call(ticket);
     return ticket;
 }
 
@@ -436,14 +447,19 @@ int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
 }
 int metadata_get_handler_async(int64_t ticket, int64_t key, Metadata &&value,
                                int64_t timestamp) {
-    g_results_map.emplace(
-        ticket,
-        std::unique_ptr<result>(
-            std::make_unique<
-                one_val_result<std::tuple<int64_t, Metadata, int64_t>>>(
-                one_val_result<std::tuple<int64_t, Metadata, int64_t>>(
-                    std::make_tuple(key, std::move(value), timestamp)))));
-    return 0;
+    if (ticket_independent(ticket)) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(
+                std::make_unique<
+                    one_val_result<std::tuple<int64_t, Metadata, int64_t>>>(
+                    one_val_result<std::tuple<int64_t, Metadata, int64_t>>(
+                        std::make_tuple(key, std::move(value), timestamp)))));
+        return 0;
+    }
+
+    return teems_handle_metadata_get(ticket, key, value, 0 /* TODO */,
+                                     timestamp, true);
 }
 
 // metadata put
@@ -453,12 +469,18 @@ int metadata_put_handler_sync(int64_t ticket, bool success, int64_t timestamp) {
 }
 int metadata_put_handler_async(int64_t ticket, bool success,
                                int64_t timestamp) {
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(
-                    std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
-                        one_val_result<std::pair<int64_t, bool>>(
-                            std::make_pair(timestamp, success)))));
-    return 0;
+    if (ticket_independent(ticket)) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(
+                std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
+                    one_val_result<std::pair<int64_t, bool>>(
+                        std::make_pair(timestamp, success)))));
+        return 0;
+    }
+
+    return teems_handle_metadata_put(ticket, 0 /* TODO */, timestamp, success);
 }
+
 }  // anonymous namespace
 }  // namespace teems

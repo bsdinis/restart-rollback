@@ -1,5 +1,6 @@
 #include "async.h"
 
+#include "context.h"
 #include "log.h"
 #include "metadata.h"
 #include "network.h"
@@ -34,7 +35,8 @@ extern ::std::vector<peer> g_servers;
 //===========================
 namespace {
 int64_t gen_subcall_ticket(int64_t teems_ticket, uint8_t call_number,
-                           call_type type, call_target target);
+                           bool independent, call_type type,
+                           call_target target);
 }  // anonymous namespace
 
 //===========================
@@ -73,8 +75,8 @@ int async_close() {
 ///     the 00 pattern is invalid
 ///
 /// A subcall ticket has the following bit pattern
-///  64            18   16           8     3      2        1 0
-///   |ticket number|type|call number|xxxxx|target|sub type|1|
+///  64            18   16           8    5           4      3        1 0
+///   |ticket number|type|call number|xxxx|independent|target|sub type|1|
 ///
 /// The higher level bits are exactly the same as the top-level call.
 /// This has two consequences:
@@ -82,14 +84,19 @@ int async_close() {
 ///     2. We can recover the top level call ticket from the subcall ticket
 ///
 /// The first  bit indicates that this is a sub call ticket
-/// The second bit indicates the sub call type:
-///     0: sync sub call
-///     1: async sub call
-/// (note that there are no sub calls with callbacks)
+/// The second two bit indicates the sub call type:
+///     0b01: sync sub call
+///     0b10: async sub call
+///     0b11: callback sub call
 ///
-/// The third bit indicates the subsystem the sub call is targetting:
+/// The fifth bit indicates the subsystem the sub call is targetting:
 ///     0: metadata subsystem
 ///     1: untrusted storage subsystem
+///
+/// The fourth bit indicates whether the subsystem call is independent (was made
+/// directly) or whether it was issued by TEEMS. This is important to recognize
+/// if we need to run the continuation of the protocol or whether we place the
+/// result in the results map.
 ///
 /// The second byte includes a call number, because a top-level call may
 /// need to make more than one call to the same subsystem.
@@ -117,14 +124,31 @@ int64_t gen_teems_ticket(call_type type) {
 }
 
 int64_t gen_metadata_ticket(int64_t teems_ticket, uint8_t call_number,
-                            call_type type) {
-    return gen_subcall_ticket(teems_ticket, call_number, type,
+                            bool independent, call_type type) {
+    return gen_subcall_ticket(teems_ticket, call_number, independent, type,
                               call_target::Metadata);
 }
 int64_t gen_untrusted_ticket(int64_t teems_ticket, uint8_t call_number,
-                             call_type type) {
-    return gen_subcall_ticket(teems_ticket, call_number, type,
+                             bool independent, call_type type) {
+    return gen_subcall_ticket(teems_ticket, call_number, independent, type,
                               call_target::Untrusted);
+}
+int64_t get_supercall_ticket(int64_t subcall_ticket) {
+    uint64_t u_ticket = static_cast<uint64_t>(subcall_ticket) & (~0x3ff);
+    return static_cast<int64_t>(u_ticket);
+}
+
+bool ticket_independent(int64_t ticket) {
+    uint64_t u_ticket = static_cast<uint64_t>(ticket);
+    if (ticket_call_target(ticket) == call_target::TEEMS) {
+        ERROR(
+            "all TEEMS calls are independent: calling this is probably a logic "
+            "error [ticket %lx]",
+            ticket);
+        return true;
+    }
+
+    return ((u_ticket >> 4) & 0b1) == 0b1;
 }
 
 call_type ticket_call_type(int64_t ticket) {
@@ -143,10 +167,16 @@ call_type ticket_call_type(int64_t ticket) {
                 return call_type::Sync;
         }
     } else {
-        if (((u_ticket >> 1) & 0b1) == 0) {
-            return call_type::Sync;
-        } else {
-            return call_type::Async;
+        switch ((u_ticket >> 1) & 0b11) {
+            case 0b01:
+                return call_type::Sync;
+            case 0b10:
+                return call_type::Async;
+            case 0b11:
+                return call_type::Callback;
+            default:
+                ERROR("invalid sub call type: %x", 0b00);
+                return call_type::Sync;
         }
     }
 }
@@ -157,11 +187,22 @@ call_target ticket_call_target(int64_t ticket) {
         return call_target::TEEMS;
     }
 
-    if (((u_ticket >> 2) & 0b1) == 0) {
+    if (((u_ticket >> 3) & 0b1) == 0) {
         return call_target::Metadata;
     } else {
         return call_target::Untrusted;
     }
+}
+
+void issued_call(int64_t ticket) {
+    g_calls_issued += 1;
+    LOG("issued   %lx | %zd | %zd | %zd", ticket, g_calls_issued,
+        g_calls_concluded, n_calls_outlasting());
+}
+void finished_call(int64_t ticket) {
+    g_calls_concluded += 1;
+    LOG("finished_call   %lx | %zd | %zd | %zd", ticket, g_calls_issued,
+        g_calls_concluded, n_calls_outlasting());
 }
 
 size_t n_calls_issued() { return g_calls_issued; }
@@ -175,40 +216,67 @@ bool has_result(int64_t ticket) {
 // functions to advance state
 poll_state poll(int64_t ticket) {
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
     if (n_calls_outlasting() == 0) {
-        return poll_state::NO_CALLS;
+        return poll_state::NoCalls;
+    }
+    if (ticket == -1) {
+        if (poll_metadata(-1) == poll_state::Error ||
+            poll_untrusted(-1) == poll_state::Error) {
+            return poll_state::Error;
+        }
+        return n_calls_outlasting() == 0 ? poll_state::NoCalls
+                                         : poll_state::Pending;
     }
 
+    int64_t metadata_ticket = -1;
+    int64_t untrusted_ticket = -1;
     switch (ticket_call_target(ticket)) {
         case call_target::TEEMS:
-            // TODO: figure out mechanichs of this
-            break;
+            if (get_call_tickets(ticket, &metadata_ticket, &untrusted_ticket) !=
+                0) {
+                ERROR("failed to get call tickets for TEEMS ticket %lx",
+                      ticket);
+                return poll_state::Error;
+            }
+            if (metadata_ticket != -1) {
+                if (poll_metadata(metadata_ticket) == poll_state::Error) {
+                    return poll_state::Error;
+                }
+            }
+            if (untrusted_ticket != -1) {
+                if (poll_untrusted(untrusted_ticket) == poll_state::Error) {
+                    return poll_state::Error;
+                }
+            }
+            return has_result(ticket) ? poll_state::Ready : poll_state::Pending;
         case call_target::Metadata:
             return poll_metadata(ticket);
         case call_target::Untrusted:
             return poll_untrusted(ticket);
     }
-
-    return n_calls_outlasting() == 0 ? poll_state::NO_CALLS
-                                     : poll_state::PENDING;
 }
 
 poll_state wait_for(int64_t ticket) {
     if (ticket == -1) {
-        poll_state res = poll_state::PENDING;
-        while (res != poll_state::NO_CALLS && res != poll_state::ERR)
-            res = poll();
+        poll_state res = poll_state::Pending;
+        while (res != poll_state::NoCalls && res != poll_state::Error) {
+            res = poll(-1);
+        }
 
         return res;
     } else {
-        while (poll(ticket) == poll_state::PENDING)
+        while (poll(ticket) == poll_state::Pending)
             ;
-        if (poll(ticket) == poll_state::ERR) {
-            return poll_state::ERR;
+        poll_state state = poll(ticket);
+        if (state == poll_state::Error) {
+            return poll_state::Error;
+        } else if (state == poll_state::NoCalls) {
+            ERROR("waiting for call that does not exist %lx", ticket);
+            return poll_state::Error;
         }
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 }
 
@@ -216,7 +284,7 @@ template <typename T>
 T get_reply(int64_t ticket) {
     auto it = g_results_map.find(ticket);
     if (it == std::end(g_results_map)) {
-        ERROR("failed to find reply for %ld", ticket);
+        ERROR("failed to find reply for %lx", ticket);
         return T();
     }
     std::unique_ptr<result> res = std::move(it->second);  // mv constructor
@@ -237,11 +305,14 @@ T get_reply(int64_t ticket) {
 }
 
 // for put
-template std::tuple<int64_t, int64_t, int64_t> get_reply(int64_t ticket);
+template std::tuple<int64_t, bool, int64_t, int64_t> get_reply(int64_t ticket);
 
 // for get
-template std::tuple<int64_t, std::vector<uint8_t>, int64_t, int64_t> get_reply(
-    int64_t ticket);
+template std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>
+get_reply(int64_t ticket);
+
+// for change policy
+template std::tuple<int64_t, bool, int64_t> get_reply(int64_t ticket);
 
 // for metadata put
 template std::pair<int64_t, bool> get_reply(int64_t ticket);
@@ -283,11 +354,8 @@ void get_reply(int64_t ticket) {
 namespace {
 
 int64_t gen_subcall_ticket(int64_t teems_ticket, uint8_t call_number,
-                           call_type type, call_target target) {
-    if (type == call_type::Callback) {
-        ERROR("cannot create a callback for a metadata call");
-        return -1;
-    }
+                           bool independent, call_type type,
+                           call_target target) {
     if (target == call_target::TEEMS) {
         ERROR("cannot create a subcall for TEEMS");
         return -1;
@@ -298,11 +366,23 @@ int64_t gen_subcall_ticket(int64_t teems_ticket, uint8_t call_number,
     }
 
     uint16_t m_ticket = static_cast<uint16_t>(call_number);
+    uint16_t m_independent = (independent) ? 0b1 : 0b0;
     uint16_t m_target = (target == call_target::Metadata) ? 0b0 : 0b1;
-    uint16_t m_type = (type == call_type::Sync) ? 0b0 : 0b1;
+    uint16_t m_type = 0b00;
+    switch (type) {
+        case call_type::Sync:
+            m_type = 0b01;
+            break;
+        case call_type::Async:
+            m_type = 0b10;
+            break;
+        case call_type::Callback:
+            m_type = 0b11;
+            break;
+    }
 
     uint64_t ticket = static_cast<uint64_t>(teems_ticket) | m_ticket << 8 |
-                      m_target << 2 | m_type << 1 | 0b1;
+                      m_independent << 4 | m_target << 3 | m_type << 1 | 0b1;
     return static_cast<int64_t>(ticket);
 }
 

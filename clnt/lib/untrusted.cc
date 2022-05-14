@@ -1,6 +1,7 @@
 #include "untrusted.h"
 
 #include "log.h"
+#include "protocol_helpers.h"
 #include "result.h"
 
 #include <libs3.h>
@@ -29,9 +30,6 @@ namespace teems {
 
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 extern timeval g_timeout;
-
-extern ssize_t g_calls_issued;
-extern ssize_t g_calls_concluded;
 
 namespace {
 
@@ -64,6 +62,9 @@ constexpr const char *g_redis_host = "127.0.0.1";  // localhost
 constexpr const char *G_DIR_PREFIX = "/home/bsd/dev/teems/clnt/teems_ustor";
 std::string g_fs_dirname;
 
+void finish_put(int64_t ticket, bool success);
+void finish_get(int64_t ticket, bool success, std::vector<uint8_t> &&value);
+
 //==============================
 // S3 INTERFACE
 //==============================
@@ -71,15 +72,16 @@ std::string g_fs_dirname;
 int s3_init();
 int s3_close();
 
-bool s3_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> &value);
-bool s3_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> const &value);
+bool s3_get(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> &value);
+bool s3_put(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> const &value);
 
 int64_t s3_get_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key);
+                     bool independent, std::string const &key);
 int64_t s3_put_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key, std::vector<uint8_t> const &value);
+                     bool independent, std::string const &key,
+                     std::vector<uint8_t> const &value);
 
 poll_state s3_poll(int64_t ticket);
 
@@ -92,15 +94,15 @@ redisAsyncContext *g_redis_async_ctx = nullptr;
 int redis_init();
 int redis_close();
 
-bool redis_get(int64_t super_ticket, uint8_t call_number,
+bool redis_get(int64_t super_ticket, uint8_t call_number, bool independent,
                std::string const &key, std::vector<uint8_t> &value);
-bool redis_put(int64_t super_ticket, uint8_t call_number,
+bool redis_put(int64_t super_ticket, uint8_t call_number, bool independent,
                std::string const &key, std::vector<uint8_t> const &value);
 
 int64_t redis_get_async(int64_t super_ticket, uint8_t call_number,
-                        std::string const &key);
+                        bool independent, std::string const &key);
 int64_t redis_put_async(int64_t super_ticket, uint8_t call_number,
-                        std::string const &key,
+                        bool independent, std::string const &key,
                         std::vector<uint8_t> const &value);
 
 poll_state redis_poll(int64_t ticket);
@@ -111,15 +113,16 @@ poll_state redis_poll(int64_t ticket);
 int fs_init();
 int fs_close();
 
-bool fs_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> &value);
-bool fs_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> const &value);
+bool fs_get(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> &value);
+bool fs_put(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> const &value);
 
 int64_t fs_get_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key);
+                     bool independent, std::string const &key);
 int64_t fs_put_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key, std::vector<uint8_t> const &value);
+                     bool independent, std::string const &key,
+                     std::vector<uint8_t> const &value);
 
 poll_state fs_poll(int64_t ticket);
 }  // anonymous namespace
@@ -160,62 +163,67 @@ int untrusted_close() {
     }
 }
 
-bool untrusted_get(int64_t super_ticket, uint8_t call_number,
+bool untrusted_get(int64_t super_ticket, uint8_t call_number, bool independent,
                    std::string const &key, std::vector<uint8_t> &value) {
     switch (g_ustore_type) {
         case UntrustedStoreType::None:
             ERROR("untrusted storage is not initialized");
             return false;
         case UntrustedStoreType::S3:
-            return s3_get(super_ticket, call_number, key, value);
+            return s3_get(super_ticket, call_number, independent, key, value);
         case UntrustedStoreType::Redis:
-            return redis_get(super_ticket, call_number, key, value);
+            return redis_get(super_ticket, call_number, independent, key,
+                             value);
         case UntrustedStoreType::Filesystem:
-            return fs_get(super_ticket, call_number, key, value);
+            return fs_get(super_ticket, call_number, independent, key, value);
     }
 }
-bool untrusted_put(int64_t super_ticket, uint8_t call_number,
+bool untrusted_put(int64_t super_ticket, uint8_t call_number, bool independent,
                    std::string const &key, std::vector<uint8_t> const &value) {
     switch (g_ustore_type) {
         case UntrustedStoreType::None:
             ERROR("untrusted storage is not initialized");
             return false;
         case UntrustedStoreType::S3:
-            return s3_put(super_ticket, call_number, key, value);
+            return s3_put(super_ticket, call_number, independent, key, value);
         case UntrustedStoreType::Redis:
-            return redis_put(super_ticket, call_number, key, value);
+            return redis_put(super_ticket, call_number, independent, key,
+                             value);
         case UntrustedStoreType::Filesystem:
-            return fs_put(super_ticket, call_number, key, value);
+            return fs_put(super_ticket, call_number, independent, key, value);
     }
 }
 
 int64_t untrusted_get_async(int64_t super_ticket, uint8_t call_number,
-                            std::string const &key) {
+                            bool independent, std::string const &key) {
     switch (g_ustore_type) {
         case UntrustedStoreType::None:
             ERROR("untrusted storage is not initialized");
             return -1;
         case UntrustedStoreType::S3:
-            return s3_get_async(super_ticket, call_number, key);
+            return s3_get_async(super_ticket, call_number, independent, key);
         case UntrustedStoreType::Redis:
-            return redis_get_async(super_ticket, call_number, key);
+            return redis_get_async(super_ticket, call_number, independent, key);
         case UntrustedStoreType::Filesystem:
-            return fs_get_async(super_ticket, call_number, key);
+            return fs_get_async(super_ticket, call_number, independent, key);
     }
 }
 int64_t untrusted_put_async(int64_t super_ticket, uint8_t call_number,
-                            std::string const &key,
+                            bool independent, std::string const &key,
                             std::vector<uint8_t> const &value) {
     switch (g_ustore_type) {
         case UntrustedStoreType::None:
             ERROR("untrusted storage is not initialized");
             return -1;
         case UntrustedStoreType::S3:
-            return s3_put_async(super_ticket, call_number, key, value);
+            return s3_put_async(super_ticket, call_number, independent, key,
+                                value);
         case UntrustedStoreType::Redis:
-            return redis_put_async(super_ticket, call_number, key, value);
+            return redis_put_async(super_ticket, call_number, independent, key,
+                                   value);
         case UntrustedStoreType::Filesystem:
-            return fs_put_async(super_ticket, call_number, key, value);
+            return fs_put_async(super_ticket, call_number, independent, key,
+                                value);
             break;
     }
 }
@@ -224,7 +232,7 @@ poll_state poll_untrusted(int64_t ticket) {
     switch (g_ustore_type) {
         case UntrustedStoreType::None:
             ERROR("untrusted storage is not initialized");
-            return poll_state::ERR;
+            return poll_state::Error;
         case UntrustedStoreType::S3:
             return s3_poll(ticket);
         case UntrustedStoreType::Redis:
@@ -236,6 +244,42 @@ poll_state poll_untrusted(int64_t ticket) {
 }
 
 namespace {
+//==============================
+// LIBRARY HELPERS
+//==============================
+void finish_put(int64_t ticket, bool success) {
+    finished_call(ticket);
+
+    if (ticket_independent(ticket)) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(std::make_unique<one_val_result<bool>>(
+                one_val_result<bool>(success))));
+    } else {
+        if (teems_handle_untrusted_put(ticket, success) != 0) {
+            ERROR("failed to handle untrusted put");
+        }
+    }
+}
+void finish_get(int64_t ticket, bool success, std::vector<uint8_t> &&value) {
+    finished_call(ticket);
+
+    if (ticket_independent(ticket)) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(
+                std::make_unique<
+                    one_val_result<std::tuple<bool, std::vector<uint8_t>>>>(
+                    one_val_result<std::tuple<bool, std::vector<uint8_t>>>(
+                        std::make_tuple(success, std::move(value))))));
+    } else {
+        if (teems_handle_untrusted_get(ticket, success, std::move(value)) !=
+            0) {
+            ERROR("failed to handle untrusted get");
+        }
+    }
+}
+
 //==============================
 // S3 INTERFACE
 //==============================
@@ -342,8 +386,8 @@ int s3_close() {
     return 0;
 }
 
-bool s3_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> &value) {
+bool s3_get(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> &value) {
     s3_sync_get_ctx ctx(&value);
     S3GetObjectHandler get_obj_handler = {g_s3_sync_resp_handler,
                                           &s3_sync_get_object_cb};
@@ -361,8 +405,8 @@ bool s3_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
     return ctx.m_success;
 }
 
-bool s3_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> const &value) {
+bool s3_put(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> const &value) {
     s3_sync_put_ctx ctx(&value);
     S3PutObjectHandler put_obj_handler = {g_s3_sync_resp_handler,
                                           &s3_sync_put_object_cb};
@@ -380,9 +424,9 @@ bool s3_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
 }
 
 int64_t s3_get_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key) {
-    s3_async_get_ctx *ctx = new s3_async_get_ctx(
-        gen_untrusted_ticket(super_ticket, call_number, call_type::Async));
+                     bool independent, std::string const &key) {
+    s3_async_get_ctx *ctx = new s3_async_get_ctx(gen_untrusted_ticket(
+        super_ticket, call_number, independent, call_type::Async));
 
     S3GetObjectHandler get_obj_handler = {g_s3_async_get_handler,
                                           &s3_async_get_object_cb};
@@ -397,14 +441,15 @@ int64_t s3_get_async(int64_t super_ticket, uint8_t call_number,
 #endif
                   &get_obj_handler, ctx);
 
-    g_calls_issued += 1;
+    issued_call(ctx->m_ticket);
     return ctx->m_ticket;
 }
 int64_t s3_put_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key,
+                     bool independent, std::string const &key,
                      std::vector<uint8_t> const &value) {
     s3_async_put_ctx *ctx = new s3_async_put_ctx(
-        gen_untrusted_ticket(super_ticket, call_number, call_type::Async),
+        gen_untrusted_ticket(super_ticket, call_number, independent,
+                             call_type::Async),
         value);
 
     S3PutObjectHandler put_obj_handler = {g_s3_async_put_handler,
@@ -419,7 +464,7 @@ int64_t s3_put_async(int64_t super_ticket, uint8_t call_number,
 #endif
                   &put_obj_handler, ctx);
 
-    g_calls_issued += 1;
+    issued_call(ctx->m_ticket);
     return ctx->m_ticket;
 }
 
@@ -445,13 +490,10 @@ void s3_async_put_cb(S3Status status, S3ErrorDetails const *error,
     }
 
     s3_async_put_ctx *ctx = (s3_async_put_ctx *)callbackData;
-    g_results_map.emplace(
-        ctx->m_ticket,
-        std::unique_ptr<result>(std::make_unique<one_val_result<bool>>(
-            one_val_result<bool>(status == S3StatusOK))));
-
-    g_calls_concluded += 1;
+    int64_t ticket = ctx->m_ticket;
     delete ctx;
+
+    finish_put(ticket, status == S3StatusOK);
     return;
 }
 
@@ -467,17 +509,11 @@ void s3_async_get_cb(S3Status status, S3ErrorDetails const *error,
     }
 
     s3_async_get_ctx *ctx = (s3_async_get_ctx *)callbackData;
-    g_results_map.emplace(
-        ctx->m_ticket,
-        std::unique_ptr<result>(
-            std::make_unique<
-                one_val_result<std::tuple<bool, std::vector<uint8_t>>>>(
-                one_val_result<std::tuple<bool, std::vector<uint8_t>>>(
-                    std::make_tuple(status == S3StatusOK,
-                                    std::move(ctx->m_value))))));
-    g_calls_concluded += 1;
-
+    int64_t ticket = ctx->m_ticket;
+    std::vector<uint8_t> value = std::move(ctx->m_value);
     delete ctx;
+
+    finish_get(ticket, status == S3StatusOK, std::move(value));
     return;
 }
 
@@ -540,21 +576,21 @@ S3Status s3_async_get_object_cb(int bufferSize, const char *buffer,
 
 poll_state s3_poll(int64_t ticket) {
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 
     int remaining = 0;
     if (S3_runonce_request_context(g_s3_request_ctx, &remaining) !=
         S3StatusOK) {
         ERROR("failed to run S3 requests");
-        return poll_state::PENDING;
+        return poll_state::Pending;
     }
 
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 
-    return poll_state::PENDING;
+    return poll_state::Pending;
 }
 
 //==============================
@@ -612,7 +648,7 @@ int redis_close() {
     return 0;
 }
 
-bool redis_get(int64_t super_ticket, uint8_t call_number,
+bool redis_get(int64_t super_ticket, uint8_t call_number, bool independent,
                std::string const &key, std::vector<uint8_t> &value) {
     redisReply *reply =
         (redisReply *)redisCommand(g_redis_ctx, "GET %s", key.c_str());
@@ -644,7 +680,7 @@ bool redis_get(int64_t super_ticket, uint8_t call_number,
     return true;
 }
 
-bool redis_put(int64_t super_ticket, uint8_t call_number,
+bool redis_put(int64_t super_ticket, uint8_t call_number, bool independent,
                std::string const &key, std::vector<uint8_t> const &value) {
     redisReply *reply = (redisReply *)redisCommand(
         g_redis_ctx, "SET %s %b", key.c_str(), value.data(), value.size());
@@ -677,22 +713,17 @@ void redis_read_cb(redisAsyncContext *ac, void *reply, void *privdata) {
         }
     }
 
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(
-                    std::make_unique<
-                        one_val_result<std::tuple<bool, std::vector<uint8_t>>>>(
-                        one_val_result<std::tuple<bool, std::vector<uint8_t>>>(
-                            std::make_tuple(value_exists, std::move(value))))));
-    g_calls_concluded += 1;
+    finish_get(ticket, value_exists, std::move(value));
 }
 int64_t redis_get_async(int64_t super_ticket, uint8_t call_number,
-                        std::string const &key) {
+                        bool independent, std::string const &key) {
     int64_t *ticket = (int64_t *)malloc(sizeof(int64_t));
     if (ticket == nullptr) {
         ERROR("failed to allocate ticket: %s", strerror(errno));
         return -1;
     }
-    *ticket = gen_untrusted_ticket(super_ticket, call_number, call_type::Async);
+    *ticket = gen_untrusted_ticket(super_ticket, call_number, independent,
+                                   call_type::Async);
 
     if (redisAsyncCommand(g_redis_async_ctx, redis_read_cb, (void *)ticket,
                           "GET %s", key.c_str()) != REDIS_OK) {
@@ -701,7 +732,7 @@ int64_t redis_get_async(int64_t super_ticket, uint8_t call_number,
         return -1;
     }
 
-    g_calls_issued += 1;
+    issued_call(*ticket);
     return *ticket;
 }
 
@@ -710,21 +741,18 @@ void redis_write_cb(redisAsyncContext *ac, void *reply, void *privdata) {
     assert(ticket_ptr != nullptr);
     int32_t const ticket = *ticket_ptr;
     free(ticket_ptr);
-
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(std::make_unique<one_val_result<bool>>(
-                    one_val_result<bool>(reply != nullptr))));
-    g_calls_concluded += 1;
+    finish_put(ticket, reply != nullptr);
 }
 int64_t redis_put_async(int64_t super_ticket, uint8_t call_number,
-                        std::string const &key,
+                        bool independent, std::string const &key,
                         std::vector<uint8_t> const &value) {
     int64_t *ticket = (int64_t *)malloc(sizeof(int64_t));
     if (ticket == nullptr) {
         ERROR("failed to allocate ticket: %s", strerror(errno));
         return -1;
     }
-    *ticket = gen_untrusted_ticket(super_ticket, call_number, call_type::Async);
+    *ticket = gen_untrusted_ticket(super_ticket, call_number, independent,
+                                   call_type::Async);
 
     if (redisAsyncCommand(g_redis_async_ctx, redis_write_cb, (void *)ticket,
                           "SET %s %b", key.c_str(), value.data(),
@@ -734,13 +762,13 @@ int64_t redis_put_async(int64_t super_ticket, uint8_t call_number,
         return -1;
     }
 
-    g_calls_issued += 1;
+    issued_call(*ticket);
     return *ticket;
 }
 
 poll_state redis_poll(int64_t ticket) {
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 
     int const fd = g_redis_async_ctx->c.fd;
@@ -762,9 +790,9 @@ poll_state redis_poll(int64_t ticket) {
         case -1:
             ERROR("failed to select on redis async socket (%d): %s", fd,
                   strerror(errno));
-            return poll_state::PENDING;
+            return poll_state::Pending;
         case 0:
-            return poll_state::PENDING;
+            return poll_state::Pending;
 
         default:
             if (FD_ISSET(fd, &read_fds)) {
@@ -785,10 +813,10 @@ poll_state redis_poll(int64_t ticket) {
     }
 
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 
-    return poll_state::PENDING;
+    return poll_state::Pending;
 }
 
 //==============================
@@ -823,8 +851,8 @@ int fs_init() {
 
 int fs_close() { return 0; }
 
-bool fs_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> &value) {
+bool fs_get(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> &value) {
     std::string const pathname = fs_construct_filename(key);
     if (access(pathname.c_str(), F_OK) != 0) {
         FINE("object does not exist: %s", pathname.c_str());
@@ -837,8 +865,8 @@ bool fs_get(int64_t super_ticket, uint8_t call_number, std::string const &key,
     return true;
 }
 
-bool fs_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
-            std::vector<uint8_t> const &value) {
+bool fs_put(int64_t super_ticket, uint8_t call_number, bool independent,
+            std::string const &key, std::vector<uint8_t> const &value) {
     std::string const pathname = fs_construct_filename(key);
     if (access(pathname.c_str(), F_OK) == 0) {
         ERROR("object name taken: %s", pathname.c_str());
@@ -858,42 +886,35 @@ bool fs_put(int64_t super_ticket, uint8_t call_number, std::string const &key,
 }
 
 int64_t fs_get_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key) {
-    int64_t const ticket =
-        gen_untrusted_ticket(super_ticket, call_number, call_type::Async);
-    std::vector<uint8_t> value;
-    g_calls_issued += 1;
-    bool success = fs_get(super_ticket, call_number, key, value);
+                     bool independent, std::string const &key) {
+    int64_t const ticket = gen_untrusted_ticket(super_ticket, call_number,
+                                                independent, call_type::Async);
+    issued_call(ticket);
 
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(
-                    std::make_unique<
-                        one_val_result<std::tuple<bool, std::vector<uint8_t>>>>(
-                        one_val_result<std::tuple<bool, std::vector<uint8_t>>>(
-                            std::make_tuple(success, std::move(value))))));
-    g_calls_concluded += 1;
+    std::vector<uint8_t> value;
+    bool success = fs_get(super_ticket, call_number, independent, key, value);
+
+    finish_get(ticket, success, std::move(value));
     return ticket;
 }
 int64_t fs_put_async(int64_t super_ticket, uint8_t call_number,
-                     std::string const &key,
+                     bool independent, std::string const &key,
                      std::vector<uint8_t> const &value) {
-    int64_t const ticket =
-        gen_untrusted_ticket(super_ticket, call_number, call_type::Async);
-    g_calls_issued += 1;
-    bool success = fs_put(super_ticket, call_number, key, value);
-    g_results_map.emplace(
-        ticket, std::unique_ptr<result>(std::make_unique<one_val_result<bool>>(
-                    one_val_result<bool>(success))));
-    g_calls_concluded += 1;
+    int64_t const ticket = gen_untrusted_ticket(super_ticket, call_number,
+                                                independent, call_type::Async);
+    issued_call(ticket);
+    bool success = fs_put(super_ticket, call_number, independent, key, value);
+
+    finish_put(ticket, success);
     return ticket;
 }
 
 poll_state fs_poll(int64_t ticket) {
     if (ticket != -1 && has_result(ticket)) {
-        return poll_state::READY;
+        return poll_state::Ready;
     }
 
-    return poll_state::PENDING;
+    return poll_state::NoCalls;
 }
 
 }  // namespace

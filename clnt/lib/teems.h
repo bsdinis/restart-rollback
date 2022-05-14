@@ -28,7 +28,6 @@
 #include <functional>
 
 #include "async.h"
-#include "teems_config.h"
 #include "untrusted.h"
 
 namespace teems{
@@ -97,13 +96,13 @@ int64_t reset_async(void);
  */
 
 // -1 means error
-int get_set_cb(std::function<void(int64_t, int64_t, std::vector<uint8_t>, int64_t, int64_t)> cb);
+int get_set_cb(std::function<void(int64_t, int64_t, bool, std::vector<uint8_t>, int64_t, int64_t)> cb);
 int64_t get_cb(int64_t key);
 
-int put_set_cb(std::function<void(int64_t, int64_t, int64_t, int64_t)> cb);
+int put_set_cb(std::function<void(int64_t, int64_t, bool, int64_t, int64_t)> cb);
 int64_t put_cb(int64_t key, std::vector<uint8_t> const &value);
 
-int change_policy_set_cb(std::function<void(int64_t, int64_t, int64_t)> cb);
+int change_policy_set_cb( std::function<void(int64_t, int64_t, bool, int64_t)> cb);
 int64_t change_policy_cb(int64_t key, uint64_t policy);
 
 int ping_set_cb(std::function<void(int64_t)> cb);

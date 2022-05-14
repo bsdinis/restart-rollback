@@ -52,11 +52,11 @@ class Metadata {
 int metadata_init(char const * config = "../server/default.conf", char const * cert_path = "certs/client.crt", char const * key_path = "certs/client.key");
 int metadata_close(bool close_remote = false);
 
-bool metadata_get(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata *value, int64_t &timestamp);
-bool metadata_put(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata const& value, int64_t &timestamp);
+bool metadata_get(int64_t super_ticket, uint8_t call_number, bool independent, int64_t key, Metadata *value, int64_t &timestamp);
+bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent, int64_t key, Metadata const& value, int64_t &timestamp);
 
-int64_t metadata_get_async(int64_t super_ticket, uint8_t call_number, int64_t key);
-int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number, int64_t key, Metadata const &value);
+int64_t metadata_get_async(int64_t super_ticket, uint8_t call_number, bool independent, int64_t key);
+int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number, bool independent, int64_t key, Metadata const &value);
 
 int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
                          Metadata &&value,
