@@ -33,10 +33,13 @@ CXXFLAGS := $(CFLAGS) -Wall -Werror -std=c++14
 CXXFLAGS := $(CXXFLAGS) -Wno-unused-function
 
 LIB_SOURCES=$(wildcard lib/*.cc)
-LIG_OBJECTS=$(LIB_SOURCES:.cc=.o)
+LIB_OBJECTS=$(LIB_SOURCES:.cc=.o)
+TEST_SOURCES=$(wildcard tests/*.cc)
+TEST_OBJECTS=$(SOURCES:.cc=.o)
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(SOURCES:.cc=.o)
-TESTS := teems_test latency_test throughput_test close_remote metadata_test untrusted_test
+EXECUTABLES := close_remote
+TESTS := tests/teems_test tests/latency_test tests/throughput_test tests/metadata_test tests/untrusted_test
 
 #ifeq ($(strip $(OPENSSL_AES)), no)
   AES_MODE = -DOPENSSL_AES
@@ -48,35 +51,32 @@ TESTS := teems_test latency_test throughput_test close_remote metadata_test untr
 CXXFLAGS += $(AES_MODE)
 INCLUDES += $(AES_MODE)
 
-all: libteems.a $(TESTS)
+all: libteems.a $(TESTS) $(EXECUTABLES)
 	@rm -f vgcore.*
 
 -include autodep
 
-libteems.a: $(LIG_OBJECTS)
+libteems.a: $(LIB_OBJECTS)
 	ar rcs $@ $^
 
-test: libteems.a $(TESTS)
-	@for t in $(TESTS) ; do echo $$t; echo; ./$$t ; echo; done
-
-untrusted_test: untrusted_test.o libteems.a
-metadata_test: metadata_test.o libteems.a
-teems_test: teems_test.o libteems.a
 close_remote: close_remote.o libteems.a
-latency_test: latency_test.o libteems.a
-throughput_test: throughput_test.o libteems.a
+tests/latency_test: tests/latency_test.o libteems.a
+tests/metadata_test: tests/metadata_test.o libteems.a
+tests/teems_test: tests/teems_test.o libteems.a
+tests/throughput_test: tests/throughput_test.o libteems.a
+tests/untrusted_test: tests/untrusted_test.o libteems.a
 
 #################################
 
 .PHONY: fmt
 fmt:
-	clang-format -i -style=file $(SOURCES) $(LIB_SOURCES)
+	clang-format -i -style=file $(SOURCES) $(LIB_SOURCES) $(TEST_SOURCES)
 
 .PHONY: clean
 clean:
-	rm -f *.o *.a vgcore* $(TESTS) lib/*.o
+	rm -f *.o *.a vgcore* $(TESTS) $(EXECUTABLES) lib/*.o tests/*.o
 	rm -rf teems_ustor.*
 
 depend : $(SOURCES)
-	$(CXX) $(CFLAGS) $(INCLUDES) -MM $(SOURCES) > autodep
+	$(CXX) $(CFLAGS) $(INCLUDES) -MM $(SOURCES) $(LIB_SOURCES) $(TEST_SOURCES) > autodep
 	@echo $(SOURCES)
