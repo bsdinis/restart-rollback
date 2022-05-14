@@ -6,6 +6,8 @@
 #include <map>
 #include <string>
 #include <vector>
+
+#include "cache.h"
 #include "log.h"
 #include "teems.h"
 #include "untrusted.h"
@@ -49,6 +51,7 @@ void test_get_put();
 void test_ping();
 void test_pipelining();
 void test_cb();
+void test_cache();
 
 std::string g_config_path = "../server/default.conf";
 size_t g_name_cache_size = 0;
@@ -84,6 +87,7 @@ int main(int argc, char** argv) {
     test_get_put();
     test_pipelining();
     test_cb();
+    test_cache();
 
     ASSERT_EQ(close(true), 0, "close");
     INFO("finished test");
@@ -401,6 +405,90 @@ void parse_cli_args(int argc, char** argv) {
                 exit(EXIT_FAILURE);
         }
     }
+}
+
+void cache_writing_workload() {
+    std::vector<uint8_t> put_value;
+    put_value.emplace_back(1);
+    int64_t put_timestamp = -1;
+    int64_t put_policy = -1;
+    EXPECT_EQ(put((int64_t)100, put_value, put_policy, put_timestamp), true,
+              "cache writing workload");
+    EXPECT_EQ(put_policy, (int64_t)client_id(), "cache writing workload");
+
+    int64_t get_timestamp = -1;
+    int64_t get_policy = -1;
+    std::vector<uint8_t> get_value;
+    EXPECT_EQ(get((int64_t)100, get_value, get_policy, get_timestamp), true,
+              "cache writing workload");
+    EXPECT_EQ(get_timestamp, put_timestamp, "cache writing workload");
+    EXPECT_EQ(get_policy, put_policy, "cache writing workload");
+    EXPECT_EQ(get_value.size(), put_value.size(), "cache writing workload");
+    EXPECT_EQ(get_value, put_value, "cache writing workload");
+}
+
+void cache_reading_workload(int64_t policy, int64_t timestamp,
+                            std::vector<uint8_t> const& value) {
+    int64_t get_timestamp = -1;
+    int64_t get_policy = -1;
+    std::vector<uint8_t> get_value;
+
+    EXPECT_EQ(get((int64_t)101, get_value, get_policy, get_timestamp), true,
+              "cache reading workload");
+    EXPECT_EQ(get_timestamp, timestamp, "cache reading workload");
+    EXPECT_EQ(get_policy, policy, "cache reading workload");
+    EXPECT_EQ(get_value.size(), value.size(), "cache reading workload");
+    EXPECT_EQ(get_value, value, "cache reading workload");
+
+    EXPECT_EQ(get((int64_t)101, get_value, get_policy, get_timestamp), true,
+              "cache reading workload");
+    EXPECT_EQ(get_timestamp, timestamp, "cache reading workload");
+    EXPECT_EQ(get_policy, policy, "cache reading workload");
+    EXPECT_EQ(get_value.size(), value.size(), "cache reading workload");
+    EXPECT_EQ(get_value, value, "cache reading workload");
+}
+
+void test_cache() {
+    std::vector<uint8_t> put_value;
+    put_value.emplace_back(1);
+    int64_t put_timestamp = -1;
+    int64_t put_policy = -1;
+    EXPECT_EQ(put((int64_t)101, put_value, put_policy, put_timestamp), true,
+              "put");
+    EXPECT_EQ(put_policy, (int64_t)client_id(), "put");
+
+    reset_name_cache(0);
+    reset_value_cache(0);
+
+    cache_writing_workload();
+    cache_reading_workload(put_policy, put_timestamp, put_value);
+
+    EXPECT_EQ(name_hits(), 0, "no name cache => no hits");
+    EXPECT_EQ(name_misses(), 3, "no name cache => all miss");
+    EXPECT_EQ(value_hits(), 0, "no value cache => no hits");
+    EXPECT_EQ(value_misses(), 3, "no value cache => all miss");
+
+    reset_name_cache(2);
+    reset_value_cache(0);
+
+    cache_writing_workload();
+    cache_reading_workload(put_policy, put_timestamp, put_value);
+
+    EXPECT_EQ(name_hits(), 2, "name cache => hits");
+    EXPECT_EQ(name_misses(), 1, "name cache => no hot miss");
+    EXPECT_EQ(value_hits(), 0, "no value cache => no hits");
+    EXPECT_EQ(value_misses(), 3, "no value cache => all miss");
+
+    reset_name_cache(2);
+    reset_value_cache(1 << 10);
+
+    cache_writing_workload();
+    cache_reading_workload(put_policy, put_timestamp, put_value);
+
+    EXPECT_EQ(name_hits(), 0, "value cache => no name cache hits");
+    EXPECT_EQ(name_misses(), 1, "value cache => only cold miss");
+    EXPECT_EQ(value_hits(), 2, "value cache => hits");
+    EXPECT_EQ(value_misses(), 1, "value cache => only cold miss");
 }
 
 }  // anonymous namespace

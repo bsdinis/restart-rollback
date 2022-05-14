@@ -1,5 +1,6 @@
 #pragma once
 
+#include "log.h"
 #include "metadata.h"
 
 #include <cstdint>
@@ -8,8 +9,16 @@ namespace teems {
 
 class get_call_ctx {
    public:
-    get_call_ctx(int64_t ticket, int64_t key)
-        : m_metadata_ticket(ticket), m_key(key) {}
+    get_call_ctx(int64_t ticket, int64_t key, std::string name_hint,
+                 std::vector<uint8_t>* value_hint)
+        : m_metadata_ticket(ticket),
+          m_key(key),
+          m_name_hint(name_hint),
+          m_value_set(value_hint != nullptr) {
+        if (value_hint != nullptr) {
+            m_value = *value_hint;
+        }
+    }
 
     void set_untrusted_ticket(int64_t ticket) { m_untrusted_ticket = ticket; }
 
@@ -19,9 +28,38 @@ class get_call_ctx {
         m_timestamp = timestamp;
         m_policy_version = policy_version;
         m_metadata_ticket = -1;
+        m_metadata_set = true;
     }
 
-    Metadata const& metadata() const& { return m_metadata; }
+    Metadata const& metadata() const& {
+        if (!m_metadata_set) {
+            ERROR(
+                "returning metadata from a call which has not received "
+                "anything from the metadata subsystem");
+        }
+        return m_metadata;
+    }
+    bool metadata_set() const { return m_metadata_set; }
+
+    std::vector<uint8_t> const& value() const {
+        if (!m_value_set) {
+            ERROR("returning a value when none is set");
+        }
+        return m_value;
+    }
+    bool value_set() const { return m_value_set; }
+
+    void set_encrypted_value(std::vector<uint8_t>&& encrypted_value) {
+        m_encrypted_value = encrypted_value;
+        m_encrypted_value_set = true;
+    }
+    std::vector<uint8_t> const& encrypted_value() const {
+        if (!m_encrypted_value_set) {
+            ERROR("returning a encrypted_value when none is set");
+        }
+        return m_encrypted_value;
+    }
+    bool encrypted_value_set() const { return m_encrypted_value_set; }
 
     int64_t metadata_ticket() const { return m_metadata_ticket; }
     int64_t untrusted_ticket() const { return m_untrusted_ticket; }
@@ -29,6 +67,8 @@ class get_call_ctx {
     int64_t key() const { return m_key; }
     int64_t timestamp() const { return m_timestamp; }
     int64_t policy_version() const { return m_policy_version; }
+
+    std::string name_hint() const { return m_name_hint; }
 
    private:
     // tickets
@@ -42,11 +82,16 @@ class get_call_ctx {
 
     // metadata
     Metadata m_metadata;
-    // bool m_metadata_set = false;
+    bool m_metadata_set = false;
+
+    // encrypted value
+    std::vector<uint8_t> m_encrypted_value;
+    bool m_encrypted_value_set = false;
 
     // hint
     std::string m_name_hint;
-    std::vector<uint8_t> m_value_hint;
+    bool m_value_set = false;
+    std::vector<uint8_t> m_value;
 };
 
 class put_call_ctx {
@@ -78,7 +123,8 @@ class put_call_ctx {
     std::vector<uint8_t> m_value;
 };
 
-int add_get_call(int64_t metadata_ticket, int64_t key);
+int add_get_call(int64_t metadata_ticket, int64_t key, std::string name_hint,
+                 std::vector<uint8_t>* value_hint);
 int add_put_call(int64_t untrusted_ticket, int64_t key, Metadata&& metadata,
                  std::vector<uint8_t> const& value);
 

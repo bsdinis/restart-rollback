@@ -8,6 +8,7 @@
 #include "cache.h"
 #include "context.h"
 #include "log.h"
+#include "lru.h"
 #include "metadata.h"
 #include "network.h"
 #include "protocol_helpers.h"
@@ -38,6 +39,13 @@ int64_t put_non_sync(int64_t key, std::vector<uint8_t> const &value,
 
 extern std::tuple<int64_t, Metadata, int64_t> g_metadata_get_result;
 extern std::pair<int64_t, bool> g_metadata_put_result;
+
+// stores name hints for TEEMS
+extern LRUCache<int64_t, std::string> g_name_cache;
+
+// stores value hints for TEEMS
+extern LRUCache<int64_t, std::pair<std::string, std::vector<uint8_t>>>
+    g_value_cache;
 
 // protocol globals
 
@@ -242,9 +250,24 @@ int64_t get_non_sync(int64_t key, call_type type) {
     int64_t const ticket = gen_teems_ticket(type);
     issued_call(ticket);
 
+    std::string name_hint;
+    std::vector<uint8_t> value_hint;
+    auto const *v_hint = g_value_cache.get(key);
+    std::string const *n_hint = nullptr;
+    if (v_hint == nullptr) {
+        n_hint = g_name_cache.get(key);
+        if (n_hint != nullptr) {
+            name_hint = *n_hint;
+        }
+    } else {
+        name_hint = v_hint->first;
+        value_hint = v_hint->second;
+    }
+
     int64_t const sub_ticket =
         gen_metadata_ticket(ticket, 0, false, call_type::Async);
-    if (add_get_call(sub_ticket, key) == -1) {
+    if (add_get_call(sub_ticket, key, name_hint,
+                     (v_hint == nullptr) ? nullptr : &value_hint) == -1) {
         ERROR("get(%ld): failed to add call context", key);
         finished_call(ticket);
         return -1;
@@ -255,6 +278,14 @@ int64_t get_non_sync(int64_t key, call_type type) {
         rem_get_call(ticket);
         finished_call(ticket);
         return -1;
+    }
+
+    if (n_hint != nullptr) {
+        // we don't have the value but we have a name hint
+        if (untrusted_get_async(ticket, 0, false, name_hint) == -1) {
+            ERROR("get(%ld): failed to start untrusted read", key);
+            return -1;
+        }
     }
 
     return ticket;

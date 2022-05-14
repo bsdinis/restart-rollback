@@ -46,8 +46,9 @@ int reset_handler_sync();
 int reset_handler_async(int64_t ticket);
 
 int teems_finish_get(int64_t ticket, int64_t key, bool success,
-                     std::vector<uint8_t> &&value, int64_t policy_version,
-                     int64_t timestamp);
+                     std::vector<uint8_t> const &value = std::vector<uint8_t>(),
+                     int64_t policy_version = -1, int64_t timestamp = -1,
+                     std::string const &ustor_name = std::string());
 int teems_finish_put(int64_t ticket, int64_t key, bool success,
                      int64_t policy_version = -1, int64_t timestamp = -1,
                      std::string ustor_name = std::string(),
@@ -120,6 +121,22 @@ int64_t send_reset_request(peer &server, call_type type) {
 // continuations
 // =================================
 
+int teems_get_final_step(int64_t super_ticket, int64_t key, get_call_ctx *ctx) {
+    std::vector<uint8_t> value;
+    if (ctx->metadata().decrypt_value(ctx->encrypted_value(), value) == false) {
+        ERROR("get(%ld): failed to decrypt value", key);
+        if (teems_finish_get(super_ticket, key, false) != 0) {
+            ERROR("get(%ld): failed to finish TEEM get", key);
+            return -1;
+        }
+        return 0;
+    }
+
+    return teems_finish_get(super_ticket, key, true, std::move(value),
+                            ctx->policy_version(), ctx->timestamp(),
+                            ctx->metadata().ustor_name());
+}
+
 int teems_handle_metadata_get(int64_t ticket, int64_t key, Metadata value,
                               int64_t policy_version, int64_t timestamp,
                               bool success) {
@@ -133,8 +150,7 @@ int teems_handle_metadata_get(int64_t ticket, int64_t key, Metadata value,
 
     if (!success) {
         ERROR("get(%ld): failed to read metadata from TEEMS", key);
-        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
-                             -1, -1) != 0) {
+        if (teems_finish_get(super_ticket, key, false) != 0) {
             ERROR("get(%ld): failed to finish TEEM get", key);
             return -1;
         }
@@ -143,7 +159,7 @@ int teems_handle_metadata_get(int64_t ticket, int64_t key, Metadata value,
 
     if (timestamp == -1) {
         if (teems_finish_get(super_ticket, key, true, std::vector<uint8_t>(),
-                             -1, -1) != 0) {
+                             -1, -1, "") != 0) {
             ERROR("get(%ld): failed to finish TEEM get", key);
             return -1;
         }
@@ -151,15 +167,30 @@ int teems_handle_metadata_get(int64_t ticket, int64_t key, Metadata value,
     }
 
     ctx->set_metadata(std::move(value), policy_version, timestamp);
+
+    if (ctx->metadata().ustor_name() == ctx->name_hint()) {
+        if (ctx->value_set()) {
+            // value hint worked
+            return teems_finish_get(super_ticket, key, true, ctx->value(),
+                                    ctx->policy_version(), ctx->timestamp(),
+                                    ctx->metadata().ustor_name());
+        } else if (ctx->encrypted_value_set()) {
+            // name hint worked and arrived before metadata
+            return teems_get_final_step(super_ticket, key, ctx);
+        } else {
+            // name hint worked and is on the way
+            return 0;
+        }
+    }
+
     int64_t const untrusted_ticket =
-        gen_untrusted_ticket(super_ticket, 0, false, call_type::Async);
+        gen_untrusted_ticket(super_ticket, 1, false, call_type::Async);
     ctx->set_untrusted_ticket(untrusted_ticket);
 
     std::string const &ustor_name = ctx->metadata().ustor_name();
-    if (untrusted_get_async(super_ticket, 0, false, ustor_name) == -1) {
+    if (untrusted_get_async(super_ticket, 1, false, ustor_name) == -1) {
         ERROR("get(%ld): failed to start untrusted read", key);
-        if (teems_finish_get(super_ticket, key, true, std::vector<uint8_t>(),
-                             -1, -1) != 0) {
+        if (teems_finish_get(super_ticket, key, false) != 0) {
             ERROR("get(%ld): failed to finish TEEM get", key);
             return -1;
         }
@@ -190,7 +221,8 @@ int teems_handle_metadata_put(int64_t ticket, int64_t policy_version,
         return 0;
     }
 
-    return teems_finish_put(super_ticket, key, true, policy_version, timestamp);
+    return teems_finish_put(super_ticket, key, true, policy_version, timestamp,
+                            ctx->metadata().ustor_name(), ctx->value());
 }
 
 int teems_handle_untrusted_get(int64_t ticket, bool success,
@@ -206,27 +238,20 @@ int teems_handle_untrusted_get(int64_t ticket, bool success,
     if (!success) {
         ERROR("get(%ld): failed to read encrypted value from untrusted storage",
               key);
-        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
-                             -1, -1) != 0) {
+        if (teems_finish_get(super_ticket, key, false) != 0) {
             ERROR("get(%ld): failed to finish TEEM get", key);
             return -1;
         }
         return 0;
     }
 
-    std::vector<uint8_t> value;
-    if (ctx->metadata().decrypt_value(encrypted_value, value) == false) {
-        ERROR("get(%ld): failed to decrypt value", key);
-        if (teems_finish_get(super_ticket, key, false, std::vector<uint8_t>(),
-                             -1, -1) != 0) {
-            ERROR("get(%ld): failed to finish TEEM get", key);
-            return -1;
-        }
-        return 0;
+    ctx->set_encrypted_value(std::move(encrypted_value));
+
+    if (ctx->metadata_set()) {
+        return teems_get_final_step(super_ticket, key, ctx);
     }
 
-    return teems_finish_get(super_ticket, key, true, std::move(value),
-                            ctx->policy_version(), ctx->timestamp());
+    return 0;
 }
 int teems_handle_untrusted_put(int64_t ticket, bool success) {
     int64_t super_ticket = get_supercall_ticket(ticket);
@@ -368,9 +393,13 @@ int reset_handler(size_t peer_idx, int64_t ticket) {
 }
 
 int teems_finish_get(int64_t ticket, int64_t key, bool success,
-                     std::vector<uint8_t> &&value, int64_t policy_version,
-                     int64_t timestamp) {
+                     std::vector<uint8_t> const &value, int64_t policy_version,
+                     int64_t timestamp, std::string const &ustor_name) {
     finished_call(ticket);
+
+    if (success) {
+        add_hint(key, ustor_name, value);
+    }
 
     if (ticket_call_type(ticket) == call_type::Async) {
         g_results_map.emplace(

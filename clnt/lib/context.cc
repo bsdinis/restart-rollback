@@ -13,9 +13,11 @@ namespace teems {
 ::std::unordered_map<int64_t, get_call_ctx> g_get_calls;
 ::std::unordered_map<int64_t, put_call_ctx> g_put_calls;
 
-int add_get_call(int64_t metadata_ticket, int64_t key) {
-    auto res = g_get_calls.emplace(get_supercall_ticket(metadata_ticket),
-                                   get_call_ctx(metadata_ticket, key));
+int add_get_call(int64_t metadata_ticket, int64_t key, std::string name_hint,
+                 std::vector<uint8_t>* value_hint) {
+    auto res = g_get_calls.emplace(
+        get_supercall_ticket(metadata_ticket),
+        get_call_ctx(metadata_ticket, key, name_hint, value_hint));
     return std::get<1>(res) ? 0 : -1;
 }
 
