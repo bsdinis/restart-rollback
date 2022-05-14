@@ -33,13 +33,14 @@ CXXFLAGS := $(CFLAGS) -Wall -Werror -std=c++14
 CXXFLAGS := $(CXXFLAGS) -Wno-unused-function
 
 LIB_SOURCES=$(wildcard lib/*.cc)
+LIB_HEADERS=$(wildcard lib/*.h)
 LIB_OBJECTS=$(LIB_SOURCES:.cc=.o)
 TEST_SOURCES=$(wildcard tests/*.cc)
 TEST_OBJECTS=$(SOURCES:.cc=.o)
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(SOURCES:.cc=.o)
 EXECUTABLES := close_remote
-TESTS := tests/teems_test tests/latency_test tests/throughput_test tests/metadata_test tests/untrusted_test
+TESTS := tests/teems_test tests/latency_test tests/throughput_test tests/metadata_test tests/untrusted_test tests/lru_test
 
 #ifeq ($(strip $(OPENSSL_AES)), no)
   AES_MODE = -DOPENSSL_AES
@@ -56,11 +57,12 @@ all: libteems.a $(TESTS) $(EXECUTABLES)
 
 -include autodep
 
-libteems.a: $(LIB_OBJECTS)
+libteems.a: $(LIB_OBJECTS) $(LIB_HEADERS)
 	ar rcs $@ $^
 
 close_remote: close_remote.o libteems.a
 tests/latency_test: tests/latency_test.o libteems.a
+tests/lru_test: tests/lru_test.o libteems.a
 tests/metadata_test: tests/metadata_test.o libteems.a
 tests/teems_test: tests/teems_test.o libteems.a
 tests/throughput_test: tests/throughput_test.o libteems.a
@@ -70,7 +72,7 @@ tests/untrusted_test: tests/untrusted_test.o libteems.a
 
 .PHONY: fmt
 fmt:
-	clang-format -i -style=file $(SOURCES) $(LIB_SOURCES) $(TEST_SOURCES)
+	clang-format -i -style=file $(SOURCES) $(LIB_SOURCES) $(TEST_SOURCES) $(LIB_HEADERS)
 
 .PHONY: clean
 clean:

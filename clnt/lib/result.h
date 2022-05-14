@@ -11,20 +11,17 @@
 
 namespace teems {
 
-enum class result_type {
-    None,
-    OneVal
-};
+enum class result_type { None, OneVal };
 
 class result {
-    public:
+   public:
     virtual result_type type() const { return result_type::None; }
     virtual ~result() = default;
 };
 
-template<typename T>
+template <typename T>
 class one_val_result final : public result {
-    public:
+   public:
     one_val_result() = delete;
     explicit one_val_result(T val) : val_(val) {}
 
@@ -32,8 +29,8 @@ class one_val_result final : public result {
     inline T get() const { return val_; }
     virtual ~one_val_result() = default;
 
-    private:
+   private:
     T val_;
 };
 
-} // namespace teems
+}  // namespace teems

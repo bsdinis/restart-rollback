@@ -13,14 +13,14 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
-#include <algorithm>
-#include <sys/types.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <algorithm>
 
 #include <vector>
 
 class peer {
-    public:
+   public:
     peer() = default;
     peer(SSL_CTX *, bool server);
     ~peer();
@@ -56,7 +56,7 @@ class peer {
     uint64_t id() const;
     inline int sock() const { return sock_; };
 
-    private:
+   private:
     // to allow for reset
     bool set = false;
     bool server;

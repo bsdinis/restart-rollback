@@ -2,8 +2,8 @@
 
 #include <cstddef>
 
-namespace teems{
+namespace teems {
 
 constexpr size_t REGISTER_SIZE = 128;
 
-} // namespace teems
+}  // namespace teems

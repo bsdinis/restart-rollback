@@ -7,7 +7,6 @@ config.o: lib/config.cc lib/config.h lib/log.h
 context.o: lib/context.cc lib/context.h lib/metadata.h lib/async.h \
   lib/crypto.h lib/teems_config.h lib/log.h
 crypto.o: lib/crypto.cc lib/crypto.h lib/log.h
-lru.o: lib/lru.cc lib/lru.h
 metadata.o: lib/metadata.cc lib/metadata.h lib/async.h lib/crypto.h \
   lib/teems_config.h lib/config.h lib/log.h lib/network.h lib/peer.h \
   lib/protocol_helpers.h lib/result.h lib/ssl_util.h \
@@ -30,6 +29,7 @@ untrusted.o: lib/untrusted.cc lib/untrusted.h lib/async.h lib/log.h \
   lib/peer.h lib/result.h
 latency_test.o: tests/latency_test.cc lib/log.h lib/teems.h lib/async.h \
   lib/untrusted.h
+lru_test.o: tests/lru_test.cc lib/log.h lib/lru.h
 metadata_test.o: tests/metadata_test.cc lib/async.h lib/log.h \
   lib/metadata.h lib/crypto.h lib/teems_config.h lib/teems.h \
   lib/untrusted.h
