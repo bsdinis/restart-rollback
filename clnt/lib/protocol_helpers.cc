@@ -313,6 +313,7 @@ int handle_received_message(size_t idx, peer &p) {
                     idx, response->ticket(),
                     response->message_as_GetResult()->key(),
                     Metadata(response->message_as_GetResult()->value()->data()),
+                    response->message_as_GetResult()->policy_version(),
                     response->message_as_GetResult()->timestamp());
                 break;
             case teems::MessageType_proxy_put_resp:
@@ -320,6 +321,7 @@ int handle_received_message(size_t idx, peer &p) {
                 metadata_put_handler(
                     idx, response->ticket(),
                     response->message_as_PutResult()->success(),
+                    response->message_as_PutResult()->policy_version(),
                     response->message_as_PutResult()->timestamp());
                 break;
             case teems::MessageType_ping_resp:

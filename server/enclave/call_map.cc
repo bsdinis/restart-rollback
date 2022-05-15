@@ -8,8 +8,11 @@ namespace teems {
 // get context
 
 void GetCallContext::add_get_reply(
-    ssize_t peer_idx, int64_t timestamp, bool stable, bool suspicious,
+    ssize_t peer_idx, int64_t policy_version, int64_t timestamp, bool stable,
+    bool suspicious, ServerPolicy const& policy,
     std::array<uint8_t, REGISTER_SIZE> const& value) {
+    // TODO: handle policy and policy_version
+
     m_n_get_replies += 1;
 
     if (suspicious) {
@@ -53,7 +56,10 @@ void GetCallContext::finish_get_phase() {
 }
 
 // put context
-void PutCallContext::add_get_reply(int64_t timestamp, bool suspicious) {
+void PutCallContext::add_get_reply(int64_t policy_version, int64_t timestamp,
+                                   bool suspicious) {
+    // TODO: handle policy and policy_version
+
     if (timestamp > m_timestamp) {
         m_timestamp = timestamp;
     }

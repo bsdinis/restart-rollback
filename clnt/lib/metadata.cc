@@ -30,12 +30,14 @@ int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
                                   call_type type);
 
 int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
-                              int64_t timestamp);
+                              int64_t policy_version, int64_t timestamp);
 int metadata_get_handler_async(int64_t ticket, int64_t key, Metadata &&value,
-                               int64_t timestamp);
+                               int64_t policy_version, int64_t timestamp);
 
-int metadata_put_handler_sync(int64_t ticket, bool success, int64_t timestamp);
-int metadata_put_handler_async(int64_t ticket, bool success, int64_t timestamp);
+int metadata_put_handler_sync(int64_t ticket, bool success,
+                              int64_t policy_version, int64_t timestamp);
+int metadata_put_handler_async(int64_t ticket, bool success,
+                               int64_t policy_version, int64_t timestamp);
 
 }  // anonymous namespace
 
@@ -43,10 +45,10 @@ int metadata_put_handler_async(int64_t ticket, bool success, int64_t timestamp);
 // GLOBAL VARIABLES
 //==========================================
 // metadata get
-std::tuple<int64_t, Metadata, int64_t> g_metadata_get_result;
+std::tuple<int64_t, Metadata, int64_t, int64_t> g_metadata_get_result;
 
 // metadata put
-std::pair<int64_t, bool> g_metadata_put_result;
+std::tuple<int64_t, int64_t, bool> g_metadata_put_result;
 
 //==========================================
 // EXTERNAL VARIABLES
@@ -255,7 +257,8 @@ int metadata_close(bool close_remote) {
 
 // sync
 bool metadata_get(int64_t super_ticket, uint8_t call_number, bool independent,
-                  int64_t key, Metadata *value, int64_t &timestamp) {
+                  int64_t key, Metadata *value, int64_t &policy_version,
+                  int64_t &timestamp) {
     int64_t const ticket =
         send_metadata_get_request(g_servers[0], super_ticket, call_number,
                                   independent, key, call_type::Sync);
@@ -269,14 +272,16 @@ bool metadata_get(int64_t super_ticket, uint8_t call_number, bool independent,
         return false;
     }
 
-    timestamp = std::get<2>(g_metadata_get_result);
     *value = std::get<1>(g_metadata_get_result);
+    policy_version = std::get<2>(g_metadata_get_result);
+    timestamp = std::get<3>(g_metadata_get_result);
 
     return true;
 }
 
 bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent,
-                  int64_t key, Metadata const &value, int64_t &timestamp) {
+                  int64_t key, Metadata const &value, int64_t &policy_version,
+                  int64_t &timestamp) {
     int64_t const ticket =
         send_metadata_put_request(g_servers[0], super_ticket, call_number,
                                   independent, key, value, call_type::Sync);
@@ -292,8 +297,9 @@ bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent,
         return false;
     }
 
-    timestamp = std::get<0>(g_metadata_put_result);
-    return std::get<1>(g_metadata_put_result);
+    policy_version = std::get<0>(g_metadata_get_result);
+    timestamp = std::get<1>(g_metadata_put_result);
+    return std::get<2>(g_metadata_put_result);
 }
 
 // async
@@ -311,15 +317,16 @@ int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number,
 
 // handlers
 int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
-                         Metadata &&value, int64_t timestamp) {
+                         Metadata &&value, int64_t policy_version,
+                         int64_t timestamp) {
     finished_call(ticket);
     switch (ticket_call_type(ticket)) {
         case call_type::Sync:
             return metadata_get_handler_sync(ticket, key, std::move(value),
-                                             timestamp);
+                                             policy_version, timestamp);
         case call_type::Async:
             return metadata_get_handler_async(ticket, key, std::move(value),
-                                              timestamp);
+                                              policy_version, timestamp);
         default:
             ERROR("invalid call type for sub call");
             return -1;
@@ -329,13 +336,15 @@ int metadata_get_handler(size_t peer_idx, int64_t ticket, int64_t key,
 }
 
 int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
-                         int64_t timestamp) {
+                         int64_t policy_version, int64_t timestamp) {
     finished_call(ticket);
     switch (ticket_call_type(ticket)) {
         case call_type::Sync:  // Sync
-            return metadata_put_handler_sync(ticket, success, timestamp);
+            return metadata_put_handler_sync(ticket, success, policy_version,
+                                             timestamp);
         case call_type::Async:  // Async
-            return metadata_put_handler_async(ticket, success, timestamp);
+            return metadata_put_handler_async(ticket, success, policy_version,
+                                              timestamp);
         default:
             ERROR("invalid call type for sub call");
             return -1;
@@ -441,45 +450,49 @@ int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
 
 // metadata get
 int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
-                              int64_t timestamp) {
-    g_metadata_get_result = std::make_tuple(key, std::move(value), timestamp);
+                              int64_t policy_version, int64_t timestamp) {
+    g_metadata_get_result =
+        std::make_tuple(key, std::move(value), policy_version, timestamp);
     return 0;
 }
 int metadata_get_handler_async(int64_t ticket, int64_t key, Metadata &&value,
-                               int64_t timestamp) {
+                               int64_t policy_version, int64_t timestamp) {
+    if (ticket_independent(ticket)) {
+        g_results_map.emplace(
+            ticket,
+            std::unique_ptr<result>(std::make_unique<one_val_result<std::tuple<
+                                        int64_t, Metadata, int64_t, int64_t>>>(
+                one_val_result<std::tuple<int64_t, Metadata, int64_t, int64_t>>(
+                    std::make_tuple(key, std::move(value), policy_version,
+                                    timestamp)))));
+        return 0;
+    }
+
+    return teems_handle_metadata_get(ticket, key, value, policy_version,
+                                     timestamp, true);
+}
+
+// metadata put
+int metadata_put_handler_sync(int64_t ticket, bool success,
+                              int64_t policy_version, int64_t timestamp) {
+    g_metadata_put_result = std::make_tuple(policy_version, timestamp, success);
+    return 0;
+}
+int metadata_put_handler_async(int64_t ticket, bool success,
+                               int64_t policy_version, int64_t timestamp) {
     if (ticket_independent(ticket)) {
         g_results_map.emplace(
             ticket,
             std::unique_ptr<result>(
                 std::make_unique<
-                    one_val_result<std::tuple<int64_t, Metadata, int64_t>>>(
-                    one_val_result<std::tuple<int64_t, Metadata, int64_t>>(
-                        std::make_tuple(key, std::move(value), timestamp)))));
+                    one_val_result<std::tuple<int64_t, int64_t, bool>>>(
+                    one_val_result<std::tuple<int64_t, int64_t, bool>>(
+                        std::make_tuple(policy_version, timestamp, success)))));
         return 0;
     }
 
-    return teems_handle_metadata_get(ticket, key, value, 0 /* TODO */,
-                                     timestamp, true);
-}
-
-// metadata put
-int metadata_put_handler_sync(int64_t ticket, bool success, int64_t timestamp) {
-    g_metadata_put_result = std::make_pair(timestamp, success);
-    return 0;
-}
-int metadata_put_handler_async(int64_t ticket, bool success,
-                               int64_t timestamp) {
-    if (ticket_independent(ticket)) {
-        g_results_map.emplace(
-            ticket,
-            std::unique_ptr<result>(
-                std::make_unique<one_val_result<std::pair<int64_t, bool>>>(
-                    one_val_result<std::pair<int64_t, bool>>(
-                        std::make_pair(timestamp, success)))));
-        return 0;
-    }
-
-    return teems_handle_metadata_put(ticket, 0 /* TODO */, timestamp, success);
+    return teems_handle_metadata_put(ticket, policy_version, timestamp,
+                                     success);
 }
 
 }  // anonymous namespace

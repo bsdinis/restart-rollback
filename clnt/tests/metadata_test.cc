@@ -98,35 +98,46 @@ void test_metadata_get_put() {
     // sync test
     {
         // there is no value
+        int64_t get_policy_version = -1;
         int64_t get_timestamp = -1;
         Metadata get_value;
         EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
-                               &get_value, get_timestamp),
+                               &get_value, get_policy_version, get_timestamp),
                   true, "metadata get");
+        EXPECT_EQ(get_policy_version, -1, "metadata get");
         EXPECT_EQ(get_timestamp, -1, "metadata get");
 
         Metadata put_value;  // generates random keys, iv, name
+        int64_t put_policy_version = -1;
         int64_t put_timestamp = -1;
         EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, true, 3,
-                               put_value, put_timestamp),
+                               put_value, put_policy_version, put_timestamp),
                   true, "metadata put");
 
         EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
-                               &get_value, get_timestamp),
+                               &get_value, get_policy_version, get_timestamp),
                   true, "metadata get");
+        INFO("get ver %ld | put ver %ld", get_policy_version,
+             put_policy_version);
+        EXPECT_EQ(get_policy_version, put_policy_version, "metadata get");
         EXPECT_EQ(get_timestamp, put_timestamp, "metadata get");
         EXPECT_EQ(get_value, put_value, "metadata get");
 
+        int64_t new_put_policy_version = -1;
         int64_t new_put_timestamp = -1;
         put_value = Metadata();  // refreshes keys, iv, name
-        EXPECT_EQ(metadata_put(gen_teems_ticket(call_type::Sync), 0, true, 3,
-                               put_value, new_put_timestamp),
-                  true, "metadata put");
+        EXPECT_EQ(
+            metadata_put(gen_teems_ticket(call_type::Sync), 0, true, 3,
+                         put_value, new_put_policy_version, new_put_timestamp),
+            true, "metadata put");
+        EXPECT_EQ(new_put_policy_version == put_policy_version, true,
+                  "metadata put");
         EXPECT_EQ(new_put_timestamp > put_timestamp, true, "metadata put");
 
         EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
-                               &get_value, get_timestamp),
+                               &get_value, get_policy_version, get_timestamp),
                   true, "metadata get");
+        EXPECT_EQ(get_policy_version, new_put_policy_version, "metadata get");
         EXPECT_EQ(get_timestamp, new_put_timestamp, "metadata get");
         EXPECT_EQ(get_value, put_value, "metadata get");
     }
@@ -140,9 +151,10 @@ void test_metadata_get_put() {
             return;
         }
         auto g_reply =
-            get_reply<std::tuple<int64_t, Metadata, int64_t>>(ticket);
+            get_reply<std::tuple<int64_t, Metadata, int64_t, int64_t>>(ticket);
 
         EXPECT_EQ(std::get<2>(g_reply), -1, "metadata get_async");
+        EXPECT_EQ(std::get<3>(g_reply), -1, "metadata get_async");
 
         Metadata put_value;  // generates random keys, iv, name
         ticket = metadata_put_async(gen_teems_ticket(call_type::Sync), 0, true,
@@ -151,8 +163,8 @@ void test_metadata_get_put() {
             ERROR("failed to wait for put");
             return;
         }
-        auto put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(put_reply), true, "metadata put_async");
+        auto put_reply = get_reply<std::tuple<int64_t, int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<2>(put_reply), true, "metadata put_async");
 
         ticket =
             metadata_get_async(gen_teems_ticket(call_type::Sync), 0, true, 4);
@@ -160,10 +172,13 @@ void test_metadata_get_put() {
             ERROR("failed to wait for get");
             return;
         }
-        g_reply = get_reply<std::tuple<int64_t, Metadata, int64_t>>(ticket);
+        g_reply =
+            get_reply<std::tuple<int64_t, Metadata, int64_t, int64_t>>(ticket);
 
         EXPECT_EQ(std::get<1>(g_reply), put_value, "metadata get_async");
         EXPECT_EQ(std::get<2>(g_reply), std::get<0>(put_reply),
+                  "metadata get_async");
+        EXPECT_EQ(std::get<3>(g_reply), std::get<1>(put_reply),
                   "metadata get_async");
 
         put_value = Metadata();  // refreshes keys, iv, name
@@ -173,9 +188,12 @@ void test_metadata_get_put() {
             ERROR("failed to wait for put");
             return;
         }
-        auto new_put_reply = get_reply<std::pair<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(new_put_reply), true, "metadata put_async");
-        EXPECT_EQ(std::get<0>(new_put_reply) > std::get<0>(put_reply), true,
+        auto new_put_reply =
+            get_reply<std::tuple<int64_t, int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<2>(new_put_reply), true, "metadata put_async");
+        EXPECT_EQ(std::get<0>(new_put_reply) == std::get<0>(put_reply), true,
+                  "metadata put_async");
+        EXPECT_EQ(std::get<1>(new_put_reply) > std::get<1>(put_reply), true,
                   "metadata put_async");
 
         ticket =
@@ -184,10 +202,13 @@ void test_metadata_get_put() {
             ERROR("failed to wait for get");
             return;
         }
-        g_reply = get_reply<std::tuple<int64_t, Metadata, int64_t>>(ticket);
+        g_reply =
+            get_reply<std::tuple<int64_t, Metadata, int64_t, int64_t>>(ticket);
 
         EXPECT_EQ(std::get<1>(g_reply), put_value, "metadata get_async");
         EXPECT_EQ(std::get<2>(g_reply), std::get<0>(new_put_reply),
+                  "metadata get_async");
+        EXPECT_EQ(std::get<3>(g_reply), std::get<1>(new_put_reply),
                   "metadata get_async");
     }
 }
@@ -224,13 +245,15 @@ void test_pipelining() {
         ;
 
     for (int64_t const ticket : get_tickets) {
-        auto reply = get_reply<std::tuple<int64_t, Metadata, int64_t>>(ticket);
+        auto reply =
+            get_reply<std::tuple<int64_t, Metadata, int64_t, int64_t>>(ticket);
         EXPECT_EQ(std::get<0>(reply), 8, "pipelining get");
         EXPECT_EQ(std::get<2>(reply), -1, "pipelining get");
+        EXPECT_EQ(std::get<3>(reply), -1, "pipelining get");
     }
 
     for (int64_t const ticket : put_tickets) {
-        auto reply = get_reply<std::pair<int64_t, bool>>(ticket);
+        auto reply = get_reply<std::tuple<int64_t, int64_t, bool>>(ticket);
         EXPECT_EQ(std::get<1>(reply), true, "pipelining put");
     }
 }

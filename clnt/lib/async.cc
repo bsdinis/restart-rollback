@@ -315,10 +315,11 @@ get_reply(int64_t ticket);
 template std::tuple<int64_t, bool, int64_t> get_reply(int64_t ticket);
 
 // for metadata put
-template std::pair<int64_t, bool> get_reply(int64_t ticket);
+template std::tuple<int64_t, int64_t, bool> get_reply(int64_t ticket);
 
 // for metadata get
-template std::tuple<int64_t, Metadata, int64_t> get_reply(int64_t ticket);
+template std::tuple<int64_t, Metadata, int64_t, int64_t> get_reply(
+    int64_t ticket);
 
 // for untrusted put
 template bool get_reply(int64_t ticket);

@@ -9,6 +9,8 @@ namespace teems {
 
 struct Value;
 
+struct Policy;
+
 struct GetArgs;
 struct GetArgsBuilder;
 
@@ -52,25 +54,28 @@ enum MessageType : int8_t {
     MessageType_get_resp = 6,
     MessageType_get_timestamp_req = 7,
     MessageType_get_timestamp_resp = 8,
-    MessageType_put_req = 9,
-    MessageType_put_resp = 10,
-    MessageType_ping_req = 11,
-    MessageType_ping_resp = 12,
-    MessageType_reset_req = 13,
-    MessageType_reset_resp = 14,
-    MessageType_stabilize_req = 15,
-    MessageType_close_req = 16,
+    MessageType_change_policy_req = 9,
+    MessageType_change_policy_resp = 10,
+    MessageType_put_req = 11,
+    MessageType_put_resp = 12,
+    MessageType_ping_req = 13,
+    MessageType_ping_resp = 14,
+    MessageType_reset_req = 15,
+    MessageType_reset_resp = 16,
+    MessageType_stabilize_req = 17,
+    MessageType_close_req = 18,
     MessageType_MIN = MessageType_client_greeting,
     MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[17] {
+inline const MessageType (&EnumValuesMessageType())[19] {
     static const MessageType values[] = {
         MessageType_client_greeting,    MessageType_proxy_get_req,
         MessageType_proxy_get_resp,     MessageType_proxy_put_req,
         MessageType_proxy_put_resp,     MessageType_get_req,
         MessageType_get_resp,           MessageType_get_timestamp_req,
-        MessageType_get_timestamp_resp, MessageType_put_req,
+        MessageType_get_timestamp_resp, MessageType_change_policy_req,
+        MessageType_change_policy_resp, MessageType_put_req,
         MessageType_put_resp,           MessageType_ping_req,
         MessageType_ping_resp,          MessageType_reset_req,
         MessageType_reset_resp,         MessageType_stabilize_req,
@@ -79,13 +84,17 @@ inline const MessageType (&EnumValuesMessageType())[17] {
 }
 
 inline const char *const *EnumNamesMessageType() {
-    static const char *const names[18] = {
-        "client_greeting", "proxy_get_req",     "proxy_get_resp",
-        "proxy_put_req",   "proxy_put_resp",    "get_req",
-        "get_resp",        "get_timestamp_req", "get_timestamp_resp",
-        "put_req",         "put_resp",          "ping_req",
-        "ping_resp",       "reset_req",         "reset_resp",
-        "stabilize_req",   "close_req",         nullptr};
+    static const char *const names[20] = {
+        "client_greeting",    "proxy_get_req",
+        "proxy_get_resp",     "proxy_put_req",
+        "proxy_put_resp",     "get_req",
+        "get_resp",           "get_timestamp_req",
+        "get_timestamp_resp", "change_policy_req",
+        "change_policy_resp", "put_req",
+        "put_resp",           "ping_req",
+        "ping_resp",          "reset_req",
+        "reset_resp",         "stabilize_req",
+        "close_req",          nullptr};
     return names;
 }
 
@@ -231,6 +240,52 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) Value FLATBUFFERS_FINAL_CLASS {
 };
 FLATBUFFERS_STRUCT_END(Value, 128);
 
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) Policy FLATBUFFERS_FINAL_CLASS {
+   private:
+    uint8_t policy_code_;
+    int8_t padding0__;
+    int16_t padding1__;
+    int32_t owner_id_;
+    int64_t valid_from_;
+
+   public:
+    Policy()
+        : policy_code_(0),
+          padding0__(0),
+          padding1__(0),
+          owner_id_(0),
+          valid_from_(0) {
+        (void)padding0__;
+        (void)padding1__;
+    }
+    Policy(uint8_t _policy_code, int32_t _owner_id, int64_t _valid_from)
+        : policy_code_(flatbuffers::EndianScalar(_policy_code)),
+          padding0__(0),
+          padding1__(0),
+          owner_id_(flatbuffers::EndianScalar(_owner_id)),
+          valid_from_(flatbuffers::EndianScalar(_valid_from)) {
+        (void)padding0__;
+        (void)padding1__;
+    }
+    uint8_t policy_code() const {
+        return flatbuffers::EndianScalar(policy_code_);
+    }
+    void mutate_policy_code(uint8_t _policy_code) {
+        flatbuffers::WriteScalar(&policy_code_, _policy_code);
+    }
+    int32_t owner_id() const { return flatbuffers::EndianScalar(owner_id_); }
+    void mutate_owner_id(int32_t _owner_id) {
+        flatbuffers::WriteScalar(&owner_id_, _owner_id);
+    }
+    int64_t valid_from() const {
+        return flatbuffers::EndianScalar(valid_from_);
+    }
+    void mutate_valid_from(int64_t _valid_from) {
+        flatbuffers::WriteScalar(&valid_from_, _valid_from);
+    }
+};
+FLATBUFFERS_STRUCT_END(Policy, 16);
+
 struct GetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -273,9 +328,11 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
         VT_VALUE = 6,
-        VT_TIMESTAMP = 8,
-        VT_STABLE = 10,
-        VT_SUSPICIOUS = 12
+        VT_POLICY = 8,
+        VT_POLICY_VERSION = 10,
+        VT_TIMESTAMP = 12,
+        VT_STABLE = 14,
+        VT_SUSPICIOUS = 16
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
@@ -284,6 +341,18 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     }
     teems::Value *mutable_value() {
         return GetStruct<teems::Value *>(VT_VALUE);
+    }
+    const teems::Policy *policy() const {
+        return GetStruct<const teems::Policy *>(VT_POLICY);
+    }
+    teems::Policy *mutable_policy() {
+        return GetStruct<teems::Policy *>(VT_POLICY);
+    }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
     }
     int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
     bool mutate_timestamp(int64_t _timestamp) {
@@ -302,6 +371,8 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
                VerifyField<teems::Value>(verifier, VT_VALUE) &&
+               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                VerifyField<uint8_t>(verifier, VT_STABLE) &&
                VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
@@ -318,6 +389,13 @@ struct GetResultBuilder {
     }
     void add_value(const teems::Value *value) {
         fbb_.AddStruct(GetResult::VT_VALUE, value);
+    }
+    void add_policy(const teems::Policy *policy) {
+        fbb_.AddStruct(GetResult::VT_POLICY, policy);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(GetResult::VT_POLICY_VERSION, policy_version,
+                                 0);
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(GetResult::VT_TIMESTAMP, timestamp, 0);
@@ -343,11 +421,14 @@ struct GetResultBuilder {
 
 inline flatbuffers::Offset<GetResult> CreateGetResult(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const teems::Value *value = 0, int64_t timestamp = 0, bool stable = false,
+    const teems::Value *value = 0, const teems::Policy *policy = 0,
+    int64_t policy_version = 0, int64_t timestamp = 0, bool stable = false,
     bool suspicious = false) {
     GetResultBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
+    builder_.add_policy_version(policy_version);
     builder_.add_key(key);
+    builder_.add_policy(policy);
     builder_.add_value(value);
     builder_.add_suspicious(suspicious);
     builder_.add_stable(stable);
@@ -396,11 +477,18 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetTimestampResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_TIMESTAMP = 6,
-        VT_SUSPICIOUS = 8
+        VT_POLICY_VERSION = 6,
+        VT_TIMESTAMP = 8,
+        VT_SUSPICIOUS = 10
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
+    }
     int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
     bool mutate_timestamp(int64_t _timestamp) {
         return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
@@ -413,6 +501,7 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
                verifier.EndTable();
@@ -425,6 +514,10 @@ struct GetTimestampResultBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetTimestampResult::VT_KEY, key, 0);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(GetTimestampResult::VT_POLICY_VERSION,
+                                 policy_version, 0);
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(GetTimestampResult::VT_TIMESTAMP, timestamp,
@@ -447,9 +540,11 @@ struct GetTimestampResultBuilder {
 
 inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    int64_t timestamp = 0, bool suspicious = false) {
+    int64_t policy_version = 0, int64_t timestamp = 0,
+    bool suspicious = false) {
     GetTimestampResultBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
+    builder_.add_policy_version(policy_version);
     builder_.add_key(key);
     builder_.add_suspicious(suspicious);
     return builder_.Finish();
@@ -522,7 +617,9 @@ struct PutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
         VT_VALUE = 6,
-        VT_TIMESTAMP = 8
+        VT_POLICY = 8,
+        VT_POLICY_VERSION = 10,
+        VT_TIMESTAMP = 12
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
@@ -532,6 +629,18 @@ struct PutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     teems::Value *mutable_value() {
         return GetStruct<teems::Value *>(VT_VALUE);
     }
+    const teems::Policy *policy() const {
+        return GetStruct<const teems::Policy *>(VT_POLICY);
+    }
+    teems::Policy *mutable_policy() {
+        return GetStruct<teems::Policy *>(VT_POLICY);
+    }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
+    }
     int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
     bool mutate_timestamp(int64_t _timestamp) {
         return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
@@ -540,6 +649,8 @@ struct PutArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
                VerifyField<teems::Value>(verifier, VT_VALUE) &&
+               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                verifier.EndTable();
     }
@@ -554,6 +665,12 @@ struct PutArgsBuilder {
     }
     void add_value(const teems::Value *value) {
         fbb_.AddStruct(PutArgs::VT_VALUE, value);
+    }
+    void add_policy(const teems::Policy *policy) {
+        fbb_.AddStruct(PutArgs::VT_POLICY, policy);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(PutArgs::VT_POLICY_VERSION, policy_version, 0);
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(PutArgs::VT_TIMESTAMP, timestamp, 0);
@@ -570,10 +687,13 @@ struct PutArgsBuilder {
 
 inline flatbuffers::Offset<PutArgs> CreatePutArgs(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const teems::Value *value = 0, int64_t timestamp = 0) {
+    const teems::Value *value = 0, const teems::Policy *policy = 0,
+    int64_t policy_version = 0, int64_t timestamp = 0) {
     PutArgsBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
+    builder_.add_policy_version(policy_version);
     builder_.add_key(key);
+    builder_.add_policy(policy);
     builder_.add_value(value);
     return builder_.Finish();
 }
@@ -582,11 +702,18 @@ struct PutResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef PutResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_SUCCESS = 4,
-        VT_TIMESTAMP = 6
+        VT_POLICY_VERSION = 6,
+        VT_TIMESTAMP = 8
     };
     bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
     bool mutate_success(bool _success) {
         return SetField<uint8_t>(VT_SUCCESS, static_cast<uint8_t>(_success), 0);
+    }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
     }
     int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
     bool mutate_timestamp(int64_t _timestamp) {
@@ -595,6 +722,7 @@ struct PutResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                verifier.EndTable();
     }
@@ -607,6 +735,10 @@ struct PutResultBuilder {
     void add_success(bool success) {
         fbb_.AddElement<uint8_t>(PutResult::VT_SUCCESS,
                                  static_cast<uint8_t>(success), 0);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(PutResult::VT_POLICY_VERSION, policy_version,
+                                 0);
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(PutResult::VT_TIMESTAMP, timestamp, 0);
@@ -624,9 +756,10 @@ struct PutResultBuilder {
 
 inline flatbuffers::Offset<PutResult> CreatePutResult(
     flatbuffers::FlatBufferBuilder &_fbb, bool success = false,
-    int64_t timestamp = 0) {
+    int64_t policy_version = 0, int64_t timestamp = 0) {
     PutResultBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
+    builder_.add_policy_version(policy_version);
     builder_.add_success(success);
     return builder_.Finish();
 }
@@ -635,10 +768,17 @@ struct StabilizeArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef StabilizeArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_TIMESTAMP = 6
+        VT_POLICY_VERSION = 6,
+        VT_TIMESTAMP = 8
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
+    }
     int64_t timestamp() const { return GetField<int64_t>(VT_TIMESTAMP, 0); }
     bool mutate_timestamp(int64_t _timestamp) {
         return SetField<int64_t>(VT_TIMESTAMP, _timestamp, 0);
@@ -646,6 +786,7 @@ struct StabilizeArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                verifier.EndTable();
     }
@@ -657,6 +798,10 @@ struct StabilizeArgsBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(StabilizeArgs::VT_KEY, key, 0);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(StabilizeArgs::VT_POLICY_VERSION,
+                                 policy_version, 0);
     }
     void add_timestamp(int64_t timestamp) {
         fbb_.AddElement<int64_t>(StabilizeArgs::VT_TIMESTAMP, timestamp, 0);
@@ -674,9 +819,10 @@ struct StabilizeArgsBuilder {
 
 inline flatbuffers::Offset<StabilizeArgs> CreateStabilizeArgs(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    int64_t timestamp = 0) {
+    int64_t policy_version = 0, int64_t timestamp = 0) {
     StabilizeArgsBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
+    builder_.add_policy_version(policy_version);
     builder_.add_key(key);
     return builder_.Finish();
 }

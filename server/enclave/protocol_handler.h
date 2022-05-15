@@ -8,6 +8,7 @@
 #include <cstdint>
 #include "call_map.h"
 #include "peer.h"
+#include "policy.h"
 #include "teems_generated.h"
 
 namespace teems {
@@ -29,10 +30,13 @@ int put_resp_handler(peer &p, int64_t ticket, PutResult const *args);
 
 // direct handlers: handlers for calls we execute ourselves
 int get_resp_handler_action(GetCallContext &context, ssize_t peer_idx,
+                            ServerPolicy const &policy,
                             std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp, bool stable, bool suspicious);
+                            int64_t policy_version, int64_t timestamp,
+                            bool stable, bool suspicious);
 int get_timestamp_resp_handler_action(PutCallContext &context,
-                                      int64_t timestamp, bool suspicious);
+                                      int64_t policy_version, int64_t timestamp,
+                                      bool suspicious);
 
 }  // namespace handler
 }  // namespace teems

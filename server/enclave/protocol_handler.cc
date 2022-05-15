@@ -21,9 +21,9 @@ int get_writeback(GetCallContext &context);
 int put_return_to_client(PutCallContext const &context);
 int put_do_write(PutCallContext &context);
 int put_resp_handler_get_action(GetCallContext &context, bool success,
-                                int64_t timestamp);
+                                int64_t policy_version, int64_t timestamp);
 int put_resp_handler_put_action(PutCallContext &context, bool success,
-                                int64_t timestamp);
+                                int64_t policy_version, int64_t timestamp);
 int do_stabilize(GetCallContext const &context, bool to_outdated);
 }  // anonymous namespace
 
@@ -35,8 +35,12 @@ int get_handler(peer &p, int64_t ticket, teems::GetArgs const *args) {
     std::array<uint8_t, REGISTER_SIZE> value;
     bool stable;
     bool suspicious;
-    auto const timestamp =
-        g_kv_store.get(args->key(), &stable, &suspicious, &value);
+    int64_t timestamp;
+    int64_t policy_version;
+    ServerPolicy policy;
+
+    bool success = g_kv_store.get(args->key(), &stable, &suspicious,
+                                  &policy_version, &timestamp, &policy, &value);
 
     auto fb_value = teems::Value();
     flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
@@ -47,8 +51,11 @@ int get_handler(peer &p, int64_t ticket, teems::GetArgs const *args) {
         }
     }
 
-    auto get_res = teems::CreateGetResult(builder, args->key(), &fb_value,
-                                          timestamp, stable, suspicious);
+    auto fb_policy = policy.to_flatbuffers();
+
+    auto get_res =
+        teems::CreateGetResult(builder, args->key(), &fb_value, &fb_policy,
+                               policy_version, timestamp, stable, suspicious);
 
     auto result =
         teems::CreateMessage(builder, teems::MessageType_get_resp, ticket,
@@ -65,11 +72,16 @@ int get_timestamp_handler(peer &p, int64_t ticket,
 
     flatbuffers::FlatBufferBuilder builder;
 
-    bool suspicious = false;
-    auto const timestamp = g_kv_store.get_timestamp(args->key(), &suspicious);
+    bool stable;
+    bool suspicious;
+    int64_t timestamp;
+    int64_t policy_version;
+
+    bool success = g_kv_store.get_timestamp(args->key(), &stable, &suspicious,
+                                            &policy_version, &timestamp);
 
     auto get_timestamp_res = teems::CreateGetTimestampResult(
-        builder, args->key(), timestamp, suspicious);
+        builder, args->key(), policy_version, timestamp, suspicious);
 
     auto result = teems::CreateMessage(
         builder, teems::MessageType_get_timestamp_resp, ticket,
@@ -84,12 +96,16 @@ int put_handler(peer &p, int64_t ticket, teems::PutArgs const *args) {
     LOG("put request [%ld]: key %ld", ticket, args->key());
 
     int64_t current_timestamp = 0;
-    bool const success = g_kv_store.put(args->key(), args->value(),
-                                        args->timestamp(), &current_timestamp);
+    int64_t current_policy_version = 0;
+    bool const success =
+        g_kv_store.put(args->key(), args->value(), ServerPolicy(args->policy()),
+                       args->policy_version(), args->timestamp(),
+                       &current_policy_version, &current_timestamp);
 
     flatbuffers::FlatBufferBuilder builder;
 
-    auto put_res = teems::CreatePutResult(builder, success, current_timestamp);
+    auto put_res = teems::CreatePutResult(
+        builder, success, current_policy_version, current_timestamp);
 
     auto message =
         teems::CreateMessage(builder, teems::MessageType_put_resp, ticket,
@@ -102,7 +118,8 @@ int put_handler(peer &p, int64_t ticket, teems::PutArgs const *args) {
 int stabilize_handler(peer &p, int64_t ticket,
                       teems::StabilizeArgs const *args) {
     LOG("stabilize request [%ld]: key %ld", ticket, args->key());
-    g_kv_store.stabilize(args->key(), args->timestamp());
+    g_kv_store.stabilize(args->key(), args->policy_version(),
+                         args->timestamp());
     return 0;
 }
 
@@ -123,18 +140,26 @@ int get_resp_handler(peer &p, ssize_t peer_idx, int64_t ticket,
         value[idx] = fb_value->Get(idx);
     }
 
-    return get_resp_handler_action(*ctx, peer_idx, value, args->timestamp(),
-                                   args->stable(), args->suspicious());
+    return get_resp_handler_action(*ctx, peer_idx, ServerPolicy(args->policy()),
+                                   value, args->policy_version(),
+                                   args->timestamp(), args->stable(),
+                                   args->suspicious());
 }
 int get_resp_handler_action(GetCallContext &context, ssize_t peer_idx,
+                            ServerPolicy const &policy,
                             std::array<uint8_t, REGISTER_SIZE> const &value,
-                            int64_t timestamp, bool stable, bool suspicious) {
+                            int64_t policy_version, int64_t timestamp,
+                            bool stable, bool suspicious) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
-    context.add_get_reply(peer_idx, timestamp, stable, suspicious, value);
+    context.add_get_reply(peer_idx, policy_version, timestamp, stable,
+                          suspicious, policy, value);
 
+    // TODO: check policy
+    // TODO: handle mismatch timestamp vs policy
+    // TODO: handle failed SMR read of timestamp
     if (context.early_get_done()) {
         context.finish_get_phase();
         return get_return_to_client(context);
@@ -163,17 +188,21 @@ int get_timestamp_resp_handler(peer &p, int64_t ticket,
         return 0;
     }
 
-    return get_timestamp_resp_handler_action(*ctx, args->timestamp(),
-                                             args->suspicious());
+    return get_timestamp_resp_handler_action(
+        *ctx, args->policy_version(), args->timestamp(), args->suspicious());
 }
 int get_timestamp_resp_handler_action(PutCallContext &context,
-                                      int64_t timestamp, bool suspicious) {
+                                      int64_t policy_version, int64_t timestamp,
+                                      bool suspicious) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
 
-    context.add_get_reply(timestamp, suspicious);
+    // TODO: check policy
+    // TODO: handle mismatch timestamp vs policy
+    // TODO: handle failed SMR read of timestamp
+    context.add_get_reply(policy_version, timestamp, suspicious);
 
     if (context.get_done()) {
         return put_do_write(context);
@@ -195,11 +224,12 @@ int put_resp_handler(peer &p, int64_t ticket, PutResult const *args) {
 
     if (get_ctx != nullptr) {
         return put_resp_handler_get_action(*get_ctx, args->success(),
+                                           args->policy_version(),
                                            args->timestamp());
     }
 
-    return put_resp_handler_put_action(*put_ctx, args->success(),
-                                       args->timestamp());
+    return put_resp_handler_put_action(
+        *put_ctx, args->success(), args->policy_version(), args->timestamp());
 }
 
 namespace {
@@ -217,9 +247,11 @@ int get_return_to_client(GetCallContext const &context) {
         }
     }
 
+    auto fb_policy = context.policy().to_flatbuffers();
+
     auto get_res = teems::CreateGetResult(
-        builder, context.key(), &fb_value, context.timestamp(),
-        true /* stable */, false /* suspicious */);
+        builder, context.key(), &fb_value, &fb_policy, context.policy_version(),
+        context.timestamp(), true /* stable */, false /* suspicious */);
 
     auto result = teems::CreateMessage(
         builder, teems::MessageType_proxy_get_resp, context.ticket(),
@@ -244,8 +276,10 @@ int get_writeback(GetCallContext &context) {
         }
     }
 
-    auto put_args = teems::CreatePutArgs(builder, context.key(), &fb_value,
-                                         context.timestamp());
+    auto fb_policy = context.policy().to_flatbuffers();
+    auto put_args =
+        teems::CreatePutArgs(builder, context.key(), &fb_value, &fb_policy,
+                             context.policy_version(), context.timestamp());
 
     auto put_request = teems::CreateMessage(
         builder, teems::MessageType_put_req, context.ticket(),
@@ -254,11 +288,15 @@ int get_writeback(GetCallContext &context) {
     builder.Finish(put_request);
 
     if (context.self_outdated()) {
+        int64_t current_policy_version = 0;
         int64_t current_timestamp = 0;
-        bool const success = g_kv_store.put(
-            context.key(), &fb_value, context.timestamp(), &current_timestamp);
-        if (put_resp_handler_get_action(context, success, current_timestamp) !=
-            0) {
+        bool const success =
+            g_kv_store.put(context.key(), &fb_value, context.policy(),
+                           context.policy_version(), context.timestamp(),
+                           &current_policy_version, &current_timestamp);
+        if (put_resp_handler_get_action(context, success,
+                                        current_policy_version,
+                                        current_timestamp) != 0) {
             ERROR("failed to register own action");
         }
     }
@@ -271,8 +309,8 @@ int put_return_to_client(PutCallContext const &context) {
     LOG("put [%ld]: returning to client", context.ticket());
     flatbuffers::FlatBufferBuilder builder;
 
-    auto put_res =
-        teems::CreatePutResult(builder, true, context.next_timestamp());
+    auto put_res = teems::CreatePutResult(
+        builder, true, context.policy_version(), context.next_timestamp());
 
     auto message = teems::CreateMessage(
         builder, teems::MessageType_proxy_put_resp, context.ticket(),
@@ -295,8 +333,10 @@ int put_do_write(PutCallContext &context) {
             fb_arr->Mutate(idx, value[idx]);
         }
     }
+    auto fb_policy = context.policy().to_flatbuffers();
 
     auto put_args = teems::CreatePutArgs(builder, context.key(), &fb_value,
+                                         &fb_policy, context.policy_version(),
                                          context.next_timestamp());
 
     auto put_request = teems::CreateMessage(
@@ -305,17 +345,20 @@ int put_do_write(PutCallContext &context) {
 
     builder.Finish(put_request);
 
+    int64_t current_policy_version = 0;
     int64_t current_timestamp = 0;
     bool const success = g_kv_store.put(
-        context.key(), &fb_value, context.next_timestamp(), &current_timestamp);
-    if (put_resp_handler_put_action(context, success, current_timestamp) != 0) {
+        context.key(), &fb_value, context.policy(), context.policy_version(),
+        context.next_timestamp(), &current_policy_version, &current_timestamp);
+    if (put_resp_handler_put_action(context, success, current_policy_version,
+                                    current_timestamp) != 0) {
         ERROR("failed to register own action");
     }
 
     return teems::handler_helper::broadcast(std::move(builder));
 }
 int put_resp_handler_get_action(GetCallContext &context, bool success,
-                                int64_t timestamp) {
+                                int64_t policy_version, int64_t timestamp) {
     if (context.call_done()) {
         return 0;  // call finished
     }
@@ -330,7 +373,7 @@ int put_resp_handler_get_action(GetCallContext &context, bool success,
     return 0;
 }
 int put_resp_handler_put_action(PutCallContext &context, bool success,
-                                int64_t timestamp) {
+                                int64_t policy_version, int64_t timestamp) {
     if (context.call_done()) {
         return 0;  // call finished
     }
@@ -345,8 +388,8 @@ int put_resp_handler_put_action(PutCallContext &context, bool success,
 int do_stabilize(GetCallContext const &context, bool to_outdated) {
     flatbuffers::FlatBufferBuilder builder;
 
-    auto stabilize_args =
-        teems::CreateStabilizeArgs(builder, context.key(), context.timestamp());
+    auto stabilize_args = teems::CreateStabilizeArgs(
+        builder, context.key(), context.policy_version(), context.timestamp());
 
     auto stabilize_request = teems::CreateMessage(
         builder, teems::MessageType_stabilize_req, context.ticket(),
@@ -354,7 +397,8 @@ int do_stabilize(GetCallContext const &context, bool to_outdated) {
 
     builder.Finish(stabilize_request);
 
-    g_kv_store.stabilize(context.key(), context.timestamp());
+    g_kv_store.stabilize(context.key(), context.policy_version(),
+                         context.timestamp());
     return teems::handler_helper::broadcast_to(
         to_outdated ? context.all_stabilize_indices()
                     : context.unstable_indices(),

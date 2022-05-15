@@ -15,6 +15,9 @@ enum MessageType:byte {
     get_timestamp_req,
     get_timestamp_resp,
 
+    change_policy_req,
+    change_policy_resp,
+
     put_req,
     put_resp,
 
@@ -33,6 +36,12 @@ struct Value {
     data: [ubyte:128];
 }
 
+struct Policy {
+    policy_code: uint8;
+    owner_id: int32;
+    valid_from: int64;
+}
+
 table GetArgs {
     key : int64;
 }
@@ -40,6 +49,8 @@ table GetArgs {
 table GetResult {
     key : int64;
     value : Value;
+    policy: Policy;
+    policy_version: int64;
     timestamp: int64;
     stable: bool;
     suspicious: bool;
@@ -51,6 +62,7 @@ table GetTimestampArgs {
 
 table GetTimestampResult {
     key : int64;
+    policy_version: int64;
     timestamp: int64;
     suspicious: bool;
 }
@@ -64,16 +76,20 @@ table ProxyPutArgs {
 table PutArgs {
     key : int64;
     value : Value;
+    policy : Policy;
+    policy_version: int64;
     timestamp: int64;
 }
 
 table PutResult {
     success : bool;
+    policy_version: int64;
     timestamp: int64;
 }
 
 table StabilizeArgs {
     key : int64;
+    policy_version: int64;
     timestamp: int64;
 }
 

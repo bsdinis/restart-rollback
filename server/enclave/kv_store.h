@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include "crypto_helpers.h"
 #include "log.h"
+#include "policy.h"
 #include "teems_generated.h"
 
 namespace teems {
@@ -47,6 +48,9 @@ struct MACedTimestampedValue {
 class KeyValueStore {
    private:
     ::std::unordered_map<int64_t, MACedTimestampedValue> m_store;
+    ::std::unordered_map<int64_t, std::tuple<int64_t, ServerPolicy>>
+        m_policy_store;
+
     void *m_persistent_backed_store = nullptr;
     size_t m_persistent_backed_store_size = 0;
 
@@ -56,12 +60,17 @@ class KeyValueStore {
     void add_backing_store(void *persistent_backed_store,
                            size_t persistent_backed_store_size);
 
-    int64_t get(int64_t key, bool *stable, bool *suspicious,
-                std::array<uint8_t, REGISTER_SIZE> *val);
-    int64_t get_timestamp(int64_t key, bool *suspicious);
-    bool put(int64_t key, Value const *val, int64_t timestamp,
-             int64_t *current_timestamp);
-    void stabilize(int64_t key, int64_t timestamp);
+    bool get(int64_t key, bool *stable, bool *suspicious,
+             int64_t *policy_version, int64_t *timestamp, ServerPolicy *policy,
+             std::array<uint8_t, REGISTER_SIZE> *val);
+    bool get_timestamp(int64_t key, bool *stable, bool *suspicious,
+                       int64_t *policy_version, int64_t *timestamp);
+    bool put(int64_t key, Value const *val, ServerPolicy const &policy,
+             int64_t policy_version, int64_t timestamp,
+             int64_t *current_policy_version, int64_t *current_timestamp);
+    bool change_policy(int64_t key, ServerPolicy policy, int64_t policy_version,
+                       int64_t *current_policy_version);
+    void stabilize(int64_t key, int64_t policy_version, int64_t timestamp);
     void reset();
 };
 

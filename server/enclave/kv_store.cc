@@ -35,36 +35,66 @@ void KeyValueStore::add_backing_store(void *persistent_backed_store,
                      sizeof(sgx_aes_gcm_128bit_tag_t)));
 }
 
-int64_t KeyValueStore::get(int64_t key, bool *stable, bool *suspicious,
-                           std::array<uint8_t, REGISTER_SIZE> *val) {
+bool KeyValueStore::get(int64_t key, bool *stable, bool *suspicious,
+                        int64_t *policy_version, int64_t *timestamp,
+                        ServerPolicy *policy,
+                        std::array<uint8_t, REGISTER_SIZE> *val) {
     assert(stable != nullptr);
     assert(suspicious != nullptr);
     *suspicious = setup::is_suspicious();
 
+    *policy_version = -1;
+    *timestamp = -1;
+
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
         *stable = true;
-        return -1;
+        return false;
     }
 
-    int64_t timestamp = key_it->second.m_ts_val.m_timestamp;
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        ERROR("there is a value but there is no policy");
+        *stable = true;
+        return false;
+    }
+
+    std::tie(*policy_version, *policy) = policy_it->second;
+    *timestamp = key_it->second.m_ts_val.m_timestamp;
     *stable = key_it->second.m_ts_val.m_stable;
     *val = key_it->second.m_ts_val.m_val;
-    return timestamp;
+
+    return true;
 }
 
-int64_t KeyValueStore::get_timestamp(int64_t key, bool *suspicious) {
+bool KeyValueStore::get_timestamp(int64_t key, bool *stable, bool *suspicious,
+                                  int64_t *policy_version, int64_t *timestamp) {
     assert(suspicious != nullptr);
     *suspicious = setup::is_suspicious();
+
+    *policy_version = -1;
+    *timestamp = -1;
+
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
-        return -1;
+        return false;
     }
 
-    return key_it->second.m_ts_val.m_timestamp;
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        ERROR("there is a value but there is no policy");
+        *stable = true;
+        return false;
+    }
+
+    *policy_version = std::get<0>(policy_it->second);
+    *timestamp = key_it->second.m_ts_val.m_timestamp;
+    return true;
 }
 
-bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
+bool KeyValueStore::put(int64_t key, Value const *val,
+                        ServerPolicy const &policy, int64_t policy_version,
+                        int64_t timestamp, int64_t *current_policy_version,
                         int64_t *current_timestamp) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
@@ -72,14 +102,24 @@ bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
         m_store.insert({key, MACedTimestampedValue(
                                  TimestampedValue(val, timestamp, false),
                                  this->get_persistent_pointer(key), key)});
+        m_policy_store.insert({key, std::make_tuple(policy_version, policy)});
         return true;
     }
 
-    if (key_it->second.m_ts_val.m_timestamp >= timestamp) {
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        ERROR("there is a value but there is no policy");
+        return false;
+    }
+
+    if (std::get<0>(policy_it->second) != policy_version &&
+        key_it->second.m_ts_val.m_timestamp >= timestamp) {
+        *current_policy_version = std::get<0>(policy_it->second);
         *current_timestamp = key_it->second.m_ts_val.m_timestamp;
         return false;
     }
 
+    *current_policy_version = policy_version;
     *current_timestamp = timestamp;
     key_it->second =
         MACedTimestampedValue(TimestampedValue(val, timestamp, false),
@@ -87,12 +127,19 @@ bool KeyValueStore::put(int64_t key, Value const *val, int64_t timestamp,
     return true;
 }
 
-void KeyValueStore::stabilize(int64_t key, int64_t timestamp) {
+void KeyValueStore::stabilize(int64_t key, int64_t policy_version,
+                              int64_t timestamp) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
         return;
     }
-    if (key_it->second.m_ts_val.m_timestamp == timestamp) {
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        ERROR("found register but didn't find the policy");
+        return;
+    }
+    if (std::get<0>(policy_it->second) == policy_version &&
+        key_it->second.m_ts_val.m_timestamp == timestamp) {
         key_it->second.m_ts_val.m_stable = true;
     }
 }

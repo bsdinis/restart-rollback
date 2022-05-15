@@ -34,12 +34,16 @@ int proxy_get_handler(peer &p, int64_t ticket, GetArgs const *args) {
     }
 
     std::array<uint8_t, REGISTER_SIZE> value;
-    bool stable = false;
-    bool suspicious = false;
-    auto const timestamp =
-        g_kv_store.get(args->key(), &stable, &suspicious, &value);
-    return get_resp_handler_action(*ctx, -1, value, timestamp, stable,
-                                   suspicious);
+    bool stable;
+    bool suspicious;
+    int64_t timestamp;
+    int64_t policy_version;
+    ServerPolicy policy;
+
+    bool success = g_kv_store.get(args->key(), &stable, &suspicious,
+                                  &policy_version, &timestamp, &policy, &value);
+    return get_resp_handler_action(*ctx, -1, policy, value, policy_version,
+                                   timestamp, stable, suspicious);
 }
 
 int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
@@ -62,9 +66,15 @@ int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
         return -1;
     }
 
-    bool suspicious = false;
-    auto const timestamp = g_kv_store.get_timestamp(args->key(), &suspicious);
-    return get_timestamp_resp_handler_action(*ctx, timestamp, suspicious);
+    bool stable;
+    bool suspicious;
+    int64_t timestamp;
+    int64_t policy_version;
+
+    g_kv_store.get_timestamp(args->key(), &stable, &suspicious, &policy_version,
+                             &timestamp);
+    return get_timestamp_resp_handler_action(*ctx, policy_version, timestamp,
+                                             suspicious);
 }
 
 }  // namespace handler
