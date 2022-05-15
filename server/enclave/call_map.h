@@ -19,6 +19,35 @@ extern std::vector<peer> g_replica_list;
 
 namespace teems {
 
+class GetCallContext;
+class PutCallContext;
+
+class SmrCallContext {
+   public:
+    SmrCallContext() = default;
+    SmrCallContext(GetCallContext* parent_call, size_t slot_n)
+        : m_parent_get_call(parent_call), m_slot_n(slot_n) {}
+    SmrCallContext(PutCallContext* parent_call, size_t slot_n)
+        : m_parent_put_call(parent_call), m_slot_n(slot_n) {}
+
+    void finish(bool success, int64_t policy_version, ServerPolicy policy);
+
+    int64_t ticket() const;
+    int64_t key() const;
+
+    inline bool success() const { return m_success; }
+    inline int64_t policy_version() const { return m_policy_version; }
+    inline ServerPolicy policy() const { return m_policy; }
+
+   private:
+    GetCallContext* m_parent_get_call = nullptr;
+    PutCallContext* m_parent_put_call = nullptr;
+    size_t m_slot_n = 0;
+    bool m_success = false;
+    int64_t m_policy_version = -1;
+    ServerPolicy m_policy;
+};
+
 enum class GetNextAction {
     None,
     FallbackPolicyRead,
@@ -37,20 +66,29 @@ class GetCallContext {
           m_peer_timestamps(std::vector<int64_t>(g_replica_list.size(), -1)),
           m_peer_stable(std::vector<bool>(g_replica_list.size(), false)) {}
 
-    // add a new reply
+    // ==================================================
+    //  PROTOCOL CALLS
+    // ==================================================
     GetNextAction add_get_reply(
         ssize_t peer_idx, int64_t policy_version, int64_t timestamp,
         bool stable, bool suspicious, ServerPolicy const& policy,
         std::array<uint8_t, REGISTER_SIZE> const& value);
+    GetNextAction add_get_retry_reply(
+        ssize_t peer_idx, int64_t timestamp, bool stable, bool suspicious,
+        std::array<uint8_t, REGISTER_SIZE> const& value);
     GetNextAction add_writeback_reply();
-
-    inline bool get_done() const { return m_get_round_done; }
-    inline bool call_done() const { return m_call_done; }
+    int finished_smr(SmrCallContext const* smr_context);
 
     inline bool self_outdated() const { return m_self_timestamp < m_timestamp; }
     inline bool self_unstable() const { return !m_self_stable; }
 
-    // getters
+    // ==================================================
+    //  GETTER CALLS
+    // ==================================================
+
+    inline bool get_done() const { return m_get_round_done; }
+    inline bool call_done() const { return m_call_done; }
+
     inline int64_t ticket() const { return m_ticket; }
     inline int64_t key() const { return m_key; }
     inline int64_t policy_version() const { return m_policy_version; }
@@ -106,7 +144,7 @@ class GetCallContext {
     int64_t m_ticket = -1;
     int64_t m_policy_version = -1;
     int64_t m_timestamp = -1;
-    bool m_stable = -1;
+    bool m_stable = false;
     std::vector<int64_t> m_peer_timestamps;
     std::vector<bool> m_peer_stable;
     std::vector<size_t> m_outdated_idx;
@@ -115,6 +153,7 @@ class GetCallContext {
     ServerPolicy m_policy;
     std::array<uint8_t, REGISTER_SIZE> m_value;
 
+    bool m_get_retrying = false;
     bool m_get_round_done = false;
     bool m_call_done = false;
 };
@@ -139,19 +178,27 @@ class PutCallContext {
         }
     }
 
-    // add a new reply
+    // ==================================================
+    //  PROTOCOL CALLS
+    // ==================================================
     PutNextAction add_get_reply(int64_t policy_version, int64_t timestamp,
                                 bool suspicious, ServerPolicy const& policy);
+    PutNextAction add_get_retry_reply(int64_t timestamp, bool suspicious);
     PutNextAction add_put_reply();
+    int finished_smr(SmrCallContext const* smr_context);
 
-    // whether the call is done
+    // ==================================================
+    //  GETTERS
+    // ==================================================
+
     inline bool get_done() const { return m_get_round_done; }
     inline bool call_done() const { return m_call_done; }
 
-    // getters
     inline int64_t ticket() const { return m_ticket; }
     inline int64_t key() const { return m_key; }
-    inline int64_t policy_version() const { return m_policy_version; }
+    inline int64_t policy_version() const {
+        return std::max<int64_t>(m_policy_version, 0);
+    }
     inline int64_t timestamp() const { return m_timestamp; }
     inline int64_t next_timestamp() const {
         uint64_t seqno = (m_timestamp < 0)
@@ -183,6 +230,7 @@ class PutCallContext {
     ServerPolicy m_policy;
     std::array<uint8_t, REGISTER_SIZE> m_value;
 
+    bool m_get_retrying = false;
     bool m_get_round_done = false;
     bool m_call_done = false;
 };
@@ -194,15 +242,21 @@ class CallMap {
     PutCallContext* add_put_call(peer* client, int32_t client_id,
                                  int64_t ticket, int64_t key,
                                  Value const* value);
+    SmrCallContext* add_smr_call(GetCallContext* parent_call, size_t slot_n);
+    SmrCallContext* add_smr_call(PutCallContext* parent_call, size_t slot_n);
 
     GetCallContext* get_get_ctx(int64_t ticket);
     PutCallContext* get_put_ctx(int64_t ticket);
+    SmrCallContext* get_smr_ctx(size_t slot_n);
 
     void resolve_call(int64_t ticket);
+    void resolve_smr_call(size_t slot_n, bool success, int64_t policy_version,
+                          ServerPolicy policy);
 
    private:
     std::unordered_map<int64_t, GetCallContext> m_get_map;
     std::unordered_map<int64_t, PutCallContext> m_put_map;
+    std::unordered_map<size_t, SmrCallContext> m_smr_map;
 };
 
 }  // namespace teems

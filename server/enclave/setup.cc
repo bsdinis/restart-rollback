@@ -18,11 +18,13 @@
 #include "handlers.h"
 #include "kv_store.h"
 #include "log.h"
+#include "op_log.h"
 #include "peer.h"
 #include "ssl_util.h"
 
 teems::CallMap g_call_map;
 teems::KeyValueStore g_kv_store;
+teems::OpLog g_log;
 std::vector<peer> g_client_list;
 std::vector<peer> g_replica_list;
 
@@ -97,6 +99,10 @@ int connect_to_all_replicas(config_t const* config, ssize_t my_idx) {
 // ========================================
 
 namespace teems {
+
+void* g_persistent_array = NULL;
+size_t g_persistent_array_size = 0;
+
 namespace setup {
 
 using namespace teems;
@@ -104,7 +110,11 @@ using namespace teems;
 void setup(config_t* conf, ssize_t idx, void* file_mapping, size_t mapping_size,
            size_t f) {
     g_my_idx = idx;
-    g_kv_store.add_backing_store(file_mapping, mapping_size);
+    g_kv_store.add_backing_store(file_mapping, mapping_size / 2);
+
+    g_persistent_array = (void*)(((uint8_t*)file_mapping) + (mapping_size / 2));
+    g_persistent_array_size = mapping_size / 2;
+
     g_rollback_faults = conf->r;
     g_crash_faults = conf->f;
     config_node_t& node = conf->nodes[idx];
@@ -186,7 +196,11 @@ size_t write_quorum_size() {
 size_t read_quorum_size(size_t suspicions) {
     return std::min<size_t>(g_rollback_faults, suspicions) + g_crash_faults + 1;
 }
+size_t max_quorum_size(size_t suspicions) {
+    return std::max<size_t>(write_quorum_size(), read_quorum_size(suspicions));
+}
 bool is_suspicious() { return !g_is_fresh; }
+bool is_leader() { return my_idx() == 0; }
 
 size_t n_replicas() {
     return std::max<size_t>(g_rollback_faults, g_crash_faults) +

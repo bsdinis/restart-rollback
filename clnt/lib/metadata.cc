@@ -297,7 +297,7 @@ bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent,
         return false;
     }
 
-    policy_version = std::get<0>(g_metadata_get_result);
+    policy_version = std::get<0>(g_metadata_put_result);
     timestamp = std::get<1>(g_metadata_put_result);
     return std::get<2>(g_metadata_put_result);
 }

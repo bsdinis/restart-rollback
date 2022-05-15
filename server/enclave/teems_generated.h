@@ -35,6 +35,18 @@ struct PutArgsBuilder;
 struct PutResult;
 struct PutResultBuilder;
 
+struct ChangePolicyResult;
+struct ChangePolicyResultBuilder;
+
+struct SmrPropose;
+struct SmrProposeBuilder;
+
+struct SmrAccept;
+struct SmrAcceptBuilder;
+
+struct SmrReject;
+struct SmrRejectBuilder;
+
 struct StabilizeArgs;
 struct StabilizeArgsBuilder;
 
@@ -65,13 +77,16 @@ enum MessageType : int8_t {
     MessageType_ping_resp = 14,
     MessageType_reset_req = 15,
     MessageType_reset_resp = 16,
-    MessageType_stabilize_req = 17,
-    MessageType_close_req = 18,
+    MessageType_smr_propose = 17,
+    MessageType_smr_accept = 18,
+    MessageType_smr_reject = 19,
+    MessageType_stabilize_req = 20,
+    MessageType_close_req = 21,
     MessageType_MIN = MessageType_client_greeting,
     MessageType_MAX = MessageType_close_req
 };
 
-inline const MessageType (&EnumValuesMessageType())[19] {
+inline const MessageType (&EnumValuesMessageType())[22] {
     static const MessageType values[] = {
         MessageType_client_greeting,    MessageType_proxy_get_req,
         MessageType_proxy_get_resp,     MessageType_proxy_put_req,
@@ -81,23 +96,36 @@ inline const MessageType (&EnumValuesMessageType())[19] {
         MessageType_change_policy_resp, MessageType_put_req,
         MessageType_put_resp,           MessageType_ping_req,
         MessageType_ping_resp,          MessageType_reset_req,
-        MessageType_reset_resp,         MessageType_stabilize_req,
-        MessageType_close_req};
+        MessageType_reset_resp,         MessageType_smr_propose,
+        MessageType_smr_accept,         MessageType_smr_reject,
+        MessageType_stabilize_req,      MessageType_close_req};
     return values;
 }
 
 inline const char *const *EnumNamesMessageType() {
-    static const char *const names[20] = {
-        "client_greeting",    "proxy_get_req",
-        "proxy_get_resp",     "proxy_put_req",
-        "proxy_put_resp",     "get_req",
-        "get_resp",           "get_timestamp_req",
-        "get_timestamp_resp", "change_policy_req",
-        "change_policy_resp", "put_req",
-        "put_resp",           "ping_req",
-        "ping_resp",          "reset_req",
-        "reset_resp",         "stabilize_req",
-        "close_req",          nullptr};
+    static const char *const names[23] = {"client_greeting",
+                                          "proxy_get_req",
+                                          "proxy_get_resp",
+                                          "proxy_put_req",
+                                          "proxy_put_resp",
+                                          "get_req",
+                                          "get_resp",
+                                          "get_timestamp_req",
+                                          "get_timestamp_resp",
+                                          "change_policy_req",
+                                          "change_policy_resp",
+                                          "put_req",
+                                          "put_resp",
+                                          "ping_req",
+                                          "ping_resp",
+                                          "reset_req",
+                                          "reset_resp",
+                                          "smr_propose",
+                                          "smr_accept",
+                                          "smr_reject",
+                                          "stabilize_req",
+                                          "close_req",
+                                          nullptr};
     return names;
 }
 
@@ -111,23 +139,28 @@ inline const char *EnumNameMessageType(MessageType e) {
 
 enum BasicMessage : uint8_t {
     BasicMessage_NONE = 0,
-    BasicMessage_Greeting = 1,
-    BasicMessage_GetArgs = 2,
-    BasicMessage_GetResult = 3,
-    BasicMessage_GetTimestampArgs = 4,
-    BasicMessage_GetTimestampResult = 5,
-    BasicMessage_ProxyGetArgs = 6,
-    BasicMessage_ProxyPutArgs = 7,
-    BasicMessage_PutArgs = 8,
-    BasicMessage_PutResult = 9,
-    BasicMessage_StabilizeArgs = 10,
-    BasicMessage_Empty = 11,
+    BasicMessage_ChangePolicyResult = 1,
+    BasicMessage_Greeting = 2,
+    BasicMessage_GetArgs = 3,
+    BasicMessage_GetResult = 4,
+    BasicMessage_GetTimestampArgs = 5,
+    BasicMessage_GetTimestampResult = 6,
+    BasicMessage_ProxyGetArgs = 7,
+    BasicMessage_ProxyPutArgs = 8,
+    BasicMessage_PutArgs = 9,
+    BasicMessage_PutResult = 10,
+    BasicMessage_SmrPropose = 11,
+    BasicMessage_SmrAccept = 12,
+    BasicMessage_SmrReject = 13,
+    BasicMessage_StabilizeArgs = 14,
+    BasicMessage_Empty = 15,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[12] {
+inline const BasicMessage (&EnumValuesBasicMessage())[16] {
     static const BasicMessage values[] = {BasicMessage_NONE,
+                                          BasicMessage_ChangePolicyResult,
                                           BasicMessage_Greeting,
                                           BasicMessage_GetArgs,
                                           BasicMessage_GetResult,
@@ -137,18 +170,32 @@ inline const BasicMessage (&EnumValuesBasicMessage())[12] {
                                           BasicMessage_ProxyPutArgs,
                                           BasicMessage_PutArgs,
                                           BasicMessage_PutResult,
+                                          BasicMessage_SmrPropose,
+                                          BasicMessage_SmrAccept,
+                                          BasicMessage_SmrReject,
                                           BasicMessage_StabilizeArgs,
                                           BasicMessage_Empty};
     return values;
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[13] = {
-        "NONE",         "Greeting",         "GetArgs",
-        "GetResult",    "GetTimestampArgs", "GetTimestampResult",
-        "ProxyGetArgs", "ProxyPutArgs",     "PutArgs",
-        "PutResult",    "StabilizeArgs",    "Empty",
-        nullptr};
+    static const char *const names[17] = {"NONE",
+                                          "ChangePolicyResult",
+                                          "Greeting",
+                                          "GetArgs",
+                                          "GetResult",
+                                          "GetTimestampArgs",
+                                          "GetTimestampResult",
+                                          "ProxyGetArgs",
+                                          "ProxyPutArgs",
+                                          "PutArgs",
+                                          "PutResult",
+                                          "SmrPropose",
+                                          "SmrAccept",
+                                          "SmrReject",
+                                          "StabilizeArgs",
+                                          "Empty",
+                                          nullptr};
     return names;
 }
 
@@ -162,6 +209,11 @@ inline const char *EnumNameBasicMessage(BasicMessage e) {
 template <typename T>
 struct BasicMessageTraits {
     static const BasicMessage enum_value = BasicMessage_NONE;
+};
+
+template <>
+struct BasicMessageTraits<teems::ChangePolicyResult> {
+    static const BasicMessage enum_value = BasicMessage_ChangePolicyResult;
 };
 
 template <>
@@ -207,6 +259,21 @@ struct BasicMessageTraits<teems::PutArgs> {
 template <>
 struct BasicMessageTraits<teems::PutResult> {
     static const BasicMessage enum_value = BasicMessage_PutResult;
+};
+
+template <>
+struct BasicMessageTraits<teems::SmrPropose> {
+    static const BasicMessage enum_value = BasicMessage_SmrPropose;
+};
+
+template <>
+struct BasicMessageTraits<teems::SmrAccept> {
+    static const BasicMessage enum_value = BasicMessage_SmrAccept;
+};
+
+template <>
+struct BasicMessageTraits<teems::SmrReject> {
+    static const BasicMessage enum_value = BasicMessage_SmrReject;
 };
 
 template <>
@@ -293,13 +360,19 @@ FLATBUFFERS_STRUCT_END(Policy, 16);
 struct GetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4
+        VT_KEY = 4,
+        VT_RETRY = 6
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool retry() const { return GetField<uint8_t>(VT_RETRY, 0) != 0; }
+    bool mutate_retry(bool _retry) {
+        return SetField<uint8_t>(VT_RETRY, static_cast<uint8_t>(_retry), 0);
+    }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_KEY) && verifier.EndTable();
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_RETRY) && verifier.EndTable();
     }
 };
 
@@ -309,6 +382,10 @@ struct GetArgsBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetArgs::VT_KEY, key, 0);
+    }
+    void add_retry(bool retry) {
+        fbb_.AddElement<uint8_t>(GetArgs::VT_RETRY, static_cast<uint8_t>(retry),
+                                 0);
     }
     explicit GetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb) : fbb_(_fbb) {
         start_ = fbb_.StartTable();
@@ -321,9 +398,10 @@ struct GetArgsBuilder {
 };
 
 inline flatbuffers::Offset<GetArgs> CreateGetArgs(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0, bool retry = false) {
     GetArgsBuilder builder_(_fbb);
     builder_.add_key(key);
+    builder_.add_retry(retry);
     return builder_.Finish();
 }
 
@@ -331,15 +409,20 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_VALUE = 6,
-        VT_POLICY = 8,
-        VT_POLICY_VERSION = 10,
-        VT_TIMESTAMP = 12,
-        VT_STABLE = 14,
-        VT_SUSPICIOUS = 16
+        VT_RETRY = 6,
+        VT_VALUE = 8,
+        VT_POLICY = 10,
+        VT_POLICY_VERSION = 12,
+        VT_TIMESTAMP = 14,
+        VT_STABLE = 16,
+        VT_SUSPICIOUS = 18
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool retry() const { return GetField<uint8_t>(VT_RETRY, 0) != 0; }
+    bool mutate_retry(bool _retry) {
+        return SetField<uint8_t>(VT_RETRY, static_cast<uint8_t>(_retry), 0);
+    }
     const teems::Value *value() const {
         return GetStruct<const teems::Value *>(VT_VALUE);
     }
@@ -374,6 +457,7 @@ struct GetResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_RETRY) &&
                VerifyField<teems::Value>(verifier, VT_VALUE) &&
                VerifyField<teems::Policy>(verifier, VT_POLICY) &&
                VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
@@ -390,6 +474,10 @@ struct GetResultBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetResult::VT_KEY, key, 0);
+    }
+    void add_retry(bool retry) {
+        fbb_.AddElement<uint8_t>(GetResult::VT_RETRY,
+                                 static_cast<uint8_t>(retry), 0);
     }
     void add_value(const teems::Value *value) {
         fbb_.AddStruct(GetResult::VT_VALUE, value);
@@ -424,7 +512,7 @@ struct GetResultBuilder {
 };
 
 inline flatbuffers::Offset<GetResult> CreateGetResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0, bool retry = false,
     const teems::Value *value = 0, const teems::Policy *policy = 0,
     int64_t policy_version = 0, int64_t timestamp = 0, bool stable = false,
     bool suspicious = false) {
@@ -436,19 +524,26 @@ inline flatbuffers::Offset<GetResult> CreateGetResult(
     builder_.add_value(value);
     builder_.add_suspicious(suspicious);
     builder_.add_stable(stable);
+    builder_.add_retry(retry);
     return builder_.Finish();
 }
 
 struct GetTimestampArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetTimestampArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-        VT_KEY = 4
+        VT_KEY = 4,
+        VT_RETRY = 6
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool retry() const { return GetField<uint8_t>(VT_RETRY, 0) != 0; }
+    bool mutate_retry(bool _retry) {
+        return SetField<uint8_t>(VT_RETRY, static_cast<uint8_t>(_retry), 0);
+    }
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
-               VerifyField<int64_t>(verifier, VT_KEY) && verifier.EndTable();
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_RETRY) && verifier.EndTable();
     }
 };
 
@@ -458,6 +553,10 @@ struct GetTimestampArgsBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetTimestampArgs::VT_KEY, key, 0);
+    }
+    void add_retry(bool retry) {
+        fbb_.AddElement<uint8_t>(GetTimestampArgs::VT_RETRY,
+                                 static_cast<uint8_t>(retry), 0);
     }
     explicit GetTimestampArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -471,9 +570,10 @@ struct GetTimestampArgsBuilder {
 };
 
 inline flatbuffers::Offset<GetTimestampArgs> CreateGetTimestampArgs(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0, bool retry = false) {
     GetTimestampArgsBuilder builder_(_fbb);
     builder_.add_key(key);
+    builder_.add_retry(retry);
     return builder_.Finish();
 }
 
@@ -481,13 +581,18 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetTimestampResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_POLICY = 6,
-        VT_POLICY_VERSION = 8,
-        VT_TIMESTAMP = 10,
-        VT_SUSPICIOUS = 12
+        VT_RETRY = 6,
+        VT_POLICY = 8,
+        VT_POLICY_VERSION = 10,
+        VT_TIMESTAMP = 12,
+        VT_SUSPICIOUS = 14
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool retry() const { return GetField<uint8_t>(VT_RETRY, 0) != 0; }
+    bool mutate_retry(bool _retry) {
+        return SetField<uint8_t>(VT_RETRY, static_cast<uint8_t>(_retry), 0);
+    }
     const teems::Policy *policy() const {
         return GetStruct<const teems::Policy *>(VT_POLICY);
     }
@@ -512,6 +617,7 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_RETRY) &&
                VerifyField<teems::Policy>(verifier, VT_POLICY) &&
                VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
@@ -526,6 +632,10 @@ struct GetTimestampResultBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetTimestampResult::VT_KEY, key, 0);
+    }
+    void add_retry(bool retry) {
+        fbb_.AddElement<uint8_t>(GetTimestampResult::VT_RETRY,
+                                 static_cast<uint8_t>(retry), 0);
     }
     void add_policy(const teems::Policy *policy) {
         fbb_.AddStruct(GetTimestampResult::VT_POLICY, policy);
@@ -554,7 +664,7 @@ struct GetTimestampResultBuilder {
 };
 
 inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0, bool retry = false,
     const teems::Policy *policy = 0, int64_t policy_version = 0,
     int64_t timestamp = 0, bool suspicious = false) {
     GetTimestampResultBuilder builder_(_fbb);
@@ -563,6 +673,7 @@ inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
     builder_.add_key(key);
     builder_.add_policy(policy);
     builder_.add_suspicious(suspicious);
+    builder_.add_retry(retry);
     return builder_.Finish();
 }
 
@@ -830,6 +941,268 @@ inline flatbuffers::Offset<PutResult> CreatePutResult(
     return builder_.Finish();
 }
 
+struct ChangePolicyResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef ChangePolicyResultBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_POLICY = 6,
+        VT_POLICY_VERSION = 8
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    const teems::Policy *policy() const {
+        return GetStruct<const teems::Policy *>(VT_POLICY);
+    }
+    teems::Policy *mutable_policy() {
+        return GetStruct<teems::Policy *>(VT_POLICY);
+    }
+    int64_t policy_version() const {
+        return GetField<int64_t>(VT_POLICY_VERSION, 0);
+    }
+    bool mutate_policy_version(int64_t _policy_version) {
+        return SetField<int64_t>(VT_POLICY_VERSION, _policy_version, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
+               VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
+               verifier.EndTable();
+    }
+};
+
+struct ChangePolicyResultBuilder {
+    typedef ChangePolicyResult Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(ChangePolicyResult::VT_KEY, key, 0);
+    }
+    void add_policy(const teems::Policy *policy) {
+        fbb_.AddStruct(ChangePolicyResult::VT_POLICY, policy);
+    }
+    void add_policy_version(int64_t policy_version) {
+        fbb_.AddElement<int64_t>(ChangePolicyResult::VT_POLICY_VERSION,
+                                 policy_version, 0);
+    }
+    explicit ChangePolicyResultBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<ChangePolicyResult> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<ChangePolicyResult>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<ChangePolicyResult> CreateChangePolicyResult(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    const teems::Policy *policy = 0, int64_t policy_version = 0) {
+    ChangePolicyResultBuilder builder_(_fbb);
+    builder_.add_policy_version(policy_version);
+    builder_.add_key(key);
+    builder_.add_policy(policy);
+    return builder_.Finish();
+}
+
+struct SmrPropose FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef SmrProposeBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_POLICY_READ = 6,
+        VT_POLICY = 8,
+        VT_SLOT_NUMBER = 10,
+        VT_SUSPICIOUS = 12
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    bool policy_read() const {
+        return GetField<uint8_t>(VT_POLICY_READ, 0) != 0;
+    }
+    bool mutate_policy_read(bool _policy_read) {
+        return SetField<uint8_t>(VT_POLICY_READ,
+                                 static_cast<uint8_t>(_policy_read), 0);
+    }
+    const teems::Policy *policy() const {
+        return GetStruct<const teems::Policy *>(VT_POLICY);
+    }
+    teems::Policy *mutable_policy() {
+        return GetStruct<teems::Policy *>(VT_POLICY);
+    }
+    int64_t slot_number() const { return GetField<int64_t>(VT_SLOT_NUMBER, 0); }
+    bool mutate_slot_number(int64_t _slot_number) {
+        return SetField<int64_t>(VT_SLOT_NUMBER, _slot_number, 0);
+    }
+    bool suspicious() const { return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0; }
+    bool mutate_suspicious(bool _suspicious) {
+        return SetField<uint8_t>(VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(_suspicious), 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_POLICY_READ) &&
+               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
+               VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+               VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
+               verifier.EndTable();
+    }
+};
+
+struct SmrProposeBuilder {
+    typedef SmrPropose Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(SmrPropose::VT_KEY, key, 0);
+    }
+    void add_policy_read(bool policy_read) {
+        fbb_.AddElement<uint8_t>(SmrPropose::VT_POLICY_READ,
+                                 static_cast<uint8_t>(policy_read), 0);
+    }
+    void add_policy(const teems::Policy *policy) {
+        fbb_.AddStruct(SmrPropose::VT_POLICY, policy);
+    }
+    void add_slot_number(int64_t slot_number) {
+        fbb_.AddElement<int64_t>(SmrPropose::VT_SLOT_NUMBER, slot_number, 0);
+    }
+    void add_suspicious(bool suspicious) {
+        fbb_.AddElement<uint8_t>(SmrPropose::VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(suspicious), 0);
+    }
+    explicit SmrProposeBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<SmrPropose> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<SmrPropose>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<SmrPropose> CreateSmrPropose(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    bool policy_read = false, const teems::Policy *policy = 0,
+    int64_t slot_number = 0, bool suspicious = false) {
+    SmrProposeBuilder builder_(_fbb);
+    builder_.add_slot_number(slot_number);
+    builder_.add_key(key);
+    builder_.add_policy(policy);
+    builder_.add_suspicious(suspicious);
+    builder_.add_policy_read(policy_read);
+    return builder_.Finish();
+}
+
+struct SmrAccept FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef SmrAcceptBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_SLOT_NUMBER = 4,
+        VT_SUSPICIOUS = 6
+    };
+    int64_t slot_number() const { return GetField<int64_t>(VT_SLOT_NUMBER, 0); }
+    bool mutate_slot_number(int64_t _slot_number) {
+        return SetField<int64_t>(VT_SLOT_NUMBER, _slot_number, 0);
+    }
+    bool suspicious() const { return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0; }
+    bool mutate_suspicious(bool _suspicious) {
+        return SetField<uint8_t>(VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(_suspicious), 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+               VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
+               verifier.EndTable();
+    }
+};
+
+struct SmrAcceptBuilder {
+    typedef SmrAccept Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_slot_number(int64_t slot_number) {
+        fbb_.AddElement<int64_t>(SmrAccept::VT_SLOT_NUMBER, slot_number, 0);
+    }
+    void add_suspicious(bool suspicious) {
+        fbb_.AddElement<uint8_t>(SmrAccept::VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(suspicious), 0);
+    }
+    explicit SmrAcceptBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<SmrAccept> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<SmrAccept>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<SmrAccept> CreateSmrAccept(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t slot_number = 0,
+    bool suspicious = false) {
+    SmrAcceptBuilder builder_(_fbb);
+    builder_.add_slot_number(slot_number);
+    builder_.add_suspicious(suspicious);
+    return builder_.Finish();
+}
+
+struct SmrReject FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef SmrRejectBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_SLOT_NUMBER = 4,
+        VT_SUSPICIOUS = 6
+    };
+    int64_t slot_number() const { return GetField<int64_t>(VT_SLOT_NUMBER, 0); }
+    bool mutate_slot_number(int64_t _slot_number) {
+        return SetField<int64_t>(VT_SLOT_NUMBER, _slot_number, 0);
+    }
+    bool suspicious() const { return GetField<uint8_t>(VT_SUSPICIOUS, 0) != 0; }
+    bool mutate_suspicious(bool _suspicious) {
+        return SetField<uint8_t>(VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(_suspicious), 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_SLOT_NUMBER) &&
+               VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
+               verifier.EndTable();
+    }
+};
+
+struct SmrRejectBuilder {
+    typedef SmrReject Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_slot_number(int64_t slot_number) {
+        fbb_.AddElement<int64_t>(SmrReject::VT_SLOT_NUMBER, slot_number, 0);
+    }
+    void add_suspicious(bool suspicious) {
+        fbb_.AddElement<uint8_t>(SmrReject::VT_SUSPICIOUS,
+                                 static_cast<uint8_t>(suspicious), 0);
+    }
+    explicit SmrRejectBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<SmrReject> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<SmrReject>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<SmrReject> CreateSmrReject(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t slot_number = 0,
+    bool suspicious = false) {
+    SmrRejectBuilder builder_(_fbb);
+    builder_.add_slot_number(slot_number);
+    builder_.add_suspicious(suspicious);
+    return builder_.Finish();
+}
+
 struct StabilizeArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef StabilizeArgsBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
@@ -983,6 +1356,11 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     const void *message() const { return GetPointer<const void *>(VT_MESSAGE); }
     template <typename T>
     const T *message_as() const;
+    const teems::ChangePolicyResult *message_as_ChangePolicyResult() const {
+        return message_type() == teems::BasicMessage_ChangePolicyResult
+                   ? static_cast<const teems::ChangePolicyResult *>(message())
+                   : nullptr;
+    }
     const teems::Greeting *message_as_Greeting() const {
         return message_type() == teems::BasicMessage_Greeting
                    ? static_cast<const teems::Greeting *>(message())
@@ -1028,6 +1406,21 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                    ? static_cast<const teems::PutResult *>(message())
                    : nullptr;
     }
+    const teems::SmrPropose *message_as_SmrPropose() const {
+        return message_type() == teems::BasicMessage_SmrPropose
+                   ? static_cast<const teems::SmrPropose *>(message())
+                   : nullptr;
+    }
+    const teems::SmrAccept *message_as_SmrAccept() const {
+        return message_type() == teems::BasicMessage_SmrAccept
+                   ? static_cast<const teems::SmrAccept *>(message())
+                   : nullptr;
+    }
+    const teems::SmrReject *message_as_SmrReject() const {
+        return message_type() == teems::BasicMessage_SmrReject
+                   ? static_cast<const teems::SmrReject *>(message())
+                   : nullptr;
+    }
     const teems::StabilizeArgs *message_as_StabilizeArgs() const {
         return message_type() == teems::BasicMessage_StabilizeArgs
                    ? static_cast<const teems::StabilizeArgs *>(message())
@@ -1049,6 +1442,12 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                verifier.EndTable();
     }
 };
+
+template <>
+inline const teems::ChangePolicyResult *
+Message::message_as<teems::ChangePolicyResult>() const {
+    return message_as_ChangePolicyResult();
+}
 
 template <>
 inline const teems::Greeting *Message::message_as<teems::Greeting>() const {
@@ -1097,6 +1496,21 @@ inline const teems::PutArgs *Message::message_as<teems::PutArgs>() const {
 template <>
 inline const teems::PutResult *Message::message_as<teems::PutResult>() const {
     return message_as_PutResult();
+}
+
+template <>
+inline const teems::SmrPropose *Message::message_as<teems::SmrPropose>() const {
+    return message_as_SmrPropose();
+}
+
+template <>
+inline const teems::SmrAccept *Message::message_as<teems::SmrAccept>() const {
+    return message_as_SmrAccept();
+}
+
+template <>
+inline const teems::SmrReject *Message::message_as<teems::SmrReject>() const {
+    return message_as_SmrReject();
 }
 
 template <>
@@ -1157,6 +1571,10 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         case BasicMessage_NONE: {
             return true;
         }
+        case BasicMessage_ChangePolicyResult: {
+            auto ptr = reinterpret_cast<const teems::ChangePolicyResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
         case BasicMessage_Greeting: {
             auto ptr = reinterpret_cast<const teems::Greeting *>(obj);
             return verifier.VerifyTable(ptr);
@@ -1191,6 +1609,18 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         }
         case BasicMessage_PutResult: {
             auto ptr = reinterpret_cast<const teems::PutResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_SmrPropose: {
+            auto ptr = reinterpret_cast<const teems::SmrPropose *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_SmrAccept: {
+            auto ptr = reinterpret_cast<const teems::SmrAccept *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_SmrReject: {
+            auto ptr = reinterpret_cast<const teems::SmrReject *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_StabilizeArgs: {

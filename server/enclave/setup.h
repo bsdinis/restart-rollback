@@ -32,7 +32,9 @@ bool closed();
 
 size_t write_quorum_size();
 size_t read_quorum_size(size_t s);
+size_t max_quorum_size(size_t s);
 bool is_suspicious();
+bool is_leader();
 size_t n_replicas();
 ssize_t my_idx();
 

@@ -117,8 +117,6 @@ void test_metadata_get_put() {
         EXPECT_EQ(metadata_get(gen_teems_ticket(call_type::Sync), 0, true, 3,
                                &get_value, get_policy_version, get_timestamp),
                   true, "metadata get");
-        INFO("get ver %ld | put ver %ld", get_policy_version,
-             put_policy_version);
         EXPECT_EQ(get_policy_version, put_policy_version, "metadata get");
         EXPECT_EQ(get_timestamp, put_timestamp, "metadata get");
         EXPECT_EQ(get_value, put_value, "metadata get");
@@ -254,7 +252,7 @@ void test_pipelining() {
 
     for (int64_t const ticket : put_tickets) {
         auto reply = get_reply<std::tuple<int64_t, int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(reply), true, "pipelining put");
+        EXPECT_EQ(std::get<2>(reply), true, "pipelining put");
     }
 }
 

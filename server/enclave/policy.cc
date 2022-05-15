@@ -19,18 +19,18 @@ namespace teems {
 
 bool ServerPolicy::can_get(int32_t id) const {
     if (id == m_owner_id) {
-        return (m_policy_code & (0b1 << 3)) != 0;
+        return (m_code & (0b1 << 3)) != 0;
     }
 
-    return (m_policy_code & (0b1 << 0)) != 0;
+    return (m_code & (0b1 << 0)) != 0;
 }
 
 bool ServerPolicy::can_put(int32_t id) const {
     if (id == m_owner_id) {
-        return (m_policy_code & (0b1 << 4)) != 0;
+        return (m_code & (0b1 << 4)) != 0;
     }
 
-    return (m_policy_code & (0b1 << 1)) != 0;
+    return (m_code & (0b1 << 1)) != 0;
 }
 
 bool ServerPolicy::can_change_policy(int32_t id) const {
@@ -38,11 +38,11 @@ bool ServerPolicy::can_change_policy(int32_t id) const {
         return true;
     }
 
-    return (m_policy_code & (0b1 << 2)) != 0;
+    return (m_code & (0b1 << 2)) != 0;
 }
 
 Policy ServerPolicy::to_flatbuffers() const {
-    return Policy(m_policy_code, m_owner_id, m_valid_from);
+    return Policy(m_code, m_owner_id, m_valid_from);
 }
 
 }  // namespace teems

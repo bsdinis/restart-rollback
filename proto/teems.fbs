@@ -27,6 +27,10 @@ enum MessageType:byte {
     reset_req,
     reset_resp,
 
+    smr_propose,
+    smr_accept,
+    smr_reject,
+
     stabilize_req,
 
     close_req,
@@ -43,11 +47,13 @@ struct Policy {
 }
 
 table GetArgs {
-    key : int64;
+    key: int64;
+    retry: bool;
 }
 
 table GetResult {
     key : int64;
+    retry: bool;
     value : Value;
     policy: Policy;
     policy_version: int64;
@@ -58,10 +64,12 @@ table GetResult {
 
 table GetTimestampArgs {
     key : int64;
+    retry: bool;
 }
 
 table GetTimestampResult {
     key : int64;
+    retry: bool;
     policy: Policy;
     policy_version: int64;
     timestamp: int64;
@@ -92,6 +100,31 @@ table PutResult {
     timestamp: int64;
 }
 
+table ChangePolicyResult {
+    key: int64;
+    policy: Policy;
+    policy_version: int64;
+}
+
+table SmrPropose {
+    key: int64;
+    policy_read: bool;
+    policy: Policy;
+    slot_number: int64;
+    suspicious: bool;
+}
+
+table SmrAccept {
+    slot_number: int64;
+    suspicious: bool;
+}
+
+table SmrReject {
+    slot_number: int64;
+    suspicious: bool;
+}
+
+
 table StabilizeArgs {
     key : int64;
     policy_version: int64;
@@ -105,6 +138,7 @@ table Greeting {
 table Empty { }
 
 union BasicMessage {
+    ChangePolicyResult,
     Greeting,
     GetArgs,
     GetResult,
@@ -114,6 +148,9 @@ union BasicMessage {
     ProxyPutArgs,
     PutArgs,
     PutResult,
+    SmrPropose,
+    SmrAccept,
+    SmrReject,
     StabilizeArgs,
     Empty,
 }

@@ -38,6 +38,16 @@ int get_timestamp_resp_handler_action(PutCallContext &context,
                                       int64_t policy_version, int64_t timestamp,
                                       bool suspicious,
                                       ServerPolicy const &policy);
+int get_retry_resp_handler_action(
+    GetCallContext &context, ssize_t peer_idx,
+    std::array<uint8_t, REGISTER_SIZE> const &value, int64_t timestamp,
+    bool stable, bool suspicious);
+int get_timestamp_retry_resp_handler_action(PutCallContext &context,
+                                            int64_t timestamp, bool suspicious);
+
+// retries after policy retrieval
+int get_retry_get(GetCallContext &context);
+int put_retry_get(PutCallContext &context);
 
 }  // namespace handler
 }  // namespace teems

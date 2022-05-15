@@ -22,7 +22,8 @@ int proxy_get_handler(peer &p, int64_t ticket, ProxyGetArgs const *args) {
         g_call_map.add_get_call(&p, args->client_id(), ticket, args->key());
 
     flatbuffers::FlatBufferBuilder builder;
-    auto get_args = teems::CreateGetArgs(builder, args->key());
+    auto get_args =
+        teems::CreateGetArgs(builder, args->key(), false /* retry */);
     auto get_req =
         teems::CreateMessage(builder, teems::MessageType_get_req, ticket,
                              teems::BasicMessage_GetArgs, get_args.Union());
@@ -55,7 +56,7 @@ int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
 
     flatbuffers::FlatBufferBuilder builder;
     auto get_timestamp_args =
-        teems::CreateGetTimestampArgs(builder, args->key());
+        teems::CreateGetTimestampArgs(builder, args->key(), false /* retry */);
     auto get_timestamp_req = teems::CreateMessage(
         builder, teems::MessageType_get_timestamp_req, ticket,
         teems::BasicMessage_GetTimestampArgs, get_timestamp_args.Union());

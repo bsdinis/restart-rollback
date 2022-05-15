@@ -43,6 +43,7 @@ bool KeyValueStore::get(int64_t key, bool *stable, bool *suspicious,
     assert(suspicious != nullptr);
     *suspicious = setup::is_suspicious();
 
+    *policy = ServerPolicy();
     *policy_version = -1;
     *timestamp = -1;
 
@@ -73,6 +74,7 @@ bool KeyValueStore::get_timestamp(int64_t key, bool *stable, bool *suspicious,
     assert(suspicious != nullptr);
     *suspicious = setup::is_suspicious();
 
+    *policy = ServerPolicy();
     *policy_version = -1;
     *timestamp = -1;
 
@@ -99,11 +101,13 @@ bool KeyValueStore::put(int64_t key, Value const *val,
                         int64_t *current_timestamp) {
     auto key_it = m_store.find(key);
     if (key_it == m_store.end()) {
+        *current_policy_version = std::max<int64_t>(policy_version, 0);
         *current_timestamp = timestamp;
         m_store.insert({key, MACedTimestampedValue(
                                  TimestampedValue(val, timestamp, false),
                                  this->get_persistent_pointer(key), key)});
-        m_policy_store.insert({key, std::make_tuple(policy_version, policy)});
+        m_policy_store.insert(
+            {key, std::make_tuple(*current_policy_version, policy)});
         return true;
     }
 
@@ -113,8 +117,7 @@ bool KeyValueStore::put(int64_t key, Value const *val,
         return false;
     }
 
-    if (std::get<0>(policy_it->second) != policy_version &&
-        key_it->second.m_ts_val.m_timestamp >= timestamp) {
+    if (key_it->second.m_ts_val.m_timestamp >= timestamp) {
         *current_policy_version = std::get<0>(policy_it->second);
         *current_timestamp = key_it->second.m_ts_val.m_timestamp;
         return false;
@@ -143,6 +146,33 @@ void KeyValueStore::stabilize(int64_t key, int64_t policy_version,
         key_it->second.m_ts_val.m_timestamp == timestamp) {
         key_it->second.m_ts_val.m_stable = true;
     }
+}
+
+bool KeyValueStore::get_policy(int64_t key, ServerPolicy *policy,
+                               int64_t *policy_version) {
+    *policy_version = -1;
+
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        *policy = ServerPolicy();
+        return false;
+    }
+
+    std::tie(*policy_version, *policy) = policy_it->second;
+    return true;
+}
+
+bool KeyValueStore::change_policy(int64_t key, ServerPolicy policy,
+                                  int64_t *policy_version) {
+    auto policy_it = m_policy_store.find(key);
+    if (policy_it == m_policy_store.end()) {
+        *policy_version = -1;
+        return false;
+    }
+
+    *policy_version = std::get<0>(policy_it->second) + 1;
+    policy_it->second = std::make_tuple(*policy_version, policy);
+    return true;
 }
 
 void KeyValueStore::reset() { m_store.clear(); }
