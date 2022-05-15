@@ -90,7 +90,7 @@ int handle_client_message(peer &p) {
                 break;
             case teems::MessageType_proxy_get_req:
                 proxy_get_handler(p, request->ticket(),
-                                  request->message_as_GetArgs());
+                                  request->message_as_ProxyGetArgs());
                 perf_rec.add("get", timer::elapsed_usec(begin));
                 break;
             case teems::MessageType_proxy_put_req:

@@ -68,7 +68,8 @@ bool KeyValueStore::get(int64_t key, bool *stable, bool *suspicious,
 }
 
 bool KeyValueStore::get_timestamp(int64_t key, bool *stable, bool *suspicious,
-                                  int64_t *policy_version, int64_t *timestamp) {
+                                  int64_t *policy_version, int64_t *timestamp,
+                                  ServerPolicy *policy) {
     assert(suspicious != nullptr);
     *suspicious = setup::is_suspicious();
 
@@ -87,7 +88,7 @@ bool KeyValueStore::get_timestamp(int64_t key, bool *stable, bool *suspicious,
         return false;
     }
 
-    *policy_version = std::get<0>(policy_it->second);
+    std::tie(*policy_version, *policy) = policy_it->second;
     *timestamp = key_it->second.m_ts_val.m_timestamp;
     return true;
 }

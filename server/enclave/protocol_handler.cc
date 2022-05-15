@@ -19,6 +19,7 @@ namespace {
 int get_return_to_client(GetCallContext const &context);
 int get_writeback(GetCallContext &context);
 int put_return_to_client(PutCallContext const &context);
+int put_return_to_client_access_denied(PutCallContext const &context);
 int put_do_write(PutCallContext &context);
 int put_resp_handler_get_action(GetCallContext &context, bool success,
                                 int64_t policy_version, int64_t timestamp);
@@ -76,12 +77,16 @@ int get_timestamp_handler(peer &p, int64_t ticket,
     bool suspicious;
     int64_t timestamp;
     int64_t policy_version;
+    ServerPolicy policy;
 
-    bool success = g_kv_store.get_timestamp(args->key(), &stable, &suspicious,
-                                            &policy_version, &timestamp);
+    bool success =
+        g_kv_store.get_timestamp(args->key(), &stable, &suspicious,
+                                 &policy_version, &timestamp, &policy);
 
-    auto get_timestamp_res = teems::CreateGetTimestampResult(
-        builder, args->key(), policy_version, timestamp, suspicious);
+    auto fb_policy = policy.to_flatbuffers();
+    auto get_timestamp_res =
+        teems::CreateGetTimestampResult(builder, args->key(), &fb_policy,
+                                        policy_version, timestamp, suspicious);
 
     auto result = teems::CreateMessage(
         builder, teems::MessageType_get_timestamp_resp, ticket,
@@ -154,27 +159,28 @@ int get_resp_handler_action(GetCallContext &context, ssize_t peer_idx,
         // get part is done
         return 0;
     }
-    context.add_get_reply(peer_idx, policy_version, timestamp, stable,
-                          suspicious, policy, value);
+    auto action = context.add_get_reply(peer_idx, policy_version, timestamp,
+                                        stable, suspicious, policy, value);
 
-    // TODO: check policy
-    // TODO: handle mismatch timestamp vs policy
-    // TODO: handle failed SMR read of timestamp
-    if (context.early_get_done()) {
-        context.finish_get_phase();
-        return get_return_to_client(context);
-    }
-
-    if (context.full_get_done()) {
-        context.finish_get_phase();
-        if (context.call_done()) {
+    switch (action) {
+        case GetNextAction::None:
+            break;
+        case GetNextAction::FallbackPolicyRead:
+            // TODO
+            INFO("don't know how to do a full policy read");
+            break;
+        case GetNextAction::Writeback:
+            return get_writeback(context);
+            break;
+        case GetNextAction::StabilizeAndReturnToClient:
             if (do_stabilize(context, false /* to_outdated */) != 0) {
                 ERROR("failed to broadcast stabilize");
             }
             return get_return_to_client(context);
-        } else {
-            return get_writeback(context);
-        }
+            break;
+        case GetNextAction::ReturnToClient:
+            return get_return_to_client(context);
+            break;
     }
 
     return 0;
@@ -189,26 +195,33 @@ int get_timestamp_resp_handler(peer &p, int64_t ticket,
     }
 
     return get_timestamp_resp_handler_action(
-        *ctx, args->policy_version(), args->timestamp(), args->suspicious());
+        *ctx, args->policy_version(), args->timestamp(), args->suspicious(),
+        ServerPolicy(args->policy()));
 }
 int get_timestamp_resp_handler_action(PutCallContext &context,
                                       int64_t policy_version, int64_t timestamp,
-                                      bool suspicious) {
+                                      bool suspicious,
+                                      ServerPolicy const &policy) {
     if (context.get_done()) {
         // get part is done
         return 0;
     }
 
-    // TODO: check policy
-    // TODO: handle mismatch timestamp vs policy
-    // TODO: handle failed SMR read of timestamp
-    context.add_get_reply(policy_version, timestamp, suspicious);
-
-    if (context.get_done()) {
-        return put_do_write(context);
+    auto action =
+        context.add_get_reply(policy_version, timestamp, suspicious, policy);
+    switch (action) {
+        case PutNextAction::None:
+            return 0;
+        case PutNextAction::FallbackPolicyRead:
+            // TODO
+            INFO("don't know how to do a full policy read");
+            return -1;
+        case PutNextAction::DoWrite:
+            return put_do_write(context);
+        default:
+            ERROR("there shouldn't be any other actions here");
+            return -1;
     }
-
-    return 0;
 }
 
 int put_resp_handler(peer &p, int64_t ticket, PutResult const *args) {
@@ -235,23 +248,31 @@ int put_resp_handler(peer &p, int64_t ticket, PutResult const *args) {
 namespace {
 int get_return_to_client(GetCallContext const &context) {
     LOG("get [%ld]: returning to client", context.ticket());
+
     flatbuffers::FlatBufferBuilder builder;
-
-    auto const &value = context.value();
     auto fb_value = teems::Value();
-    flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
-        fb_value.mutable_data();
-    {
-        for (size_t idx = 0; idx < value.size(); ++idx) {
-            fb_arr->Mutate(idx, value[idx]);
-        }
-    }
-
     auto fb_policy = context.policy().to_flatbuffers();
 
+    int64_t policy_version = -1;
+    int64_t timestamp = -1;
+
+    if (context.policy().can_get(context.client_id())) {
+        auto const &value = context.value();
+        flatbuffers::Array<uint8_t, REGISTER_SIZE> *fb_arr =
+            fb_value.mutable_data();
+        {
+            for (size_t idx = 0; idx < value.size(); ++idx) {
+                fb_arr->Mutate(idx, value[idx]);
+            }
+        }
+
+        policy_version = context.policy_version();
+        timestamp = context.timestamp();
+    }
+
     auto get_res = teems::CreateGetResult(
-        builder, context.key(), &fb_value, &fb_policy, context.policy_version(),
-        context.timestamp(), true /* stable */, false /* suspicious */);
+        builder, context.key(), &fb_value, &fb_policy, policy_version,
+        timestamp, true /* stable */, false /* suspicious */);
 
     auto result = teems::CreateMessage(
         builder, teems::MessageType_proxy_get_resp, context.ticket(),
@@ -321,7 +342,26 @@ int put_return_to_client(PutCallContext const &context) {
                                                  std::move(builder));
 }
 
+int put_return_to_client_access_denied(PutCallContext const &context) {
+    LOG("put [%ld]: returning to client", context.ticket());
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto put_res = teems::CreatePutResult(builder, true, -1, -1);
+
+    auto message = teems::CreateMessage(
+        builder, teems::MessageType_proxy_put_resp, context.ticket(),
+        teems::BasicMessage_PutResult, put_res.Union());
+    builder.Finish(message);
+
+    return teems::handler_helper::append_message(*context.client(),
+                                                 std::move(builder));
+}
+
 int put_do_write(PutCallContext &context) {
+    if (!context.policy().can_put(context.client_id())) {
+        return put_return_to_client_access_denied(context);
+    }
+
     flatbuffers::FlatBufferBuilder builder;
 
     auto const &value = context.value();
@@ -363,14 +403,20 @@ int put_resp_handler_get_action(GetCallContext &context, bool success,
         return 0;  // call finished
     }
 
-    context.add_writeback_reply();
-    if (context.call_done()) {
-        if (do_stabilize(context, true /* to_outdated */) != 0) {
-            ERROR("failed to broadcast stabilize");
-        }
-        return get_return_to_client(context);
+    auto action = context.add_writeback_reply();
+    switch (action) {
+        case GetNextAction::StabilizeAndReturnToClient:
+            if (do_stabilize(context, true /* to_outdated */) != 0) {
+                ERROR("failed to broadcast stabilize");
+            }
+            return get_return_to_client(context);
+            break;
+        case GetNextAction::None:
+            return 0;
+        default:
+            ERROR("invalid action for a writeback reply");
+            return -1;
     }
-    return 0;
 }
 int put_resp_handler_put_action(PutCallContext &context, bool success,
                                 int64_t policy_version, int64_t timestamp) {
@@ -378,11 +424,16 @@ int put_resp_handler_put_action(PutCallContext &context, bool success,
         return 0;  // call finished
     }
 
-    context.add_put_reply();
-    if (context.call_done()) {
-        return put_return_to_client(context);
+    auto action = context.add_put_reply();
+    switch (action) {
+        case PutNextAction::None:
+            return 0;
+        case PutNextAction::ReturnToClient:
+            return put_return_to_client(context);
+        default:
+            ERROR("invalid action for a put reply");
+            return -1;
     }
-    return 0;
 }
 
 int do_stabilize(GetCallContext const &context, bool to_outdated) {

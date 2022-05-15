@@ -64,7 +64,8 @@ class KeyValueStore {
              int64_t *policy_version, int64_t *timestamp, ServerPolicy *policy,
              std::array<uint8_t, REGISTER_SIZE> *val);
     bool get_timestamp(int64_t key, bool *stable, bool *suspicious,
-                       int64_t *policy_version, int64_t *timestamp);
+                       int64_t *policy_version, int64_t *timestamp,
+                       ServerPolicy *policy);
     bool put(int64_t key, Value const *val, ServerPolicy const &policy,
              int64_t policy_version, int64_t timestamp,
              int64_t *current_policy_version, int64_t *current_timestamp);

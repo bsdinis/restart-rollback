@@ -24,7 +24,7 @@ class ServerPolicy {
     Policy to_flatbuffers() const;
 
    private:
-    uint8_t m_policy_code = 0;
+    uint8_t m_policy_code = 0xff;
     int32_t m_owner_id = 0;
     int64_t m_valid_from = 0;
 };

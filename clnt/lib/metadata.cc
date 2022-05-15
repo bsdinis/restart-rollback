@@ -388,11 +388,11 @@ int64_t send_metadata_get_request(peer &server, int64_t super_ticket,
         gen_metadata_ticket(super_ticket, call_number, independent, type);
 
     flatbuffers::FlatBufferBuilder builder;
-    auto get_args = teems::CreateGetArgs(builder, key);
+    auto get_args = teems::CreateProxyGetArgs(builder, key, g_client_id);
 
-    auto request =
-        teems::CreateMessage(builder, teems::MessageType_proxy_get_req, ticket,
-                             teems::BasicMessage_GetArgs, get_args.Union());
+    auto request = teems::CreateMessage(
+        builder, teems::MessageType_proxy_get_req, ticket,
+        teems::BasicMessage_ProxyGetArgs, get_args.Union());
     builder.Finish(request);
 
     size_t const size = builder.GetSize();

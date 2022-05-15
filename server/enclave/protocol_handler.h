@@ -36,7 +36,8 @@ int get_resp_handler_action(GetCallContext &context, ssize_t peer_idx,
                             bool stable, bool suspicious);
 int get_timestamp_resp_handler_action(PutCallContext &context,
                                       int64_t policy_version, int64_t timestamp,
-                                      bool suspicious);
+                                      bool suspicious,
+                                      ServerPolicy const &policy);
 
 }  // namespace handler
 }  // namespace teems

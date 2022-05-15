@@ -15,10 +15,11 @@ extern teems::KeyValueStore g_kv_store;
 namespace teems {
 namespace handler {
 
-int proxy_get_handler(peer &p, int64_t ticket, GetArgs const *args) {
+int proxy_get_handler(peer &p, int64_t ticket, ProxyGetArgs const *args) {
     LOG("proxy get request [%ld]: key %ld", ticket, args->key());
 
-    auto ctx = g_call_map.add_get_call(&p, ticket, args->key());
+    auto ctx =
+        g_call_map.add_get_call(&p, args->client_id(), ticket, args->key());
 
     flatbuffers::FlatBufferBuilder builder;
     auto get_args = teems::CreateGetArgs(builder, args->key());
@@ -49,8 +50,8 @@ int proxy_get_handler(peer &p, int64_t ticket, GetArgs const *args) {
 int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
     LOG("proxy put request [%ld]: key %ld", ticket, args->key());
 
-    auto ctx = g_call_map.add_put_call(&p, ticket, args->key(),
-                                       args->client_id(), args->value());
+    auto ctx = g_call_map.add_put_call(&p, args->client_id(), ticket,
+                                       args->key(), args->value());
 
     flatbuffers::FlatBufferBuilder builder;
     auto get_timestamp_args =
@@ -70,11 +71,12 @@ int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
     bool suspicious;
     int64_t timestamp;
     int64_t policy_version;
+    ServerPolicy policy;
 
     g_kv_store.get_timestamp(args->key(), &stable, &suspicious, &policy_version,
-                             &timestamp);
+                             &timestamp, &policy);
     return get_timestamp_resp_handler_action(*ctx, policy_version, timestamp,
-                                             suspicious);
+                                             suspicious, policy);
 }
 
 }  // namespace handler

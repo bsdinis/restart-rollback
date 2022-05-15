@@ -62,11 +62,16 @@ table GetTimestampArgs {
 
 table GetTimestampResult {
     key : int64;
+    policy: Policy;
     policy_version: int64;
     timestamp: int64;
     suspicious: bool;
 }
 
+table ProxyGetArgs {
+    key : int64;
+    client_id: int32;
+}
 table ProxyPutArgs {
     key : int64;
     value : Value;
@@ -105,6 +110,7 @@ union BasicMessage {
     GetResult,
     GetTimestampArgs,
     GetTimestampResult,
+    ProxyGetArgs,
     ProxyPutArgs,
     PutArgs,
     PutResult,

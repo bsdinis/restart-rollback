@@ -23,6 +23,9 @@ struct GetTimestampArgsBuilder;
 struct GetTimestampResult;
 struct GetTimestampResultBuilder;
 
+struct ProxyGetArgs;
+struct ProxyGetArgsBuilder;
+
 struct ProxyPutArgs;
 struct ProxyPutArgsBuilder;
 
@@ -113,22 +116,24 @@ enum BasicMessage : uint8_t {
     BasicMessage_GetResult = 3,
     BasicMessage_GetTimestampArgs = 4,
     BasicMessage_GetTimestampResult = 5,
-    BasicMessage_ProxyPutArgs = 6,
-    BasicMessage_PutArgs = 7,
-    BasicMessage_PutResult = 8,
-    BasicMessage_StabilizeArgs = 9,
-    BasicMessage_Empty = 10,
+    BasicMessage_ProxyGetArgs = 6,
+    BasicMessage_ProxyPutArgs = 7,
+    BasicMessage_PutArgs = 8,
+    BasicMessage_PutResult = 9,
+    BasicMessage_StabilizeArgs = 10,
+    BasicMessage_Empty = 11,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[11] {
+inline const BasicMessage (&EnumValuesBasicMessage())[12] {
     static const BasicMessage values[] = {BasicMessage_NONE,
                                           BasicMessage_Greeting,
                                           BasicMessage_GetArgs,
                                           BasicMessage_GetResult,
                                           BasicMessage_GetTimestampArgs,
                                           BasicMessage_GetTimestampResult,
+                                          BasicMessage_ProxyGetArgs,
                                           BasicMessage_ProxyPutArgs,
                                           BasicMessage_PutArgs,
                                           BasicMessage_PutResult,
@@ -138,18 +143,12 @@ inline const BasicMessage (&EnumValuesBasicMessage())[11] {
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[12] = {"NONE",
-                                          "Greeting",
-                                          "GetArgs",
-                                          "GetResult",
-                                          "GetTimestampArgs",
-                                          "GetTimestampResult",
-                                          "ProxyPutArgs",
-                                          "PutArgs",
-                                          "PutResult",
-                                          "StabilizeArgs",
-                                          "Empty",
-                                          nullptr};
+    static const char *const names[13] = {
+        "NONE",         "Greeting",         "GetArgs",
+        "GetResult",    "GetTimestampArgs", "GetTimestampResult",
+        "ProxyGetArgs", "ProxyPutArgs",     "PutArgs",
+        "PutResult",    "StabilizeArgs",    "Empty",
+        nullptr};
     return names;
 }
 
@@ -188,6 +187,11 @@ struct BasicMessageTraits<teems::GetTimestampArgs> {
 template <>
 struct BasicMessageTraits<teems::GetTimestampResult> {
     static const BasicMessage enum_value = BasicMessage_GetTimestampResult;
+};
+
+template <>
+struct BasicMessageTraits<teems::ProxyGetArgs> {
+    static const BasicMessage enum_value = BasicMessage_ProxyGetArgs;
 };
 
 template <>
@@ -477,12 +481,19 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef GetTimestampResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_POLICY_VERSION = 6,
-        VT_TIMESTAMP = 8,
-        VT_SUSPICIOUS = 10
+        VT_POLICY = 6,
+        VT_POLICY_VERSION = 8,
+        VT_TIMESTAMP = 10,
+        VT_SUSPICIOUS = 12
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    const teems::Policy *policy() const {
+        return GetStruct<const teems::Policy *>(VT_POLICY);
+    }
+    teems::Policy *mutable_policy() {
+        return GetStruct<teems::Policy *>(VT_POLICY);
+    }
     int64_t policy_version() const {
         return GetField<int64_t>(VT_POLICY_VERSION, 0);
     }
@@ -501,6 +512,7 @@ struct GetTimestampResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
                VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                VerifyField<int64_t>(verifier, VT_TIMESTAMP) &&
                VerifyField<uint8_t>(verifier, VT_SUSPICIOUS) &&
@@ -514,6 +526,9 @@ struct GetTimestampResultBuilder {
     flatbuffers::uoffset_t start_;
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(GetTimestampResult::VT_KEY, key, 0);
+    }
+    void add_policy(const teems::Policy *policy) {
+        fbb_.AddStruct(GetTimestampResult::VT_POLICY, policy);
     }
     void add_policy_version(int64_t policy_version) {
         fbb_.AddElement<int64_t>(GetTimestampResult::VT_POLICY_VERSION,
@@ -540,13 +555,64 @@ struct GetTimestampResultBuilder {
 
 inline flatbuffers::Offset<GetTimestampResult> CreateGetTimestampResult(
     flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    int64_t policy_version = 0, int64_t timestamp = 0,
-    bool suspicious = false) {
+    const teems::Policy *policy = 0, int64_t policy_version = 0,
+    int64_t timestamp = 0, bool suspicious = false) {
     GetTimestampResultBuilder builder_(_fbb);
     builder_.add_timestamp(timestamp);
     builder_.add_policy_version(policy_version);
     builder_.add_key(key);
+    builder_.add_policy(policy);
     builder_.add_suspicious(suspicious);
+    return builder_.Finish();
+}
+
+struct ProxyGetArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef ProxyGetArgsBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_CLIENT_ID = 6
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    int32_t client_id() const { return GetField<int32_t>(VT_CLIENT_ID, 0); }
+    bool mutate_client_id(int32_t _client_id) {
+        return SetField<int32_t>(VT_CLIENT_ID, _client_id, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<int32_t>(verifier, VT_CLIENT_ID) &&
+               verifier.EndTable();
+    }
+};
+
+struct ProxyGetArgsBuilder {
+    typedef ProxyGetArgs Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(ProxyGetArgs::VT_KEY, key, 0);
+    }
+    void add_client_id(int32_t client_id) {
+        fbb_.AddElement<int32_t>(ProxyGetArgs::VT_CLIENT_ID, client_id, 0);
+    }
+    explicit ProxyGetArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<ProxyGetArgs> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<ProxyGetArgs>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<ProxyGetArgs> CreateProxyGetArgs(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    int32_t client_id = 0) {
+    ProxyGetArgsBuilder builder_(_fbb);
+    builder_.add_key(key);
+    builder_.add_client_id(client_id);
     return builder_.Finish();
 }
 
@@ -942,6 +1008,11 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                    ? static_cast<const teems::GetTimestampResult *>(message())
                    : nullptr;
     }
+    const teems::ProxyGetArgs *message_as_ProxyGetArgs() const {
+        return message_type() == teems::BasicMessage_ProxyGetArgs
+                   ? static_cast<const teems::ProxyGetArgs *>(message())
+                   : nullptr;
+    }
     const teems::ProxyPutArgs *message_as_ProxyPutArgs() const {
         return message_type() == teems::BasicMessage_ProxyPutArgs
                    ? static_cast<const teems::ProxyPutArgs *>(message())
@@ -1004,6 +1075,12 @@ template <>
 inline const teems::GetTimestampResult *
 Message::message_as<teems::GetTimestampResult>() const {
     return message_as_GetTimestampResult();
+}
+
+template <>
+inline const teems::ProxyGetArgs *Message::message_as<teems::ProxyGetArgs>()
+    const {
+    return message_as_ProxyGetArgs();
 }
 
 template <>
@@ -1098,6 +1175,10 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
         }
         case BasicMessage_GetTimestampResult: {
             auto ptr = reinterpret_cast<const teems::GetTimestampResult *>(obj);
+            return verifier.VerifyTable(ptr);
+        }
+        case BasicMessage_ProxyGetArgs: {
+            auto ptr = reinterpret_cast<const teems::ProxyGetArgs *>(obj);
             return verifier.VerifyTable(ptr);
         }
         case BasicMessage_ProxyPutArgs: {
