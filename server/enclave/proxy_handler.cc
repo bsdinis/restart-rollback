@@ -76,8 +76,41 @@ int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
 
     g_kv_store.get_timestamp(args->key(), &stable, &suspicious, &policy_version,
                              &timestamp, &policy);
-    return get_timestamp_resp_handler_action(*ctx, policy_version, timestamp,
-                                             suspicious, policy);
+    return get_timestamp_resp_handler_put_action(*ctx, policy_version,
+                                                 timestamp, suspicious, policy);
+}
+
+int proxy_change_policy_handler(peer &p, int64_t ticket,
+                                ChangePolicyArgs const *args) {
+    INFO("change policy request [%ld]: key %ld", ticket, args->key());
+
+    auto ctx = g_call_map.add_change_policy_call(
+        &p, args->client_id(), ticket, args->key(), args->policy_code());
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto get_timestamp_args =
+        teems::CreateGetTimestampArgs(builder, args->key(), false /* retry */);
+    auto get_timestamp_req = teems::CreateMessage(
+        builder, teems::MessageType_get_timestamp_req, ticket,
+        teems::BasicMessage_GetTimestampArgs, get_timestamp_args.Union());
+
+    builder.Finish(get_timestamp_req);
+
+    if (teems::handler_helper::broadcast(std::move(builder)) != 0) {
+        ERROR("failed to broadcast get request");
+        return -1;
+    }
+
+    bool stable;
+    bool suspicious;
+    int64_t timestamp;
+    int64_t policy_version;
+    ServerPolicy policy;
+
+    g_kv_store.get_timestamp(args->key(), &stable, &suspicious, &policy_version,
+                             &timestamp, &policy);
+    return get_timestamp_resp_handler_change_policy_action(*ctx, timestamp,
+                                                           suspicious);
 }
 
 }  // namespace handler

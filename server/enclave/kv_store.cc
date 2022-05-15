@@ -170,6 +170,11 @@ bool KeyValueStore::change_policy(int64_t key, ServerPolicy policy,
         return false;
     }
 
+    if (!std::get<1>(policy_it->second).can_change_policy(policy.owner_id())) {
+        *policy_version = std::get<0>(policy_it->second);
+        return false;
+    }
+
     *policy_version = std::get<0>(policy_it->second) + 1;
     policy_it->second = std::make_tuple(*policy_version, policy);
     return true;

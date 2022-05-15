@@ -35,6 +35,7 @@ namespace {
 int64_t get_non_sync(int64_t key, call_type type);
 int64_t put_non_sync(int64_t key, std::vector<uint8_t> const &value,
                      call_type type);
+int64_t change_policy_non_sync(int64_t key, uint8_t policy, call_type type);
 }  // anonymous namespace
 
 extern std::tuple<int64_t, Metadata, int64_t> g_metadata_get_result;
@@ -154,9 +155,9 @@ bool put(int64_t key, std::vector<uint8_t> const &value,
         get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
     return success;
 }
-bool change_policy(int64_t key, uint64_t policy, int64_t &policy_version) {
-    // TODO
-    return true;
+bool change_policy(int64_t key, uint8_t policy, int64_t &policy_version) {
+    return metadata_change_policy(gen_teems_ticket(call_type::Sync), 0, false,
+                                  key, policy, policy_version);
 }
 void ping() {
     int64_t const ticket = send_ping_request(g_servers[0], call_type::Sync);
@@ -190,9 +191,8 @@ int64_t get_async(int64_t key) { return get_non_sync(key, call_type::Async); }
 int64_t put_async(int64_t key, std::vector<uint8_t> const &value) {
     return put_non_sync(key, value, call_type::Async);
 }
-int64_t change_policy_async(int64_t key, uint64_t policy) {
-    // TODO
-    return -1;
+int64_t change_policy_async(int64_t key, uint8_t policy) {
+    return change_policy_non_sync(key, policy, call_type::Async);
 }
 int64_t ping_async() {
     return send_ping_request(g_servers[0], call_type::Async);
@@ -224,9 +224,8 @@ int change_policy_set_cb(
     g_change_policy_callback = cb;
     return 0;
 }
-int64_t change_policy_cb(int64_t key, uint64_t policy) {
-    // TODO
-    return -1;
+int64_t change_policy_cb(int64_t key, uint8_t policy) {
+    return change_policy_non_sync(key, policy, call_type::Callback);
 }
 
 int ping_set_cb(std::function<void(int64_t)> cb) {
@@ -320,6 +319,20 @@ int64_t put_non_sync(int64_t key, std::vector<uint8_t> const &value,
             "under %s",
             key, ustor_name.c_str());
         rem_put_call(ticket);
+        finished_call(ticket);
+        return -1;
+    }
+
+    return ticket;
+}
+
+int64_t change_policy_non_sync(int64_t key, uint8_t policy, call_type type) {
+    int64_t const super_ticket = gen_teems_ticket(type);
+    int64_t const ticket =
+        metadata_change_policy_async(super_ticket, 0, false, key, policy);
+
+    if (ticket == -1) {
+        ERROR("change policy(%ld): failed to start change policy", key);
         finished_call(ticket);
         return -1;
     }

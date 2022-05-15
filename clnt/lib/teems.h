@@ -60,7 +60,7 @@ bool get(int64_t key, std::vector<uint8_t> &value, int64_t &policy_version,
          int64_t &timestamp);
 bool put(int64_t key, std::vector<uint8_t> const &value,
          int64_t &policy_version, int64_t &timestamp);
-bool change_policy(int64_t key, uint64_t policy, int64_t &policy_version);
+bool change_policy(int64_t key, uint8_t policy_code, int64_t &policy_version);
 
 void ping(void);
 void reset(void);
@@ -79,7 +79,7 @@ void reset(void);
 
 int64_t get_async(int64_t key);
 int64_t put_async(int64_t key, std::vector<uint8_t> const &value);
-int64_t change_policy_async(int64_t key, uint64_t policy);
+int64_t change_policy_async(int64_t key, uint8_t policy);
 
 int64_t ping_async(void);
 int64_t reset_async(void);
@@ -111,7 +111,7 @@ int64_t put_cb(int64_t key, std::vector<uint8_t> const &value);
 
 int change_policy_set_cb(
     std::function<void(int64_t, int64_t, bool, int64_t)> cb);
-int64_t change_policy_cb(int64_t key, uint64_t policy);
+int64_t change_policy_cb(int64_t key, uint8_t policy);
 
 int ping_set_cb(std::function<void(int64_t)> cb);
 int64_t ping_cb(void);

@@ -28,6 +28,11 @@ int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
                                   uint8_t call_number, bool independent,
                                   int64_t key, Metadata const &value,
                                   call_type type);
+int64_t send_metadata_change_policy_request(peer &server, int64_t super_ticket,
+                                            uint8_t call_number,
+                                            bool independent, int64_t key,
+                                            uint8_t policy_code,
+                                            call_type type);
 
 int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
                               int64_t policy_version, int64_t timestamp);
@@ -38,6 +43,11 @@ int metadata_put_handler_sync(int64_t ticket, bool success,
                               int64_t policy_version, int64_t timestamp);
 int metadata_put_handler_async(int64_t ticket, bool success,
                                int64_t policy_version, int64_t timestamp);
+
+int metadata_change_policy_handler_sync(int64_t ticket, bool success,
+                                        int64_t policy_version);
+int metadata_change_policy_handler_async(int64_t ticket, bool success,
+                                         int64_t policy_version);
 
 }  // anonymous namespace
 
@@ -50,11 +60,17 @@ std::tuple<int64_t, Metadata, int64_t, int64_t> g_metadata_get_result;
 // metadata put
 std::tuple<int64_t, int64_t, bool> g_metadata_put_result;
 
+// metadata change_policy
+std::tuple<int64_t, bool> g_metadata_change_policy_result;
+
 //==========================================
 // EXTERNAL VARIABLES
 //==========================================
 
 extern int32_t g_client_id;
+
+extern std::function<void(int64_t, int64_t, bool, int64_t)>
+    g_change_policy_callback;
 
 extern ::std::unordered_map<int64_t, std::unique_ptr<result>> g_results_map;
 extern ::std::vector<peer> g_servers;
@@ -302,6 +318,28 @@ bool metadata_put(int64_t super_ticket, uint8_t call_number, bool independent,
     return std::get<2>(g_metadata_put_result);
 }
 
+bool metadata_change_policy(int64_t super_ticket, uint8_t call_number,
+                            bool independent, int64_t key, uint8_t policy_code,
+                            int64_t &policy_version) {
+    int64_t const ticket = send_metadata_change_policy_request(
+        g_servers[0], super_ticket, call_number, independent, key, policy_code,
+        call_type::Sync);
+
+    if (ticket == -1) {
+        ERROR("Failed to send change_policy");
+        return false;
+    }
+
+    if (block_until_return(0, g_servers[0]) == -1) {
+        ERROR("failed to get a return from the server");
+        finished_call(ticket);
+        return false;
+    }
+
+    policy_version = std::get<0>(g_metadata_change_policy_result);
+    return std::get<1>(g_metadata_change_policy_result);
+}
+
 // async
 int64_t metadata_get_async(int64_t super_ticket, uint8_t call_number,
                            bool independent, int64_t key) {
@@ -313,6 +351,13 @@ int64_t metadata_put_async(int64_t super_ticket, uint8_t call_number,
                            Metadata const &value) {
     return send_metadata_put_request(g_servers[0], super_ticket, call_number,
                                      independent, key, value, call_type::Async);
+}
+int64_t metadata_change_policy_async(int64_t super_ticket, uint8_t call_number,
+                                     bool independent, int64_t key,
+                                     uint8_t policy_code) {
+    return send_metadata_change_policy_request(g_servers[0], super_ticket,
+                                               call_number, independent, key,
+                                               policy_code, call_type::Async);
 }
 
 // handlers
@@ -348,6 +393,27 @@ int metadata_put_handler(size_t peer_idx, int64_t ticket, bool success,
         default:
             ERROR("invalid call type for sub call");
             return -1;
+    }
+}
+
+int metadata_change_policy_handler(size_t peer_idx, int64_t ticket, int64_t key,
+                                   bool success, int64_t policy_version) {
+    finished_call(ticket);
+    switch (ticket_call_type(ticket)) {
+        case call_type::Sync:  // Sync
+            return metadata_change_policy_handler_sync(ticket, success,
+                                                       policy_version);
+        case call_type::Async:  // Async
+            return metadata_change_policy_handler_async(ticket, success,
+                                                        policy_version);
+        case call_type::Callback:  // Callback
+            if (ticket_independent(ticket)) {
+                ERROR("invalid call type for sub call");
+                return -1;
+            } else {
+                g_change_policy_callback(ticket, key, success, policy_version);
+                return 0;
+            }
     }
 }
 
@@ -448,6 +514,40 @@ int64_t send_metadata_put_request(peer &server, int64_t super_ticket,
     return ticket;
 }
 
+int64_t send_metadata_change_policy_request(peer &server, int64_t super_ticket,
+                                            uint8_t call_number,
+                                            bool independent, int64_t key,
+                                            uint8_t policy_code,
+                                            call_type type) {
+    int64_t const ticket =
+        gen_metadata_ticket(super_ticket, call_number, independent, type);
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto change_policy_args =
+        teems::CreateChangePolicyArgs(builder, key, policy_code, g_client_id);
+
+    auto request = teems::CreateMessage(
+        builder, teems::MessageType_change_policy_req, ticket,
+        teems::BasicMessage_ChangePolicyArgs, change_policy_args.Union());
+    builder.Finish(request);
+
+    size_t const size = builder.GetSize();
+    uint8_t const *payload = builder.GetBufferPointer();
+
+    if (server.append(&size, 1) == -1) {
+        // encode message header
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+    if (server.append(payload, size) == -1) {  // then the segment itself
+        ERROR("failed to prepare message to send");
+        return -1;
+    }
+
+    issued_call(ticket);
+    return ticket;
+}
+
 // metadata get
 int metadata_get_handler_sync(int64_t ticket, int64_t key, Metadata &&value,
                               int64_t policy_version, int64_t timestamp) {
@@ -493,6 +593,22 @@ int metadata_put_handler_async(int64_t ticket, bool success,
 
     return teems_handle_metadata_put(ticket, policy_version, timestamp,
                                      success);
+}
+
+// metadata change_policy
+int metadata_change_policy_handler_sync(int64_t ticket, bool success,
+                                        int64_t policy_version) {
+    g_metadata_change_policy_result = std::make_tuple(policy_version, success);
+    return 0;
+}
+int metadata_change_policy_handler_async(int64_t ticket, bool success,
+                                         int64_t policy_version) {
+    g_results_map.emplace(
+        ticket, std::unique_ptr<result>(
+                    std::make_unique<one_val_result<std::tuple<int64_t, bool>>>(
+                        one_val_result<std::tuple<int64_t, bool>>(
+                            std::make_tuple(policy_version, success)))));
+    return 0;
 }
 
 }  // anonymous namespace

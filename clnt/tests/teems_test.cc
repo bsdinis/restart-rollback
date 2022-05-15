@@ -48,6 +48,7 @@ using namespace teems;
 
 namespace {
 void test_get_put();
+void test_change_policy();
 void test_ping();
 void test_pipelining();
 void test_cb();
@@ -85,6 +86,7 @@ int main(int argc, char** argv) {
 
     test_ping();
     test_get_put();
+    test_change_policy();
     test_pipelining();
     test_cb();
     test_cache();
@@ -234,20 +236,24 @@ void test_ping() {
 void test_pipelining() {
     std::vector<int64_t> get_tickets;
     std::vector<int64_t> put_tickets;
+    std::vector<int64_t> change_policy_tickets;
     std::vector<int64_t> ping_tickets;
 
     std::vector<uint8_t> value;
     value.emplace_back(5);
 
-    for (int i = 0; i < 10; i++) {
-        switch (i % 3) {
+    for (int i = 0; i < 20; i++) {
+        switch (i % 4) {
             case 0:
-                get_tickets.emplace_back(get_async(8));
+                get_tickets.emplace_back(get_async(9));
                 break;
             case 1:
                 put_tickets.emplace_back(put_async(9, value));
                 break;
             case 2:
+                change_policy_tickets.emplace_back(
+                    change_policy_async(9, 0xff));
+            case 3:
             default:
                 ping_tickets.emplace_back(ping_async());
         }
@@ -261,6 +267,11 @@ void test_pipelining() {
                        [](int64_t ticket) {
                            return poll(ticket) == poll_state::Pending;
                        }) ||
+           std::any_of(std::cbegin(change_policy_tickets),
+                       std::cend(change_policy_tickets),
+                       [](int64_t ticket) {
+                           return poll(ticket) == poll_state::Pending;
+                       }) ||
            std::any_of(std::cbegin(ping_tickets), std::cend(ping_tickets),
                        [](int64_t ticket) {
                            return poll(ticket) == poll_state::Pending;
@@ -271,14 +282,18 @@ void test_pipelining() {
         auto reply = get_reply<
             std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
-        EXPECT_EQ(std::get<0>(reply), 8, "pipelining");
+        EXPECT_EQ(std::get<0>(reply), 9, "pipelining");
         EXPECT_EQ(std::get<1>(reply), true, "pipelining");
-        EXPECT_EQ(std::get<4>(reply), -1, "pipelining");
     }
 
     for (int64_t const ticket : put_tickets) {
         auto reply =
             get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+    }
+
+    for (int64_t const ticket : change_policy_tickets) {
+        auto reply = get_reply<std::tuple<int64_t, bool>>(ticket);
         EXPECT_EQ(std::get<1>(reply), true, "pipelining");
     }
 
@@ -338,72 +353,83 @@ void test_cb() {
     ASSERT_EQ(ping_set_cb([](int64_t) {}), 0, "ping_set_cb");
 }
 
-void usage(char* arg0) {
-    fprintf(stderr, "usage: %s\n", basename(arg0));
-    fprintf(stderr, "\t-c [configuration file = %s]\n", g_config_path.c_str());
-    fprintf(stderr, "\t-h : print help message\n");
-}
+void test_change_policy() {
+    // sync test
+    {
+        // there is no value
+        int64_t policy_version = -1;
+        EXPECT_EQ(change_policy(13, 0xff, policy_version), false,
+                  "change policy");
+        EXPECT_EQ(policy_version, -1, "change policy");
 
-// cli
-void parse_cli_args(int argc, char** argv) {
-    opterr = 0;  // ignore default error
-    int opt;
+        std::vector<uint8_t> put_value;
+        put_value.emplace_back(0);
+        int64_t put_policy_version = -1;
+        int64_t put_timestamp = -1;
+        EXPECT_EQ(put(13, put_value, put_policy_version, put_timestamp), true,
+                  "put");
 
-    while ((opt = getopt(argc, argv, "c:i:a:b:s:h")) != -1) {
-        switch (opt) {
-            case 'c':
-                g_config_path = std::string(optarg, strlen(optarg));
-                break;
+        EXPECT_EQ(change_policy(13, 0xff, policy_version), true,
+                  "change policy");
+        EXPECT_EQ(policy_version, put_policy_version + 1, "change policy");
 
-            case 'a':
-                errno = 0;
-                g_name_cache_size = std::stoull(optarg);
-                if (errno != 0) {
-                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
-                            optarg, strerror(errno));
-                    usage(argv[0]);
-                    exit(EXIT_FAILURE);
-                }
+        std::vector<uint8_t> get_value;
+        int64_t get_policy_version = -1;
+        int64_t get_timestamp = -1;
+        EXPECT_EQ(get(13, get_value, get_policy_version, get_timestamp), true,
+                  "get");
+        EXPECT_EQ(get_policy_version, policy_version, "get");
+        EXPECT_EQ(get_timestamp, put_timestamp, "get");
+    }
 
-                break;
-
-            case 'b':
-                errno = 0;
-                g_value_cache_size = std::stoull(optarg);
-                if (errno != 0) {
-                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
-                            optarg, strerror(errno));
-                    usage(argv[0]);
-                    exit(EXIT_FAILURE);
-                }
-
-                break;
-
-            case 's': {
-                auto storage_type = std::string(optarg, strlen(optarg));
-                if (g_storage_types.find(storage_type) ==
-                    std::end(g_storage_types)) {
-                    std::string known_types = "|";
-                    for (auto const& pair : g_storage_types) {
-                        known_types += pair.first + "|";
-                    }
-                    KILL("Store type %s is unknown. Know these: %s",
-                         storage_type.c_str(), known_types.c_str());
-                }
-
-                g_storage_type = g_storage_types[storage_type];
-            } break;
-
-            case 'h':
-                usage(argv[0]);
-                exit(EXIT_SUCCESS);
-                break;
-
-            default: /* '?' */
-                ERROR("Unknown flag -%c", optopt);
-                usage(argv[0]);
-                exit(EXIT_FAILURE);
+    // async test
+    {
+        int64_t ticket = change_policy_async(14, 0xff);
+        if (wait_for(ticket) == poll_state::Error) {
+            ERROR("failed to wait for change policy");
+            return;
         }
+
+        auto change_policy_reply = get_reply<std::tuple<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<0>(change_policy_reply), -1, "change policy async");
+        EXPECT_EQ(std::get<1>(change_policy_reply), false,
+                  "change policy async");
+
+        std::vector<uint8_t> put_value;
+        put_value.emplace_back(0);
+        ticket = put_async(14, put_value);
+        if (wait_for(ticket) == poll_state::Error) {
+            ERROR("failed to wait for put");
+            return;
+        }
+        auto put_reply =
+            get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
+        EXPECT_EQ(std::get<1>(put_reply), true, "put async");
+
+        ticket = change_policy_async(14, 0xff);
+        if (wait_for(ticket) == poll_state::Error) {
+            ERROR("failed to wait for get");
+            return;
+        }
+
+        change_policy_reply = get_reply<std::tuple<int64_t, bool>>(ticket);
+        EXPECT_EQ(std::get<0>(change_policy_reply), std::get<2>(put_reply) + 1,
+                  "change policy async");
+        EXPECT_EQ(std::get<1>(change_policy_reply), true,
+                  "change policy async");
+
+        ticket = get_async(14);
+        if (wait_for(ticket) == poll_state::Error) {
+            ERROR("failed to wait for get");
+            return;
+        }
+        auto g_reply = get_reply<
+            std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
+            ticket);
+
+        EXPECT_EQ(std::get<3>(g_reply), std::get<0>(change_policy_reply),
+                  "get async");
+        EXPECT_EQ(std::get<4>(g_reply), std::get<3>(put_reply), "get async");
     }
 }
 
@@ -489,6 +515,75 @@ void test_cache() {
     EXPECT_EQ(name_misses(), 1, "value cache => only cold miss");
     EXPECT_EQ(value_hits(), 2, "value cache => hits");
     EXPECT_EQ(value_misses(), 1, "value cache => only cold miss");
+}
+
+// cli
+void usage(char* arg0) {
+    fprintf(stderr, "usage: %s\n", basename(arg0));
+    fprintf(stderr, "\t-c [configuration file = %s]\n", g_config_path.c_str());
+    fprintf(stderr, "\t-h : print help message\n");
+}
+
+void parse_cli_args(int argc, char** argv) {
+    opterr = 0;  // ignore default error
+    int opt;
+
+    while ((opt = getopt(argc, argv, "c:i:a:b:s:h")) != -1) {
+        switch (opt) {
+            case 'c':
+                g_config_path = std::string(optarg, strlen(optarg));
+                break;
+
+            case 'a':
+                errno = 0;
+                g_name_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
+            case 'b':
+                errno = 0;
+                g_value_cache_size = std::stoull(optarg);
+                if (errno != 0) {
+                    fprintf(stderr, "Failed to parse %s as integer: %s\n",
+                            optarg, strerror(errno));
+                    usage(argv[0]);
+                    exit(EXIT_FAILURE);
+                }
+
+                break;
+
+            case 's': {
+                auto storage_type = std::string(optarg, strlen(optarg));
+                if (g_storage_types.find(storage_type) ==
+                    std::end(g_storage_types)) {
+                    std::string known_types = "|";
+                    for (auto const& pair : g_storage_types) {
+                        known_types += pair.first + "|";
+                    }
+                    KILL("Store type %s is unknown. Know these: %s",
+                         storage_type.c_str(), known_types.c_str());
+                }
+
+                g_storage_type = g_storage_types[storage_type];
+            } break;
+
+            case 'h':
+                usage(argv[0]);
+                exit(EXIT_SUCCESS);
+                break;
+
+            default: /* '?' */
+                ERROR("Unknown flag -%c", optopt);
+                usage(argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    }
 }
 
 }  // anonymous namespace

@@ -21,6 +21,7 @@ namespace teems {
 
 class GetCallContext;
 class PutCallContext;
+class ChangePolicyCallContext;
 
 class SmrCallContext {
    public:
@@ -29,6 +30,8 @@ class SmrCallContext {
         : m_parent_get_call(parent_call), m_slot_n(slot_n) {}
     SmrCallContext(PutCallContext* parent_call, size_t slot_n)
         : m_parent_put_call(parent_call), m_slot_n(slot_n) {}
+    SmrCallContext(ChangePolicyCallContext* parent_call, size_t slot_n)
+        : m_parent_change_policy_call(parent_call), m_slot_n(slot_n) {}
 
     void finish(bool success, int64_t policy_version, ServerPolicy policy);
 
@@ -42,6 +45,7 @@ class SmrCallContext {
    private:
     GetCallContext* m_parent_get_call = nullptr;
     PutCallContext* m_parent_put_call = nullptr;
+    ChangePolicyCallContext* m_parent_change_policy_call = nullptr;
     size_t m_slot_n = 0;
     bool m_success = false;
     int64_t m_policy_version = -1;
@@ -235,6 +239,75 @@ class PutCallContext {
     bool m_call_done = false;
 };
 
+enum class ChangePolicyNextAction {
+    None,
+    IssueSMR,
+    ReturnToClient,
+};
+
+class ChangePolicyCallContext {
+   public:
+    ChangePolicyCallContext(peer* client, int32_t client_id, int64_t ticket,
+                            int64_t key, uint8_t policy_code)
+        : m_client(client),
+          m_client_id(client_id),
+          m_ticket(ticket),
+          m_key(key),
+          m_policy_code(policy_code) {}
+
+    // ==================================================
+    //  PROTOCOL CALLS
+    // ==================================================
+    ChangePolicyNextAction add_get_reply(int64_t timestamp, bool suspicious);
+    int finished_smr(SmrCallContext const* smr_context);
+
+    // ==================================================
+    //  GETTERS
+    // ==================================================
+
+    inline bool get_done() const { return m_get_round_done; }
+    inline bool call_done() const { return m_call_done; }
+    inline bool success() const { return m_success; }
+
+    inline int64_t ticket() const { return m_ticket; }
+    inline int64_t key() const { return m_key; }
+    inline int64_t policy_version() const { return m_policy_version; }
+    inline peer* client() const { return m_client; }
+    inline int32_t client_id() const { return m_client_id; }
+
+    inline int64_t next_timestamp() const {
+        uint64_t seqno = (m_timestamp < 0)
+                             ? 1
+                             : (static_cast<uint64_t>(m_timestamp) >> 32) + 1;
+        return static_cast<int64_t>((seqno << 32) |
+                                    static_cast<uint64_t>(m_client_id));
+    }
+
+    inline ServerPolicy policy() const& {
+        INFO("timestamp: %ld", next_timestamp());
+        if (next_timestamp() == -1) {
+            ERROR("generating policy before agreeing on a timestamp");
+        }
+        return ServerPolicy(m_policy_code, m_client_id, next_timestamp());
+    }
+
+   private:
+    peer* m_client = nullptr;
+    int64_t m_ticket = -1;
+    int64_t m_key = -1;
+    int32_t m_client_id = -1;
+    uint8_t m_policy_code;
+
+    size_t m_n_suspicions = 0;
+    size_t m_n_get_replies = 0;
+    int64_t m_policy_version = -1;
+    int64_t m_timestamp = -1;
+
+    bool m_success = false;
+    bool m_get_round_done = false;
+    bool m_call_done = false;
+};
+
 class CallMap {
    public:
     GetCallContext* add_get_call(peer* client, int32_t client_id,
@@ -242,11 +315,19 @@ class CallMap {
     PutCallContext* add_put_call(peer* client, int32_t client_id,
                                  int64_t ticket, int64_t key,
                                  Value const* value);
+    ChangePolicyCallContext* add_change_policy_call(peer* client,
+                                                    int32_t client_id,
+                                                    int64_t ticket, int64_t key,
+                                                    uint8_t policy_code);
+
     SmrCallContext* add_smr_call(GetCallContext* parent_call, size_t slot_n);
     SmrCallContext* add_smr_call(PutCallContext* parent_call, size_t slot_n);
+    SmrCallContext* add_smr_call(ChangePolicyCallContext* parent_call,
+                                 size_t slot_n);
 
     GetCallContext* get_get_ctx(int64_t ticket);
     PutCallContext* get_put_ctx(int64_t ticket);
+    ChangePolicyCallContext* get_change_policy_ctx(int64_t ticket);
     SmrCallContext* get_smr_ctx(size_t slot_n);
 
     void resolve_call(int64_t ticket);
@@ -256,6 +337,7 @@ class CallMap {
    private:
     std::unordered_map<int64_t, GetCallContext> m_get_map;
     std::unordered_map<int64_t, PutCallContext> m_put_map;
+    std::unordered_map<int64_t, ChangePolicyCallContext> m_change_policy_map;
     std::unordered_map<size_t, SmrCallContext> m_smr_map;
 };
 

@@ -39,7 +39,8 @@ int broadcast_reject(int64_t ticket, teems::SmrPropose const *message) {
 namespace teems {
 namespace handler {
 
-int smr_propose_handler(int64_t ticket, teems::SmrPropose const *message) {
+int smr_propose_handler(peer &p, int64_t ticket,
+                        teems::SmrPropose const *message) {
     LOG("replica propose request [%ld]: slot %ld", ticket,
         message->slot_number());
 
@@ -55,7 +56,8 @@ int smr_propose_handler(int64_t ticket, teems::SmrPropose const *message) {
     return broadcast_reject(ticket, message);
 }
 
-int smr_accept_handler(int64_t ticket, teems::SmrAccept const *message) {
+int smr_accept_handler(peer &p, int64_t ticket,
+                       teems::SmrAccept const *message) {
     LOG("replica accept request [%ld]: slot %ld", ticket,
         message->slot_number());
 
@@ -63,7 +65,8 @@ int smr_accept_handler(int64_t ticket, teems::SmrAccept const *message) {
     return 0;
 }
 
-int smr_reject_handler(int64_t ticket, teems::SmrReject const *message) {
+int smr_reject_handler(peer &p, int64_t ticket,
+                       teems::SmrReject const *message) {
     LOG("replica reject request [%ld]: slot %ld", ticket,
         message->slot_number());
     KILL("Without a view change, there should never be a rejection");

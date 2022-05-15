@@ -324,6 +324,15 @@ int handle_received_message(size_t idx, peer &p) {
                     response->message_as_PutResult()->policy_version(),
                     response->message_as_PutResult()->timestamp());
                 break;
+            case teems::MessageType_change_policy_resp:
+                FINE("change policy response [ticket %ld]", response->ticket());
+                metadata_change_policy_handler(
+                    idx, response->ticket(),
+                    response->message_as_ChangePolicyResult()->key(),
+                    response->message_as_ChangePolicyResult()->success(),
+                    response->message_as_ChangePolicyResult()
+                        ->policy_version());
+                break;
             case teems::MessageType_ping_resp:
                 FINE("ping response [ticket %ld]", response->ticket());
                 ping_handler(idx, response->ticket());

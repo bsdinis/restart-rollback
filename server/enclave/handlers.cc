@@ -23,6 +23,7 @@
 #include "protocol_handler.h"
 #include "proxy_handler.h"
 #include "reset_handler.h"
+#include "smr_handlers.h"
 
 #include <string.h>
 #include <algorithm>
@@ -91,12 +92,18 @@ int handle_client_message(peer &p) {
             case teems::MessageType_proxy_get_req:
                 proxy_get_handler(p, request->ticket(),
                                   request->message_as_ProxyGetArgs());
-                perf_rec.add("get", timer::elapsed_usec(begin));
+                perf_rec.add("proxy get", timer::elapsed_usec(begin));
                 break;
             case teems::MessageType_proxy_put_req:
                 proxy_put_handler(p, request->ticket(),
                                   request->message_as_ProxyPutArgs());
-                perf_rec.add("put", timer::elapsed_usec(begin));
+                perf_rec.add("proxy put", timer::elapsed_usec(begin));
+                break;
+            case teems::MessageType_change_policy_req:
+                proxy_change_policy_handler(
+                    p, request->ticket(),
+                    request->message_as_ChangePolicyArgs());
+                perf_rec.add("change policy", timer::elapsed_usec(begin));
                 break;
             case teems::MessageType_ping_req:
                 client_ping_handler(p, request->ticket());
@@ -175,6 +182,21 @@ int handle_replica_message(peer &p, size_t idx) {
             case teems::MessageType_reset_req:
                 reset_handler(p, message->ticket());
                 perf_rec.add("reset");
+                break;
+            case teems::MessageType_smr_propose:
+                smr_propose_handler(p, message->ticket(),
+                                    message->message_as_SmrPropose());
+                perf_rec.add("propose");
+                break;
+            case teems::MessageType_smr_accept:
+                smr_accept_handler(p, message->ticket(),
+                                   message->message_as_SmrAccept());
+                perf_rec.add("accept");
+                break;
+            case teems::MessageType_smr_reject:
+                smr_reject_handler(p, message->ticket(),
+                                   message->message_as_SmrReject());
+                perf_rec.add("reject");
                 break;
             default:
                 // XXX: CHANGE ME

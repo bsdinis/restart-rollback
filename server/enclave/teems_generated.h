@@ -35,6 +35,9 @@ struct PutArgsBuilder;
 struct PutResult;
 struct PutResultBuilder;
 
+struct ChangePolicyArgs;
+struct ChangePolicyArgsBuilder;
+
 struct ChangePolicyResult;
 struct ChangePolicyResultBuilder;
 
@@ -139,27 +142,29 @@ inline const char *EnumNameMessageType(MessageType e) {
 
 enum BasicMessage : uint8_t {
     BasicMessage_NONE = 0,
-    BasicMessage_ChangePolicyResult = 1,
-    BasicMessage_Greeting = 2,
-    BasicMessage_GetArgs = 3,
-    BasicMessage_GetResult = 4,
-    BasicMessage_GetTimestampArgs = 5,
-    BasicMessage_GetTimestampResult = 6,
-    BasicMessage_ProxyGetArgs = 7,
-    BasicMessage_ProxyPutArgs = 8,
-    BasicMessage_PutArgs = 9,
-    BasicMessage_PutResult = 10,
-    BasicMessage_SmrPropose = 11,
-    BasicMessage_SmrAccept = 12,
-    BasicMessage_SmrReject = 13,
-    BasicMessage_StabilizeArgs = 14,
-    BasicMessage_Empty = 15,
+    BasicMessage_ChangePolicyArgs = 1,
+    BasicMessage_ChangePolicyResult = 2,
+    BasicMessage_Greeting = 3,
+    BasicMessage_GetArgs = 4,
+    BasicMessage_GetResult = 5,
+    BasicMessage_GetTimestampArgs = 6,
+    BasicMessage_GetTimestampResult = 7,
+    BasicMessage_ProxyGetArgs = 8,
+    BasicMessage_ProxyPutArgs = 9,
+    BasicMessage_PutArgs = 10,
+    BasicMessage_PutResult = 11,
+    BasicMessage_SmrPropose = 12,
+    BasicMessage_SmrAccept = 13,
+    BasicMessage_SmrReject = 14,
+    BasicMessage_StabilizeArgs = 15,
+    BasicMessage_Empty = 16,
     BasicMessage_MIN = BasicMessage_NONE,
     BasicMessage_MAX = BasicMessage_Empty
 };
 
-inline const BasicMessage (&EnumValuesBasicMessage())[16] {
+inline const BasicMessage (&EnumValuesBasicMessage())[17] {
     static const BasicMessage values[] = {BasicMessage_NONE,
+                                          BasicMessage_ChangePolicyArgs,
                                           BasicMessage_ChangePolicyResult,
                                           BasicMessage_Greeting,
                                           BasicMessage_GetArgs,
@@ -179,7 +184,8 @@ inline const BasicMessage (&EnumValuesBasicMessage())[16] {
 }
 
 inline const char *const *EnumNamesBasicMessage() {
-    static const char *const names[17] = {"NONE",
+    static const char *const names[18] = {"NONE",
+                                          "ChangePolicyArgs",
                                           "ChangePolicyResult",
                                           "Greeting",
                                           "GetArgs",
@@ -209,6 +215,11 @@ inline const char *EnumNameBasicMessage(BasicMessage e) {
 template <typename T>
 struct BasicMessageTraits {
     static const BasicMessage enum_value = BasicMessage_NONE;
+};
+
+template <>
+struct BasicMessageTraits<teems::ChangePolicyArgs> {
+    static const BasicMessage enum_value = BasicMessage_ChangePolicyArgs;
 };
 
 template <>
@@ -941,20 +952,79 @@ inline flatbuffers::Offset<PutResult> CreatePutResult(
     return builder_.Finish();
 }
 
+struct ChangePolicyArgs FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+    typedef ChangePolicyArgsBuilder Builder;
+    enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+        VT_KEY = 4,
+        VT_POLICY_CODE = 6,
+        VT_CLIENT_ID = 8
+    };
+    int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
+    bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
+    uint8_t policy_code() const { return GetField<uint8_t>(VT_POLICY_CODE, 0); }
+    bool mutate_policy_code(uint8_t _policy_code) {
+        return SetField<uint8_t>(VT_POLICY_CODE, _policy_code, 0);
+    }
+    int32_t client_id() const { return GetField<int32_t>(VT_CLIENT_ID, 0); }
+    bool mutate_client_id(int32_t _client_id) {
+        return SetField<int32_t>(VT_CLIENT_ID, _client_id, 0);
+    }
+    bool Verify(flatbuffers::Verifier &verifier) const {
+        return VerifyTableStart(verifier) &&
+               VerifyField<int64_t>(verifier, VT_KEY) &&
+               VerifyField<uint8_t>(verifier, VT_POLICY_CODE) &&
+               VerifyField<int32_t>(verifier, VT_CLIENT_ID) &&
+               verifier.EndTable();
+    }
+};
+
+struct ChangePolicyArgsBuilder {
+    typedef ChangePolicyArgs Table;
+    flatbuffers::FlatBufferBuilder &fbb_;
+    flatbuffers::uoffset_t start_;
+    void add_key(int64_t key) {
+        fbb_.AddElement<int64_t>(ChangePolicyArgs::VT_KEY, key, 0);
+    }
+    void add_policy_code(uint8_t policy_code) {
+        fbb_.AddElement<uint8_t>(ChangePolicyArgs::VT_POLICY_CODE, policy_code,
+                                 0);
+    }
+    void add_client_id(int32_t client_id) {
+        fbb_.AddElement<int32_t>(ChangePolicyArgs::VT_CLIENT_ID, client_id, 0);
+    }
+    explicit ChangePolicyArgsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+        start_ = fbb_.StartTable();
+    }
+    flatbuffers::Offset<ChangePolicyArgs> Finish() {
+        const auto end = fbb_.EndTable(start_);
+        auto o = flatbuffers::Offset<ChangePolicyArgs>(end);
+        return o;
+    }
+};
+
+inline flatbuffers::Offset<ChangePolicyArgs> CreateChangePolicyArgs(
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
+    uint8_t policy_code = 0, int32_t client_id = 0) {
+    ChangePolicyArgsBuilder builder_(_fbb);
+    builder_.add_key(key);
+    builder_.add_client_id(client_id);
+    builder_.add_policy_code(policy_code);
+    return builder_.Finish();
+}
+
 struct ChangePolicyResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     typedef ChangePolicyResultBuilder Builder;
     enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
         VT_KEY = 4,
-        VT_POLICY = 6,
+        VT_SUCCESS = 6,
         VT_POLICY_VERSION = 8
     };
     int64_t key() const { return GetField<int64_t>(VT_KEY, 0); }
     bool mutate_key(int64_t _key) { return SetField<int64_t>(VT_KEY, _key, 0); }
-    const teems::Policy *policy() const {
-        return GetStruct<const teems::Policy *>(VT_POLICY);
-    }
-    teems::Policy *mutable_policy() {
-        return GetStruct<teems::Policy *>(VT_POLICY);
+    bool success() const { return GetField<uint8_t>(VT_SUCCESS, 0) != 0; }
+    bool mutate_success(bool _success) {
+        return SetField<uint8_t>(VT_SUCCESS, static_cast<uint8_t>(_success), 0);
     }
     int64_t policy_version() const {
         return GetField<int64_t>(VT_POLICY_VERSION, 0);
@@ -965,7 +1035,7 @@ struct ChangePolicyResult FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     bool Verify(flatbuffers::Verifier &verifier) const {
         return VerifyTableStart(verifier) &&
                VerifyField<int64_t>(verifier, VT_KEY) &&
-               VerifyField<teems::Policy>(verifier, VT_POLICY) &&
+               VerifyField<uint8_t>(verifier, VT_SUCCESS) &&
                VerifyField<int64_t>(verifier, VT_POLICY_VERSION) &&
                verifier.EndTable();
     }
@@ -978,8 +1048,9 @@ struct ChangePolicyResultBuilder {
     void add_key(int64_t key) {
         fbb_.AddElement<int64_t>(ChangePolicyResult::VT_KEY, key, 0);
     }
-    void add_policy(const teems::Policy *policy) {
-        fbb_.AddStruct(ChangePolicyResult::VT_POLICY, policy);
+    void add_success(bool success) {
+        fbb_.AddElement<uint8_t>(ChangePolicyResult::VT_SUCCESS,
+                                 static_cast<uint8_t>(success), 0);
     }
     void add_policy_version(int64_t policy_version) {
         fbb_.AddElement<int64_t>(ChangePolicyResult::VT_POLICY_VERSION,
@@ -997,12 +1068,12 @@ struct ChangePolicyResultBuilder {
 };
 
 inline flatbuffers::Offset<ChangePolicyResult> CreateChangePolicyResult(
-    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0,
-    const teems::Policy *policy = 0, int64_t policy_version = 0) {
+    flatbuffers::FlatBufferBuilder &_fbb, int64_t key = 0, bool success = false,
+    int64_t policy_version = 0) {
     ChangePolicyResultBuilder builder_(_fbb);
     builder_.add_policy_version(policy_version);
     builder_.add_key(key);
-    builder_.add_policy(policy);
+    builder_.add_success(success);
     return builder_.Finish();
 }
 
@@ -1356,6 +1427,11 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     const void *message() const { return GetPointer<const void *>(VT_MESSAGE); }
     template <typename T>
     const T *message_as() const;
+    const teems::ChangePolicyArgs *message_as_ChangePolicyArgs() const {
+        return message_type() == teems::BasicMessage_ChangePolicyArgs
+                   ? static_cast<const teems::ChangePolicyArgs *>(message())
+                   : nullptr;
+    }
     const teems::ChangePolicyResult *message_as_ChangePolicyResult() const {
         return message_type() == teems::BasicMessage_ChangePolicyResult
                    ? static_cast<const teems::ChangePolicyResult *>(message())
@@ -1442,6 +1518,12 @@ struct Message FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
                verifier.EndTable();
     }
 };
+
+template <>
+inline const teems::ChangePolicyArgs *
+Message::message_as<teems::ChangePolicyArgs>() const {
+    return message_as_ChangePolicyArgs();
+}
 
 template <>
 inline const teems::ChangePolicyResult *
@@ -1570,6 +1652,10 @@ inline bool VerifyBasicMessage(flatbuffers::Verifier &verifier, const void *obj,
     switch (type) {
         case BasicMessage_NONE: {
             return true;
+        }
+        case BasicMessage_ChangePolicyArgs: {
+            auto ptr = reinterpret_cast<const teems::ChangePolicyArgs *>(obj);
+            return verifier.VerifyTable(ptr);
         }
         case BasicMessage_ChangePolicyResult: {
             auto ptr = reinterpret_cast<const teems::ChangePolicyResult *>(obj);

@@ -100,9 +100,14 @@ table PutResult {
     timestamp: int64;
 }
 
+table ChangePolicyArgs {
+    key : int64;
+    policy_code: uint8;
+    client_id: int32;
+}
 table ChangePolicyResult {
     key: int64;
-    policy: Policy;
+    success: bool;
     policy_version: int64;
 }
 
@@ -138,6 +143,7 @@ table Greeting {
 table Empty { }
 
 union BasicMessage {
+    ChangePolicyArgs,
     ChangePolicyResult,
     Greeting,
     GetArgs,

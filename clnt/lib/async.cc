@@ -312,7 +312,7 @@ template std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>
 get_reply(int64_t ticket);
 
 // for change policy
-template std::tuple<int64_t, bool, int64_t> get_reply(int64_t ticket);
+template std::tuple<int64_t, bool> get_reply(int64_t ticket);
 
 // for metadata put
 template std::tuple<int64_t, int64_t, bool> get_reply(int64_t ticket);

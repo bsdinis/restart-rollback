@@ -31,6 +31,7 @@ int put_resp_handler_put_action(PutCallContext &context, bool success,
 int do_stabilize(GetCallContext const &context, bool to_outdated);
 int get_smr_read(GetCallContext *context, int64_t key);
 int put_smr_read(PutCallContext *ctx, int64_t key);
+int change_policy_issue_smr(ChangePolicyCallContext &context);
 }  // anonymous namespace
 
 int get_handler(peer &p, int64_t ticket, teems::GetArgs const *args) {
@@ -74,7 +75,7 @@ int get_handler(peer &p, int64_t ticket, teems::GetArgs const *args) {
 
 int get_timestamp_handler(peer &p, int64_t ticket,
                           teems::GetTimestampArgs const *args) {
-    LOG("get timestamp request [%ld]: key %ld", ticket, args->key());
+    INFO("get timestamp request [%ld]: key %ld", ticket, args->key());
 
     flatbuffers::FlatBufferBuilder builder;
 
@@ -229,24 +230,30 @@ int get_retry_resp_handler_action(
 int get_timestamp_resp_handler(peer &p, int64_t ticket,
                                GetTimestampResult const *args) {
     LOG("get timestamp response [%ld]: key %ld", ticket, args->key());
-    PutCallContext *ctx = g_call_map.get_put_ctx(ticket);
-    if (ctx == nullptr) {  // call ended
-        return 0;
+    PutCallContext *p_ctx = g_call_map.get_put_ctx(ticket);
+    ChangePolicyCallContext *cp_ctx = g_call_map.get_change_policy_ctx(ticket);
+
+    if (p_ctx != nullptr) {
+        if (args->retry()) {
+            return get_timestamp_retry_resp_handler_action(
+                *p_ctx, args->timestamp(), args->suspicious());
+        } else {
+            return get_timestamp_resp_handler_put_action(
+                *p_ctx, args->policy_version(), args->timestamp(),
+                args->suspicious(), ServerPolicy(args->policy()));
+        }
+    } else if (cp_ctx != nullptr) {
+        return get_timestamp_resp_handler_change_policy_action(
+            *cp_ctx, args->timestamp(), args->suspicious());
     }
 
-    if (args->retry()) {
-        return get_timestamp_retry_resp_handler_action(*ctx, args->timestamp(),
-                                                       args->suspicious());
-    } else {
-        return get_timestamp_resp_handler_action(
-            *ctx, args->policy_version(), args->timestamp(), args->suspicious(),
-            ServerPolicy(args->policy()));
-    }
+    // calls ended
+    return 0;
 }
-int get_timestamp_resp_handler_action(PutCallContext &context,
-                                      int64_t policy_version, int64_t timestamp,
-                                      bool suspicious,
-                                      ServerPolicy const &policy) {
+int get_timestamp_resp_handler_put_action(PutCallContext &context,
+                                          int64_t policy_version,
+                                          int64_t timestamp, bool suspicious,
+                                          ServerPolicy const &policy) {
     if (context.get_done()) {
         // get part is done
         return 0;
@@ -284,6 +291,25 @@ int get_timestamp_retry_resp_handler_action(PutCallContext &context,
             return -1;
         case PutNextAction::DoWrite:
             return put_do_write(context);
+        default:
+            ERROR("there shouldn't be any other actions here");
+            return -1;
+    }
+}
+
+int get_timestamp_resp_handler_change_policy_action(
+    ChangePolicyCallContext &context, int64_t timestamp, bool suspicious) {
+    if (context.get_done()) {
+        // get part is done
+        return 0;
+    }
+
+    auto action = context.add_get_reply(timestamp, suspicious);
+    switch (action) {
+        case ChangePolicyNextAction::None:
+            return 0;
+        case ChangePolicyNextAction::IssueSMR:
+            return change_policy_issue_smr(context);
         default:
             ERROR("there shouldn't be any other actions here");
             return -1;
@@ -367,6 +393,22 @@ int put_retry_get(PutCallContext &context) {
                              &policy_version, &timestamp, &policy);
     return get_timestamp_retry_resp_handler_action(context, timestamp,
                                                    suspicious);
+}
+
+int change_policy_return_to_client(ChangePolicyCallContext const &context) {
+    INFO("change_policy [%ld]: returning to client", context.ticket());
+    flatbuffers::FlatBufferBuilder builder;
+
+    auto change_policy_res = teems::CreateChangePolicyResult(
+        builder, context.key(), context.success(), context.policy_version());
+
+    auto message = teems::CreateMessage(
+        builder, teems::MessageType_change_policy_resp, context.ticket(),
+        teems::BasicMessage_ChangePolicyResult, change_policy_res.Union());
+    builder.Finish(message);
+
+    return teems::handler_helper::append_message(*context.client(),
+                                                 std::move(builder));
 }
 
 namespace {
@@ -633,6 +675,35 @@ int put_smr_read(PutCallContext *ctx, int64_t key) {
                                 slot_n, teems::setup::is_suspicious());
     auto message = teems::CreateMessage(
         builder, teems::MessageType_smr_propose, ctx->ticket(),
+        teems::BasicMessage_SmrPropose, propose.Union());
+    builder.Finish(message);
+
+    return teems::replicas::broadcast_message(builder.GetBufferPointer(),
+                                              builder.GetSize());
+}
+
+int change_policy_issue_smr(ChangePolicyCallContext &ctx) {
+    INFO("issuing SMR call for change policy(%ld)", ctx.key());
+    auto policy = ctx.policy();
+    size_t const slot_n = g_log.propose_op(
+        Operation(ctx.key(), false /* read */, policy), setup::is_suspicious());
+    {
+        size_t execution_slot = slot_n;
+        while (g_log.can_execute(execution_slot)) {
+            replicas::execute(execution_slot);
+            execution_slot += 1;
+        }
+    }
+
+    g_call_map.add_smr_call(&ctx, slot_n);
+
+    auto fb_policy = policy.to_flatbuffers();
+    flatbuffers::FlatBufferBuilder builder;
+    auto propose = teems::CreateSmrPropose(builder, ctx.key(), false /* read */,
+                                           &fb_policy, slot_n,
+                                           teems::setup::is_suspicious());
+    auto message = teems::CreateMessage(
+        builder, teems::MessageType_smr_propose, ctx.ticket(),
         teems::BasicMessage_SmrPropose, propose.Union());
     builder.Finish(message);
 

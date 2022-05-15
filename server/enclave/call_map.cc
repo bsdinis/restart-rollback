@@ -11,16 +11,20 @@ namespace teems {
 int64_t SmrCallContext::ticket() const {
     if (m_parent_get_call != nullptr) {
         return m_parent_get_call->ticket();
-    } else {
+    } else if (m_parent_put_call != nullptr) {
         return m_parent_put_call->ticket();
+    } else {
+        return m_parent_change_policy_call->ticket();
     }
 }
 
 int64_t SmrCallContext::key() const {
     if (m_parent_get_call != nullptr) {
         return m_parent_get_call->key();
-    } else {
+    } else if (m_parent_put_call != nullptr) {
         return m_parent_put_call->key();
+    } else {
+        return m_parent_change_policy_call->key();
     }
 }
 
@@ -32,8 +36,10 @@ void SmrCallContext::finish(bool success, int64_t policy_version,
 
     if (m_parent_get_call != nullptr) {
         m_parent_get_call->finished_smr(this);
-    } else {
+    } else if (m_parent_put_call != nullptr) {
         m_parent_put_call->finished_smr(this);
+    } else {
+        m_parent_change_policy_call->finished_smr(this);
     }
 }
 
@@ -240,7 +246,6 @@ PutNextAction PutCallContext::add_get_reply(int64_t policy_version,
     return PutNextAction::None;
 }
 
-// put context
 PutNextAction PutCallContext::add_get_retry_reply(int64_t timestamp,
                                                   bool suspicious) {
     if (!m_get_retrying) {
@@ -286,6 +291,34 @@ int PutCallContext::finished_smr(SmrCallContext const* smr_context) {
     return handler::put_retry_get(*this);
 }
 
+// change policy context
+ChangePolicyNextAction ChangePolicyCallContext::add_get_reply(int64_t timestamp,
+                                                              bool suspicious) {
+    if (timestamp > m_timestamp) {
+        m_timestamp = timestamp;
+    }
+
+    if (suspicious) {
+        m_n_suspicions += 1;
+    }
+    m_n_get_replies += 1;
+
+    if (m_n_get_replies >= setup::read_quorum_size(m_n_suspicions)) {
+        m_get_round_done = true;
+        return ChangePolicyNextAction::IssueSMR;
+    }
+
+    return ChangePolicyNextAction::None;
+}
+
+int ChangePolicyCallContext::finished_smr(SmrCallContext const* smr_context) {
+    INFO("change_policy(%ld): finished smr %lx", key(), ticket());
+    m_call_done = true;
+    m_success = smr_context->success();
+    m_policy_version = smr_context->policy_version();
+    return handler::change_policy_return_to_client(*this);
+}
+
 // call map
 
 SmrCallContext* CallMap::add_smr_call(GetCallContext* parent_call,
@@ -294,6 +327,11 @@ SmrCallContext* CallMap::add_smr_call(GetCallContext* parent_call,
                 .first->second;
 }
 SmrCallContext* CallMap::add_smr_call(PutCallContext* parent_call,
+                                      size_t slot_n) {
+    return &m_smr_map.emplace(slot_n, SmrCallContext(parent_call, slot_n))
+                .first->second;
+}
+SmrCallContext* CallMap::add_smr_call(ChangePolicyCallContext* parent_call,
                                       size_t slot_n) {
     return &m_smr_map.emplace(slot_n, SmrCallContext(parent_call, slot_n))
                 .first->second;
@@ -311,6 +349,17 @@ PutCallContext* CallMap::add_put_call(peer* client, int32_t client_id,
     return &m_put_map
                 .emplace(ticket,
                          PutCallContext(client, client_id, ticket, key, value))
+                .first->second;
+}
+ChangePolicyCallContext* CallMap::add_change_policy_call(peer* client,
+                                                         int32_t client_id,
+                                                         int64_t ticket,
+                                                         int64_t key,
+                                                         uint8_t policy_code) {
+    return &m_change_policy_map
+                .emplace(ticket,
+                         ChangePolicyCallContext(client, client_id, ticket, key,
+                                                 policy_code))
                 .first->second;
 }
 
@@ -331,6 +380,14 @@ PutCallContext* CallMap::get_put_ctx(int64_t ticket) {
 
     return &put_it->second;
 }
+ChangePolicyCallContext* CallMap::get_change_policy_ctx(int64_t ticket) {
+    auto change_policy_it = m_change_policy_map.find(ticket);
+    if (change_policy_it == std::end(m_change_policy_map)) {
+        return nullptr;
+    }
+
+    return &change_policy_it->second;
+}
 
 void CallMap::resolve_call(int64_t ticket) {
     auto get_it = m_get_map.find(ticket);
@@ -342,6 +399,12 @@ void CallMap::resolve_call(int64_t ticket) {
     auto put_it = m_put_map.find(ticket);
     if (put_it != std::end(m_put_map)) {
         m_put_map.erase(put_it);
+        return;
+    }
+
+    auto change_policy_it = m_change_policy_map.find(ticket);
+    if (change_policy_it != std::end(m_change_policy_map)) {
+        m_change_policy_map.erase(change_policy_it);
         return;
     }
 
