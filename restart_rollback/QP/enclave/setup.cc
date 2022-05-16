@@ -192,7 +192,7 @@ size_t write_quorum_size() {
     return std::max<size_t>(g_rollback_faults, g_crash_faults) + 1;
 }
 size_t read_quorum_size(size_t suspicions) {
-    return std::min<size_t>(g_rollback_faults, suspicions) + 1;
+    return std::min<size_t>(g_rollback_faults, suspicions) + g_crash_faults + 1;
 }
 size_t max_quorum_size(size_t suspicions) {
     return std::max<size_t>(write_quorum_size(), read_quorum_size(suspicions));
