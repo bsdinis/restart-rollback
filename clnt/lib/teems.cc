@@ -281,10 +281,16 @@ int64_t get_non_sync(int64_t key, call_type type) {
 
     if (n_hint != nullptr) {
         // we don't have the value but we have a name hint
-        if (untrusted_get_async(ticket, 0, false, name_hint) == -1) {
+
+        int64_t const untrusted_ticket =
+            untrusted_get_async(ticket, 0, false, name_hint);
+        if (untrusted_ticket == -1) {
             ERROR("get(%ld): failed to start untrusted read", key);
             return -1;
         }
+
+        get_call_ctx *ctx = get_get_call_ctx(ticket);
+        ctx->set_untrusted_ticket(untrusted_ticket);
     }
 
     return ticket;

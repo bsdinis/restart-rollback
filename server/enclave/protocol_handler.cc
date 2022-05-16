@@ -75,7 +75,7 @@ int get_handler(peer &p, int64_t ticket, teems::GetArgs const *args) {
 
 int get_timestamp_handler(peer &p, int64_t ticket,
                           teems::GetTimestampArgs const *args) {
-    INFO("get timestamp request [%ld]: key %ld", ticket, args->key());
+    LOG("get timestamp request [%ld]: key %ld", ticket, args->key());
 
     flatbuffers::FlatBufferBuilder builder;
 
@@ -396,7 +396,7 @@ int put_retry_get(PutCallContext &context) {
 }
 
 int change_policy_return_to_client(ChangePolicyCallContext const &context) {
-    INFO("change_policy [%ld]: returning to client", context.ticket());
+    LOG("change_policy [%ld]: returning to client", context.ticket());
     flatbuffers::FlatBufferBuilder builder;
 
     auto change_policy_res = teems::CreateChangePolicyResult(
@@ -683,7 +683,7 @@ int put_smr_read(PutCallContext *ctx, int64_t key) {
 }
 
 int change_policy_issue_smr(ChangePolicyCallContext &ctx) {
-    INFO("issuing SMR call for change policy(%ld)", ctx.key());
+    LOG("issuing SMR call for change policy(%ld)", ctx.key());
     auto policy = ctx.policy();
     size_t const slot_n = g_log.propose_op(
         Operation(ctx.key(), false /* read */, policy), setup::is_suspicious());

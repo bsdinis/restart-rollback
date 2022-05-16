@@ -312,7 +312,6 @@ ChangePolicyNextAction ChangePolicyCallContext::add_get_reply(int64_t timestamp,
 }
 
 int ChangePolicyCallContext::finished_smr(SmrCallContext const* smr_context) {
-    INFO("change_policy(%ld): finished smr %lx", key(), ticket());
     m_call_done = true;
     m_success = smr_context->success();
     m_policy_version = smr_context->policy_version();

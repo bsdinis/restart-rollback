@@ -242,6 +242,12 @@ void test_pipelining() {
     std::vector<uint8_t> value;
     value.emplace_back(5);
 
+    // create the value
+    int64_t policy_version;
+    int64_t timestamp;
+    ASSERT_EQ(put(9, value, policy_version, timestamp), true,
+              "pipeline prepare");
+
     for (int i = 0; i < 20; i++) {
         switch (i % 4) {
             case 0:
@@ -282,24 +288,24 @@ void test_pipelining() {
         auto reply = get_reply<
             std::tuple<int64_t, bool, std::vector<uint8_t>, int64_t, int64_t>>(
             ticket);
-        EXPECT_EQ(std::get<0>(reply), 9, "pipelining");
-        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+        EXPECT_EQ(std::get<0>(reply), 9, "pipelining get");
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining get");
     }
 
     for (int64_t const ticket : put_tickets) {
         auto reply =
             get_reply<std::tuple<int64_t, bool, int64_t, int64_t>>(ticket);
-        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining put");
     }
 
     for (int64_t const ticket : change_policy_tickets) {
         auto reply = get_reply<std::tuple<int64_t, bool>>(ticket);
-        EXPECT_EQ(std::get<1>(reply), true, "pipelining");
+        EXPECT_EQ(std::get<1>(reply), true, "pipelining change policy");
     }
 
     for (int64_t const ticket : ping_tickets) {
         get_reply<void>(ticket);
-        EXPECT_EQ(0, 0, "pipelining");
+        EXPECT_EQ(0, 0, "pipelining ping");
     }
 }
 

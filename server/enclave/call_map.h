@@ -284,7 +284,6 @@ class ChangePolicyCallContext {
     }
 
     inline ServerPolicy policy() const& {
-        INFO("timestamp: %ld", next_timestamp());
         if (next_timestamp() == -1) {
             ERROR("generating policy before agreeing on a timestamp");
         }

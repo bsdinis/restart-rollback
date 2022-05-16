@@ -82,7 +82,7 @@ int proxy_put_handler(peer &p, int64_t ticket, ProxyPutArgs const *args) {
 
 int proxy_change_policy_handler(peer &p, int64_t ticket,
                                 ChangePolicyArgs const *args) {
-    INFO("change policy request [%ld]: key %ld", ticket, args->key());
+    LOG("change policy request [%ld]: key %ld", ticket, args->key());
 
     auto ctx = g_call_map.add_change_policy_call(
         &p, args->client_id(), ticket, args->key(), args->policy_code());
