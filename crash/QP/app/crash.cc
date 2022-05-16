@@ -203,7 +203,8 @@ void shutdown_properly(int code, void *__) {
 }
 
 void *create_mapping(char const *filename) {
-    int fd = open(filename, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
+    int fd =
+        open(filename, O_CREAT | O_TRUNC | O_RDWR | O_SYNC, S_IRUSR | S_IWUSR);
     if (fd == -1) {
         KILL("failed to open file %s: %s", filename, strerror(errno));
     }
