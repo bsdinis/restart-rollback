@@ -218,23 +218,23 @@ bool VerifyBasicMessageVector(flatbuffers::Verifier &verifier, const flatbuffers
 
 FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(1) DataValue FLATBUFFERS_FINAL_CLASS {
  private:
-  uint8_t data_[2048];
+  uint8_t data_[8];
 
  public:
   DataValue()
       : data_() {
   }
-  DataValue(flatbuffers::span<const uint8_t, 2048> _data) {
+  DataValue(flatbuffers::span<const uint8_t, 8> _data) {
     flatbuffers::CastToArray(data_).CopyFromSpan(_data);
   }
-  const flatbuffers::Array<uint8_t, 2048> *data() const {
+  const flatbuffers::Array<uint8_t, 8> *data() const {
     return &flatbuffers::CastToArray(data_);
   }
-  flatbuffers::Array<uint8_t, 2048> *mutable_data() {
+  flatbuffers::Array<uint8_t, 8> *mutable_data() {
     return &flatbuffers::CastToArray(data_);
   }
 };
-FLATBUFFERS_STRUCT_END(DataValue, 2048);
+FLATBUFFERS_STRUCT_END(DataValue, 8);
 
 struct Value FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   typedef ValueBuilder Builder;

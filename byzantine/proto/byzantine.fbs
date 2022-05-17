@@ -28,7 +28,7 @@ enum MessageType:byte {
 }
 
 struct DataValue {
-    data: [ubyte:2048];
+    data: [ubyte:8];
 }
 
 
