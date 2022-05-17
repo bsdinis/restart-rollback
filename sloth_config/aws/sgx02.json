@@ -1,0 +1,53 @@
+{
+  "interface": "bond0",
+  "peers": [
+    {
+      "hostname": "sgx01",
+      "lat_avg": " 33.98850000000000000000 ms",
+      "lat_stddev": " 1.94300000000000000000 ms",
+      "bandwidth": "86.3"
+    },
+    {
+      "hostname": "sgx03",
+      "lat_avg": " 32.02900000000000000000 ms",
+      "lat_stddev": " 1.69600000000000000000 ms",
+      "bandwidth": "82.9"
+    },
+    {
+      "hostname": "sgx04",
+      "lat_avg": " 114.01400000000000000000 ms",
+      "lat_stddev": " 2.10050000000000000000 ms",
+      "bandwidth": "34.8"
+    },
+    {
+      "hostname": "sgx05",
+      "lat_avg": " 73.14700000000000000000 ms",
+      "lat_stddev": " 1.91000000000000000000 ms",
+      "bandwidth": "76.2"
+    },
+    {
+      "hostname": "sgx06",
+      "lat_avg": " 99.96000000000000000000 ms",
+      "lat_stddev": " 2.36650000000000000000 ms",
+      "bandwidth": "48.6"
+    },
+    {
+      "hostname": "sgx07",
+      "lat_avg": " 88.30950000000000000000 ms",
+      "lat_stddev": " 1.75500000000000000000 ms",
+      "bandwidth": "82.9"
+    },
+    {
+      "hostname": "sigilium01",
+      "lat_avg": " 59.26900000000000000000 ms",
+      "lat_stddev": " 1.89200000000000000000 ms",
+      "bandwidth": "80.0"
+    },
+    {
+      "hostname": "sigilium02",
+      "lat_avg": " 101.44550000000000000000 ms",
+      "lat_stddev": " 1.18600000000000000000 ms",
+      "bandwidth": "51.8"
+    }
+  ]
+}

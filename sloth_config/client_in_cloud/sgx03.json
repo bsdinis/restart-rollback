@@ -1,0 +1,25 @@
+{
+  "interface": "bond0",
+  "peers": [
+    {
+      "hostname": "sigilium01",
+      "lat_avg": "25ms"
+    },
+    {
+      "hostname": "sgx04",
+      "lat_avg": "25ms"
+    },
+    {
+      "hostname": "sgx05",
+      "lat_avg": "25ms"
+    },
+    {
+      "hostname": "sgx06",
+      "lat_avg": "25ms"
+    },
+    {
+      "hostname": "sgx07",
+      "lat_avg": "25ms"
+    }
+  ]
+}
