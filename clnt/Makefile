@@ -40,7 +40,7 @@ TEST_OBJECTS=$(SOURCES:.cc=.o)
 SOURCES=$(wildcard *.cc)
 OBJECTS=$(SOURCES:.cc=.o)
 EXECUTABLES := close_remote
-TESTS := tests/teems_test tests/latency_test tests/throughput_test tests/metadata_test tests/untrusted_test tests/lru_test
+TESTS := tests/teems_test tests/latency_test tests/throughput_test tests/metadata_test tests/untrusted_test tests/lru_test tests/ycsb_test tests/untrusted_ycsb_test
 
 #ifeq ($(strip $(OPENSSL_AES)), no)
   AES_MODE = -DOPENSSL_AES
@@ -67,6 +67,8 @@ tests/metadata_test: tests/metadata_test.o libteems.a
 tests/teems_test: tests/teems_test.o libteems.a
 tests/throughput_test: tests/throughput_test.o libteems.a
 tests/untrusted_test: tests/untrusted_test.o libteems.a
+tests/ycsb_test: tests/ycsb_test.o libteems.a
+tests/untrusted_ycsb_test: tests/untrusted_ycsb_test.o libteems.a
 
 #################################
 

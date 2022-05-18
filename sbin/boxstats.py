@@ -32,9 +32,9 @@ def stats(data, show=True):
                 'size': len(data),
                 'mean': statistics.mean(data),
                 'stddev': statistics.stdev(data),
-                'first_quart': data[len(data) // 4],
+                '1st_percentile': data[len(data) // 100],
                 'median': statistics.median(data),
-                'third_quart': data[(3 * len(data)) // 4],
+                '99th_percentile': data[(3 * len(data)) // 4],
                 'range': (data[0], data[-1],),
                 'unit': '\mu s',
                 }
@@ -43,9 +43,9 @@ def stats(data, show=True):
             print("{}:\t| {}".format(labl, stats['size']))
             print("Mean:\t| {} us".format(stats['mean']))
             print("Stdev:\t| {} us".format(stats['stddev']))
-            print("25%:\t| {} us".format(stats['first_quart']))
+            print("1%:\t| {} us".format(stats['1st_percentile']))
             print("Median:\t| {} us".format(stats['median']))
-            print("75%:\t| {} us".format(stats['third_quart']))
+            print("99%:\t| {} us".format(stats['99th_percentile']))
             print("Range:\t| {} - {} us".format(stats['range'][0], stats['range'][1]))
             print("===============================")
 
@@ -81,10 +81,10 @@ def export_dat(statmap, outfile):
             for op in sorted(statmap[lbl].keys()):
                 if op in stats:
                     #stats[op].append(statmap[lbl][op]['median'])
-                    stats[op].append((statmap[lbl][op]['median'], statmap[lbl][op]['first_quart'], statmap[lbl][op]['third_quart']))
+                    stats[op].append((statmap[lbl][op]['median'], statmap[lbl][op]['1st_percentile'], statmap[lbl][op]['99th_percentile']))
                 else:
                     #stats[op] = [0] * i + [statmap[lbl][op]['median']]
-                    stats[op] = [(0, 0, 0)] * i + [(statmap[lbl][op]['median'], statmap[lbl][op]['first_quart'], statmap[lbl][op]['third_quart'])]
+                    stats[op] = [(0, 0, 0)] * i + [(statmap[lbl][op]['median'], statmap[lbl][op]['1st_percentile'], statmap[lbl][op]['99th_percentile'])]
 
             for op in stats:
                 if op not in sorted(statmap[lbl].keys()):
@@ -102,12 +102,12 @@ def export_dat(statmap, outfile):
 def export_gnu(count, title, unit):
     template =\
 '''
-set terminal pngcairo size 1800, 1200 enhanced font 'Verdana, 30'
+set terminal postscript eps colour size 12cm,8cm enhanced font 'Helvetica,20'
 set output '{}'
 
 set key outside above
 
-set border linewidth 2
+set border linewidth 0.75
 
 set style data histogram
 set style histogram cluster gap 1 errorbars lw 2
@@ -123,7 +123,7 @@ set ylabel \'Latency ({})\'
         return res
 
     with open(title + '.gnu', 'w') as outf:
-        print(template.format(title + '.png', unit), file = outf)
+        print(template.format(title + '.eps', unit), file = outf)
         print(gen_plot(count, title), file = outf)
 
 
