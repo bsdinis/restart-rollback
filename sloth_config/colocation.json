@@ -1,0 +1,23 @@
+{
+    "interfaces": {
+        "sgx01": "bond0",
+        "sgx02": "bond0",
+        "sgx03": "bond0",
+        "sgx04": "bond0",
+        "sgx05": "bond0",
+        "sgx06": "bond0",
+        "sgx07": "bond0",
+        "sigilium01": "bond0",
+        "sigilium02": "bond0"
+    },
+    "links": [
+        { "hosts": ["sigilium02", "sgx01"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx02"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx03"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx04"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx05"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx06"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sgx07"], "lat_avg": "10ms" },
+        { "hosts": ["sigilium02", "sigilium01"], "lat_avg": "10ms" }
+    ]
+}
