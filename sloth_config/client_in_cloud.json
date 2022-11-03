@@ -1,38 +1,36 @@
 {
-    "interfaces": {
-        "sgx01": "bond0",
-        "sgx02": "bond0",
-        "sgx03": "bond0",
-        "sgx04": "bond0",
-        "sgx05": "bond0",
-        "sgx06": "bond0",
-        "sgx07": "bond0",
-        "sigilium01": "bond0",
-        "sigilium02": "bond0"
-    },
-    "links": [
-        { "hosts": ["sgx01", "sgx04"], "lat_avg": "50ms" },
-        { "hosts": ["sgx01", "sgx05"], "lat_avg": "50ms" },
-        { "hosts": ["sgx01", "sgx06"], "lat_avg": "50ms" },
-        { "hosts": ["sgx01", "sgx07"], "lat_avg": "50ms" },
-        { "hosts": ["sgx01", "sigilium01"], "lat_avg": "50ms" },
-
-        { "hosts": ["sgx02", "sgx04"], "lat_avg": "50ms" },
-        { "hosts": ["sgx02", "sgx05"], "lat_avg": "50ms" },
-        { "hosts": ["sgx02", "sgx06"], "lat_avg": "50ms" },
-        { "hosts": ["sgx02", "sgx07"], "lat_avg": "50ms" },
-        { "hosts": ["sgx02", "sigilium01"], "lat_avg": "50ms" },
-
-        { "hosts": ["sgx04", "sgx04"], "lat_avg": "50ms" },
-        { "hosts": ["sgx04", "sgx05"], "lat_avg": "50ms" },
-        { "hosts": ["sgx04", "sgx06"], "lat_avg": "50ms" },
-        { "hosts": ["sgx04", "sgx07"], "lat_avg": "50ms" },
-        { "hosts": ["sgx04", "sigilium01"], "lat_avg": "50ms" },
-
-        { "hosts": ["sigilium02", "sgx04"], "lat_avg": "50ms" },
-        { "hosts": ["sigilium02", "sgx05"], "lat_avg": "50ms" },
-        { "hosts": ["sigilium02", "sgx06"], "lat_avg": "50ms" },
-        { "hosts": ["sigilium02", "sgx07"], "lat_avg": "50ms" },
-        { "hosts": ["sigilium02", "sigilium01"], "lat_avg": "50ms" }
+  "nodes": {
+    "sgx01": "bond0",
+    "sgx02": "bond0",
+    "sgx03": "bond0",
+    "sgx04": "bond0",
+    "sgx05": "bond0",
+    "sgx06": "bond0",
+    "sgx07": "bond0",
+    "sigilium01": "bond0",
+    "sigilium02": "bond0"
+  },
+  "groups": {
+    "@datacenter": [
+      "sgx01",
+      "sgx02",
+      "sgx03",
+      "sigilium02"
+    ],
+    "@remote": [
+      "sgx04",
+      "sgx05",
+      "sgx07",
+      "sigilium01"
     ]
+  },
+  "links": [
+    {
+      "hosts": [
+        "@datacenter",
+        "@remote"
+      ],
+      "lat_avg": "50ms"
+    }
+  ]
 }
