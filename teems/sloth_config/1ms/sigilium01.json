@@ -1,0 +1,45 @@
+{
+  "interface": "bond0",
+  "peers": [
+    {
+      "hostname": "sigilium02",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx01",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx02",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx03",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx04",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx05",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx06",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    },
+    {
+      "hostname": "sgx07",
+      "lat_avg": "500us",
+      "lat_stddev": "250us"
+    }
+  ]
+}

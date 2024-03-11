@@ -1,0 +1,53 @@
+{
+  "interface": "bond0",
+  "peers": [
+    {
+      "hostname": "sgx01",
+      "lat_avg": " 71.40000000000000000000 ms",
+      "lat_stddev": " .23250000000000000000 ms",
+      "bandwidth": "77.3"
+    },
+    {
+      "hostname": "sgx02",
+      "lat_avg": " 104.32150000000000000000 ms",
+      "lat_stddev": " 1.40100000000000000000 ms",
+      "bandwidth": "50.0"
+    },
+    {
+      "hostname": "sgx03",
+      "lat_avg": " 111.33750000000000000000 ms",
+      "lat_stddev": " .30350000000000000000 ms",
+      "bandwidth": "46.8"
+    },
+    {
+      "hostname": "sgx04",
+      "lat_avg": " 135.26850000000000000000 ms",
+      "lat_stddev": " .11750000000000000000 ms",
+      "bandwidth": "46.1"
+    },
+    {
+      "hostname": "sgx05",
+      "lat_avg": " 65.01800000000000000000 ms",
+      "lat_stddev": " .11650000000000000000 ms",
+      "bandwidth": "56.2"
+    },
+    {
+      "hostname": "sgx06",
+      "lat_avg": " 69.52700000000000000000 ms",
+      "lat_stddev": " .23500000000000000000 ms",
+      "bandwidth": "56.7"
+    },
+    {
+      "hostname": "sgx07",
+      "lat_avg": " 17.50550000000000000000 ms",
+      "lat_stddev": " .12250000000000000000 ms",
+      "bandwidth": "111"
+    },
+    {
+      "hostname": "sgx08",
+      "lat_avg": " 157.85150000000000000000 ms",
+      "lat_stddev": " .33250000000000000000 ms",
+      "bandwidth": "30.9"
+    }
+  ]
+}

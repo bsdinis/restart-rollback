@@ -1,0 +1,23 @@
+{
+  "interfaces": {
+    "sgx01": "bond0",
+    "sgx02": "bond0",
+    "sgx03": "bond0",
+    "sgx04": "bond0",
+    "sgx05": "bond0",
+    "sgx06": "bond0",
+    "sgx07": "bond0",
+    "sigilium01": "bond0",
+    "sigilium02": "bond0"
+  },
+  "links": [
+    {
+      "hosts": [
+        "@all",
+        "@all"
+      ],
+      "lat_avg": "1ms",
+      "lat_stddev": "500us"
+    }
+  ]
+}

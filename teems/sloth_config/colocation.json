@@ -1,0 +1,22 @@
+{
+  "nodes": {
+    "sgx01": "bond0",
+    "sgx02": "bond0",
+    "sgx03": "bond0",
+    "sgx04": "bond0",
+    "sgx05": "bond0",
+    "sgx06": "bond0",
+    "sgx07": "bond0",
+    "sigilium01": "bond0",
+    "sigilium02": "bond0"
+  },
+  "links": [
+    {
+      "hosts": [
+        "sigilium02",
+        "@all"
+      ],
+      "lat_avg": "10ms"
+    }
+  ]
+}

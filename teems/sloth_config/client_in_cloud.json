@@ -1,0 +1,36 @@
+{
+  "nodes": {
+    "sgx01": "bond0",
+    "sgx02": "bond0",
+    "sgx03": "bond0",
+    "sgx04": "bond0",
+    "sgx05": "bond0",
+    "sgx06": "bond0",
+    "sgx07": "bond0",
+    "sigilium01": "bond0",
+    "sigilium02": "bond0"
+  },
+  "groups": {
+    "@datacenter": [
+      "sgx01",
+      "sgx02",
+      "sgx03",
+      "sigilium02"
+    ],
+    "@remote": [
+      "sgx04",
+      "sgx05",
+      "sgx07",
+      "sigilium01"
+    ]
+  },
+  "links": [
+    {
+      "hosts": [
+        "@datacenter",
+        "@remote"
+      ],
+      "lat_avg": "50ms"
+    }
+  ]
+}
