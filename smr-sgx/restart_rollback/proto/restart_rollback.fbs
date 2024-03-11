@@ -1,0 +1,82 @@
+namespace paxos_sgx.restart_rollback;
+
+enum MessageType:byte {
+    client_fast_get_req,
+    client_fast_get_resp,
+
+    client_operation_req,
+    client_operation_resp,
+
+    replica_propose,
+    replica_accept,
+    replica_reject,
+
+    ping_req,
+    ping_resp,
+
+    reset_req,
+    reset_resp,
+
+    close_req,
+}
+
+table FastGetArgs {
+    account : int64;
+}
+
+table FastGetResult {
+    account : int64;
+    amount  : int64;
+    last_applied : int64;
+    last_accepted : int64;
+    last_seen : int64;
+    suspicious : bool;
+}
+
+table OperationArgs {
+    account : int64;
+    to      : int64;
+    amount  : int64;
+}
+
+table OperationResult {
+    account : int64;
+    amount  : int64;
+    success : bool;
+}
+
+table ReplicaPropose {
+    operation_args: OperationArgs;
+    slot_number: int64;
+    suspicious : bool;
+}
+
+table ReplicaAccept {
+    slot_number: int64;
+    suspicious : bool;
+}
+
+table ReplicaReject {
+    slot_number: int64;
+}
+
+table Empty { }
+
+union BasicMessage {
+    FastGetArgs,
+    FastGetResult,
+    OperationArgs,
+    OperationResult,
+    ReplicaPropose,
+    ReplicaAccept,
+    ReplicaReject,
+    Empty,
+}
+
+table Message {
+    type    : MessageType;
+    ticket  : int64;
+    message : BasicMessage;
+}
+
+root_type Message;
